@@ -1,0 +1,387 @@
+{
+  "metric": "M2 — связность соизменённых файлов (нижняя граница пользы графа)",
+  "method": "обход графа в оба направления от главного изменённого символа",
+  "rev": "rev-0012",
+  "depth": 3,
+  "commits_analyzed": 20,
+  "recall_mean": 0.7708,
+  "recall_median": 1.0,
+  "precision_mean": 0.0715,
+  "baseline_naive_recall_mean": 0.0,
+  "cases_full_recall": 11,
+  "cases_zero_recall": 1,
+  "reference_orient": "Измеренный потолок в литературе: precision 69% / recall 79% / F1 55% (LCIP, arXiv:1512.07435, Java, симуляция мутациями). Наш случай иной (PHP, реальные правки, измеряется связность, а не полное предсказание) — сравнение только как порядок величины.",
+  "generated_at": "2026-10-04T22:24:23+03:00",
+  "cases": [
+    {
+      "commit": "7748931a37",
+      "date": "2026-09-29T20:43:39+03:00",
+      "files_changed": 7,
+      "primary_file": "src/Skills/SkillSelector.php",
+      "primary_symbol": "App\\Skills\\SkillSelector::__construct",
+      "others": [
+        "index.php",
+        "src/Http/Controllers/SkillDocsController.php",
+        "src/Http/Controllers/SkillDraftsController.php",
+        "src/Pipeline/PipelineEngine.php",
+        "src/Skills/SkillAutoCreator.php",
+        "src/Skills/SkillDoc.php"
+      ],
+      "reachable": [
+        "index.php",
+        "src/Http/Controllers/SkillDocsController.php",
+        "src/Http/Controllers/SkillDraftsController.php",
+        "src/Pipeline/PipelineEngine.php",
+        "src/Skills/SkillAutoCreator.php"
+      ],
+      "naive_recall": 0.0,
+      "graph_recall": 0.8333,
+      "graph_precision": 0.0248
+    },
+    {
+      "commit": "def6c088d2",
+      "date": "2026-09-29T18:06:21+03:00",
+      "files_changed": 3,
+      "primary_file": "src/Http/Controllers/SkillDocsController.php",
+      "primary_symbol": "App\\Http\\Controllers\\SkillDocsController::document",
+      "others": [
+        "src/Skills/ConsensusSkillCatalog.php",
+        "src/Skills/SkillDoc.php"
+      ],
+      "reachable": [
+        "src/Skills/ConsensusSkillCatalog.php",
+        "src/Skills/SkillDoc.php"
+      ],
+      "naive_recall": 0.0,
+      "graph_recall": 1.0,
+      "graph_precision": 0.0119
+    },
+    {
+      "commit": "1abc777a2e",
+      "date": "2026-09-29T17:51:50+03:00",
+      "files_changed": 2,
+      "primary_file": "src/Skills/SkillDoc.php",
+      "primary_symbol": "App\\Skills\\SkillDoc::markdown",
+      "others": [
+        "src/Skills/ConsensusSkillCatalog.php"
+      ],
+      "reachable": [
+        "src/Skills/ConsensusSkillCatalog.php"
+      ],
+      "naive_recall": 0.0,
+      "graph_recall": 1.0,
+      "graph_precision": 0.011
+    },
+    {
+      "commit": "692c848e4e",
+      "date": "2026-09-29T15:44:03+03:00",
+      "files_changed": 5,
+      "primary_file": "src/Skills/SkillDoc.php",
+      "primary_symbol": "App\\Skills\\SkillDoc::markdown",
+      "others": [
+        "index.php",
+        "src/Api/ApiAuth.php",
+        "src/Http/Controllers/DocumentShareController.php",
+        "src/Http/Controllers/SkillDocsController.php"
+      ],
+      "reachable": [
+        "index.php",
+        "src/Api/ApiAuth.php",
+        "src/Http/Controllers/DocumentShareController.php",
+        "src/Http/Controllers/SkillDocsController.php"
+      ],
+      "naive_recall": 0.0,
+      "graph_recall": 1.0,
+      "graph_precision": 0.0275
+    },
+    {
+      "commit": "4d9849e63d",
+      "date": "2026-09-29T15:23:00+03:00",
+      "files_changed": 2,
+      "primary_file": "src/Settings/DatabaseDsn.php",
+      "primary_symbol": "App\\Settings\\DatabaseDsn::mergeForm",
+      "others": [
+        "src/Http/Controllers/SettingsController.php"
+      ],
+      "reachable": [
+        "src/Http/Controllers/SettingsController.php"
+      ],
+      "naive_recall": 0.0,
+      "graph_recall": 1.0,
+      "graph_precision": 0.0086
+    },
+    {
+      "commit": "07acf1d320",
+      "date": "2026-09-29T04:30:29+03:00",
+      "files_changed": 3,
+      "primary_file": "src/Http/Controllers/ResearchController.php",
+      "primary_symbol": "App\\Http\\Controllers\\ResearchController::search",
+      "others": [
+        "config.php",
+        "src/Research/ResearchJournal.php"
+      ],
+      "reachable": [
+        "src/Research/ResearchJournal.php"
+      ],
+      "naive_recall": 0.0,
+      "graph_recall": 0.5,
+      "graph_precision": 0.0101
+    },
+    {
+      "commit": "ccda94c6cb",
+      "date": "2026-09-29T04:21:11+03:00",
+      "files_changed": 3,
+      "primary_file": "src/History/HistoryService.php",
+      "primary_symbol": "App\\History\\HistoryService::__construct",
+      "others": [
+        "src/Jobs/JobService.php",
+        "src/Pipeline/PipelineEngine.php"
+      ],
+      "reachable": [],
+      "naive_recall": 0.0,
+      "graph_recall": 0.0,
+      "graph_precision": 0.0435
+    },
+    {
+      "commit": "7f0eb8ed51",
+      "date": "2026-09-29T03:57:22+03:00",
+      "files_changed": 5,
+      "primary_file": "src/Jobs/JobService.php",
+      "primary_symbol": "App\\Jobs\\JobService::__construct",
+      "others": [
+        "src/Http/Controllers/CouncilController.php",
+        "src/Jobs/PipelineJobRunner.php",
+        "src/Pipeline/PipelineEngine.php",
+        "src/Pipeline/QueryAttachments.php"
+      ],
+      "reachable": [
+        "src/Pipeline/QueryAttachments.php"
+      ],
+      "naive_recall": 0.0,
+      "graph_recall": 0.25,
+      "graph_precision": 0.1429
+    },
+    {
+      "commit": "c81ea57e33",
+      "date": "2026-09-29T03:05:34+03:00",
+      "files_changed": 5,
+      "primary_file": "src/Research/ResearchJournal.php",
+      "primary_symbol": "App\\Research\\ResearchJournal::__construct",
+      "others": [
+        "config.php",
+        "index.php",
+        "src/Http/Controllers/ResearchController.php",
+        "src/Research/AnalysisProposals.php"
+      ],
+      "reachable": [
+        "index.php",
+        "src/Http/Controllers/ResearchController.php"
+      ],
+      "naive_recall": 0.0,
+      "graph_recall": 0.5,
+      "graph_precision": 0.0469
+    },
+    {
+      "commit": "72e66f5fac",
+      "date": "2026-09-29T02:49:21+03:00",
+      "files_changed": 5,
+      "primary_file": "src/Research/AnalysisProposals.php",
+      "primary_symbol": "App\\Research\\AnalysisProposals::extract",
+      "others": [
+        "src/Http/Controllers/ResearchController.php",
+        "src/Research/ArxivClient.php",
+        "src/Research/PaperAnalyst.php",
+        "src/Research/PaperRanker.php"
+      ],
+      "reachable": [
+        "src/Http/Controllers/ResearchController.php",
+        "src/Research/ArxivClient.php",
+        "src/Research/PaperAnalyst.php",
+        "src/Research/PaperRanker.php"
+      ],
+      "naive_recall": 0.0,
+      "graph_recall": 1.0,
+      "graph_precision": 0.0463
+    },
+    {
+      "commit": "389e156598",
+      "date": "2026-09-29T01:23:55+03:00",
+      "files_changed": 7,
+      "primary_file": "src/Http/Controllers/ResearchController.php",
+      "primary_symbol": "App\\Http\\Controllers\\ResearchController::__construct",
+      "others": [
+        "index.php",
+        "src/Api/ApiAuth.php",
+        "src/Pipeline/PipelineEngine.php",
+        "src/Research/ArxivAtomParser.php",
+        "src/Research/ArxivClient.php",
+        "src/Research/PaperAnalyst.php"
+      ],
+      "reachable": [
+        "index.php",
+        "src/Research/ArxivClient.php",
+        "src/Research/PaperAnalyst.php"
+      ],
+      "naive_recall": 0.0,
+      "graph_recall": 0.5,
+      "graph_precision": 0.2667
+    },
+    {
+      "commit": "a5d9687a04",
+      "date": "2026-09-29T01:01:55+03:00",
+      "files_changed": 2,
+      "primary_file": "src/Skills/ConsensusSkillCatalog.php",
+      "primary_symbol": "App\\Skills\\ConsensusSkillCatalog::__construct",
+      "others": [
+        "index.php"
+      ],
+      "reachable": [
+        "index.php"
+      ],
+      "naive_recall": 0.0,
+      "graph_recall": 1.0,
+      "graph_precision": 0.3333
+    },
+    {
+      "commit": "0f6b7dc2c5",
+      "date": "2026-09-29T00:57:49+03:00",
+      "files_changed": 4,
+      "primary_file": "src/Http/Controllers/SkillDraftsController.php",
+      "primary_symbol": "App\\Http\\Controllers\\SkillDraftsController::confirm",
+      "others": [
+        "index.php",
+        "src/Api/ApiAuth.php",
+        "src/Skills/SkillAutoCreator.php"
+      ],
+      "reachable": [
+        "index.php",
+        "src/Api/ApiAuth.php",
+        "src/Skills/SkillAutoCreator.php"
+      ],
+      "naive_recall": 0.0,
+      "graph_recall": 1.0,
+      "graph_precision": 0.0149
+    },
+    {
+      "commit": "bd89f0b4dc",
+      "date": "2026-09-29T00:45:22+03:00",
+      "files_changed": 4,
+      "primary_file": "src/Http/Controllers/SkillDraftsController.php",
+      "primary_symbol": "App\\Http\\Controllers\\SkillDraftsController::__construct",
+      "others": [
+        "index.php",
+        "src/Api/ApiAuth.php",
+        "src/Skills/SkillAutoCreator.php"
+      ],
+      "reachable": [
+        "index.php",
+        "src/Skills/SkillAutoCreator.php"
+      ],
+      "naive_recall": 0.0,
+      "graph_recall": 0.6667,
+      "graph_precision": 0.2727
+    },
+    {
+      "commit": "537cd37f57",
+      "date": "2026-09-29T00:27:45+03:00",
+      "files_changed": 4,
+      "primary_file": "src/Analyzer/RequestAnalyzer.php",
+      "primary_symbol": "App\\Analyzer\\RequestAnalyzer::timeoutSeconds",
+      "others": [
+        "config.php",
+        "src/DomainPresets/DomainPresetRepository.php",
+        "src/Settings/PopularModels.php"
+      ],
+      "reachable": [
+        "src/DomainPresets/DomainPresetRepository.php",
+        "src/Settings/PopularModels.php"
+      ],
+      "naive_recall": 0.0,
+      "graph_recall": 0.6667,
+      "graph_precision": 0.0146
+    },
+    {
+      "commit": "c6cdf205da",
+      "date": "2026-09-29T00:09:23+03:00",
+      "files_changed": 2,
+      "primary_file": "src/Connectors/AbstractConnector.php",
+      "primary_symbol": "App\\Connectors\\AbstractConnector::chat",
+      "others": [
+        "src/Connectors/SseDeltaParser.php"
+      ],
+      "reachable": [
+        "src/Connectors/SseDeltaParser.php"
+      ],
+      "naive_recall": 0.0,
+      "graph_recall": 1.0,
+      "graph_precision": 0.0116
+    },
+    {
+      "commit": "a04d5e768f",
+      "date": "2026-09-28T17:13:59+03:00",
+      "files_changed": 3,
+      "primary_file": "src/Connectors/ParallelChatDispatcher.php",
+      "primary_symbol": "App\\Connectors\\ParallelChatDispatcher::curlAvailable",
+      "others": [
+        "src/Pipeline/ModelSubstitution.php",
+        "src/Pipeline/PipelineEngine.php"
+      ],
+      "reachable": [
+        "src/Pipeline/PipelineEngine.php"
+      ],
+      "naive_recall": 0.0,
+      "graph_recall": 0.5,
+      "graph_precision": 0.0147
+    },
+    {
+      "commit": "fbe8efef1a",
+      "date": "2026-09-28T09:34:00+03:00",
+      "files_changed": 3,
+      "primary_file": "src/Http/Controllers/DomainPresetsController.php",
+      "primary_symbol": "App\\Http\\Controllers\\DomainPresetsController::index",
+      "others": [
+        "index.php",
+        "src/DomainPresets/DomainPresetTransfer.php"
+      ],
+      "reachable": [
+        "index.php",
+        "src/DomainPresets/DomainPresetTransfer.php"
+      ],
+      "naive_recall": 0.0,
+      "graph_recall": 1.0,
+      "graph_precision": 0.011
+    },
+    {
+      "commit": "0f8e2c8385",
+      "date": "2026-09-28T01:26:29+03:00",
+      "files_changed": 2,
+      "primary_file": "src/Profiles/PromptFingerprint.php",
+      "primary_symbol": "App\\Profiles\\PromptFingerprint::of",
+      "others": [
+        "src/Pipeline/PipelineEngine.php"
+      ],
+      "reachable": [
+        "src/Pipeline/PipelineEngine.php"
+      ],
+      "naive_recall": 0.0,
+      "graph_recall": 1.0,
+      "graph_precision": 0.08
+    },
+    {
+      "commit": "6540cabfcc",
+      "date": "2026-09-28T00:51:08+03:00",
+      "files_changed": 2,
+      "primary_file": "src/Pipeline/PipelineEngine.php",
+      "primary_symbol": "App\\Pipeline\\PipelineEngine::__construct",
+      "others": [
+        "src/Pipeline/PipelinePlan.php"
+      ],
+      "reachable": [
+        "src/Pipeline/PipelinePlan.php"
+      ],
+      "naive_recall": 0.0,
+      "graph_recall": 1.0,
+      "graph_precision": 0.0377
+    }
+  ]
+}

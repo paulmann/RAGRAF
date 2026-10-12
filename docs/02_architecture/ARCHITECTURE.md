@@ -1,0 +1,649 @@
+# RAGRAF — Архитектура (Этап 2)
+
+**Статус:** v1.0, готов к реализации.
+**Входы, зафиксированные заказчиком (2026-10-04):**
+1. **JVM разрешена** → доступен полный CPG (AST+CFG+DFG+PDG) через Joern + JDK 19, поверх базового стека.
+2. **Пилот — `второй PHP-корпус`** (PHP, 103 коммита, 162 366 строк, php 323/111 762), затем `пилотный PHP-портал` (отладка), затем `второй корпус` (второй язык).
+3. **Эмбеддинги — `paraphrase-multilingual-MiniLM-L12-v2`** (384, ~0,22 ГБ, ONNX через `fastembed`, без torch).
+4. **Первый релиз — только PHP.** Остальные языки — релиз 2.
+
+Связанные документы: `docs/00_plan/PLAN.md` · `docs/01_research/SPEC_INPUT.md` · `docs/02_architecture/TZ.md` · `docs/02_architecture/ACCEPTANCE.md`
+
+---
+
+## 1. Назначение
+
+RAGRAF — вспомогательная база знаний о коде, которая (а) избавляет агента от изучения репозитория вслепую и (б) **не врёт агенту**, когда код изменился после снимка индекса.
+
+Три режима работы системы:
+
+| Режим | Когда | Что происходит |
+|---|---|---|
+| **Индексация** | до начала доработки (`ragraf index`) | снимок кода → граф + символы + вектор + лексика → `INDEX_REV` |
+| **Сопровождение** | во время доработки | агент задаёт вопросы фасаду; каждая правка регистрируется в ledger; индекс **не меняется** |
+| **Переиндексация** | после доработки (`ragraf reindex --commit`) | новый `INDEX_REV`; ledger архивируется в отчёт «что изменилось в знаниях» |
+
+---
+
+## 2. Принципы (не обсуждаются без пересмотра архитектуры)
+
+| № | Принцип | Обоснование |
+|---|---|---|
+| **P1** | **Индекс иммутабелен в пределах `INDEX_REV`.** Частичных инкрементальных переиндексаций во время доработки нет | Иначе факты разных моментов времени смешиваются в одном ответе без различия — источник «неправильных выводов» |
+| **P2** | **Устаревание нельзя выводить в $null — только показывать.** Факт, затронутый ledger, помечается `stale` | Устаревание, неотличимое от ошибки, хуже отсутствия индекса |
+| **P3** | **Ребро без доказательства не живёт в графе как факт.** Обязательны `evidence` (`path:line`) и `confidence` | Защита от «галлюцинаций связями» уже внутри индекса |
+| **P4** | **Агенту не даётся язык запросов.** Только фиксированные операции из §7 | Базовая модель генерирует нерабочий CPGQL (132/1278 и 19/1278 против 1278/1278 — LLMxCPG, USENIX '25) |
+| **P5** | **Граф — основной источник, вектор и лексика — дополнительные.** Для «что с чем связано» отвечает граф | Вектор ловит синтаксическое сходство и не видит межпроцедурные потоки |
+| **P6** | **Свободный текст отделён от структурных фактов** (`P5` в §4.3 ТЗ) | ALIBI: комментарии-инъекции подавляют обнаружение >90% случаев; Words Speak…: формулировка сдвигает вердикты на 33,2% |
+| **P7** | **Пилотная ревизия — крошечная, но сквозная.** Сначала 6–10 файлов PHP от разбора до ответа агента и записи в ledger | Отладка конвейера на 162 тыс. строк — потеря времени |
+| **P8** | **Точность важнее полноты на первом этапе.** Лучше честное «не найдено» + `live_read`, чем приблизительный ответ | Repoformer: право не искать даёт до 70% ускорения; ложная уверенность дороже |
+
+---
+
+## 3. Компоненты
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│ L5  ИНТЕГРАЦИЯ   AGENTS.md проекта · skill · MCP-сервер (основной вход)  │
+├─────────────────────────────────────────────────────────────────────────┤
+│ L4  ФАСАД        ragraf core: операции §7 · провенанс · drift-гейт       │
+├─────────────────────────────────────────────────────────────────────────┤
+│ L3  ХРАНИЛИЩА    graph.sqlite (узлы/рёбра/CPG)                          │
+│                  lexvec.sqlite (FTS5 + vec0)                            │
+│                  control.sqlite (ревизии · покрытие · ledger · архив)    │
+├─────────────────────────────────────────────────────────────────────────┤
+│ L2  ЗАГРУЗКА     нормализация → схема §5 → дедупликация → идемпотентная │
+│                  загрузка ревизии → проверка инвариантов                │
+├─────────────────────────────────────────────────────────────────────────┤
+│ L1  ЭКСТРАКТОРЫ  ┌ CPG (Joern + JDK 19) — вызовы, CFG/DFG/PDG, срезы   │
+│                  ├ Символы (SCIP + PHPStan/Psalm PHAR) — определения    │
+│                  ├ Синтаксис (tree-sitter PHP) — быстрый скелет,       │
+│                  │   токены для FTS/вектора, инкрементальный разбор     │
+│                  ├ SQL/БД (MySQL information_schema + миграции)         │
+│                  └ Текст (md/комментарии/докблоки) — отдельный слой      │
+├─────────────────────────────────────────────────────────────────────────┤
+│ L0  ИСТОЧНИКИ    репозиторий PHP · schema MySQL · migrations/*.sql · md  │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+Компоненты — отдельные процессы (CLI), а не библиотеки в одном процессе агента:
+
+| Компонент | Технология | Роль |
+|---|---|---|
+| `ragraf` CLI | Python 3.13 | вход для человека и для MCP-сервера: `index`, `reindex`, `query`, `drift`, `status`, `calibrate` |
+| Конвейер индексации | Python + вызовы внешних анализаторов | L1–L2 |
+| Joern-обёртка | вызов `joern-cli` через дочерний процесс | CPG, CPGQL-запросы (только внутренние, никогда не генерируются моделью) |
+| MCP-сервер | Python, stdio | выставление операций §7 агенту |
+| SQLite-хранилища | SQLite 3.50.4 + FTS5 + `sqlite-vec` | L3 |
+
+---
+
+## 4. Хранилища
+
+Три файла, каждый — со своей ролью. Разделение нужно, потому что у них разный жизненный цикл: граф и вектор — большие и пересобираемые, контрол — маленький и **никогда не удаляемый**.
+
+```
+<project>/.ragraf/
+├─ index/
+│  ├─ rev.json                 текущая ревизия, статус, конфиг-хеш
+│  ├─ graph/graph.sqlite       узлы, рёбра, CPG, покрытие
+│  └─ lex/lexvec.sqlite        FTS5 (BM25) + vec0 (384-мерные)
+├─ control.sqlite              ревизии, покрытие по файлам, ledger, архив — append-only
+├─ drift/
+│  ├─ LEDGER.md                человекочитаемый журнал (дописывается)
+│  └─ archive/<rev>_<ts>.md    архивы после переиндексации
+├─ config/
+│  ├─ project.yaml             конфигурация корпуса (пути, исключения, языки)
+│  └─ confidence.yaml          таблица достоверности (калибруемая)
+└─ logs/                       журналы индексации и вызовов фасада
+```
+
+### 4.1 `graph/graph.sqlite` — факты о коде
+
+```sql
+-- Ревизия и покрытие
+CREATE TABLE rev (
+  rev_id TEXT PRIMARY KEY,          -- 'rev-0001'
+  created_at TEXT NOT NULL,
+  corpus_hash TEXT NOT NULL,        -- хэш входного состояния корпуса
+  config_hash TEXT NOT NULL,        -- хэш config/project.yaml
+  extractor_versions TEXT NOT NULL, -- JSON: версии Joern, scip-php, tree-sitter, PHPStan
+  state TEXT NOT NULL               -- 'building' | 'ready' | 'failed'
+);
+CREATE TABLE file (
+  rev_id TEXT NOT NULL, path TEXT NOT NULL,
+  lang TEXT, lines INTEGER, sha256 TEXT NOT NULL,
+  parse_status TEXT NOT NULL,       -- 'ok' | 'partial' | 'failed' | 'skipped'
+  parse_note TEXT,
+  PRIMARY KEY (rev_id, path)
+);
+-- Узлы
+CREATE TABLE node (
+  rev_id TEXT NOT NULL, node_id TEXT NOT NULL,
+  kind TEXT NOT NULL,               -- см. §5.1
+  name TEXT, fqn TEXT,              -- fqn: Class::method
+  path TEXT, start_line INTEGER, end_line INTEGER,
+  props TEXT,                       -- JSON: сигнатура, видимость, статичность и т.п.
+  layer TEXT NOT NULL,              -- 'structural' | 'text'
+  PRIMARY KEY (rev_id, node_id)
+);
+-- Рёбра
+CREATE TABLE edge (
+  rev_id TEXT NOT NULL, src TEXT NOT NULL, dst TEXT NOT NULL, kind TEXT NOT NULL,
+  provenance TEXT NOT NULL,         -- 'stated' | 'derived'
+  evidence_path TEXT, evidence_line INTEGER,
+  confidence REAL NOT NULL,
+  sources TEXT NOT NULL,            -- JSON: из каких анализаторов получено ребро
+  edge_uid TEXT NOT NULL,           -- детерминированный хэш (см. §5.3)
+  PRIMARY KEY (rev_id, edge_uid)
+);
+CREATE INDEX idx_edge_src ON edge(rev_id, src, kind);
+CREATE INDEX idx_edge_dst ON edge(rev_id, dst, kind);
+-- Свободный текст — ОТДЕЛЬНО от структурных фактов (P6)
+CREATE TABLE text_chunk (
+  rev_id TEXT NOT NULL, chunk_id TEXT NOT NULL,
+  owner_node_id TEXT, path TEXT NOT NULL, start_line INTEGER, end_line INTEGER,
+  text_kind TEXT NOT NULL,          -- 'comment' | 'docblock' | 'md' | 'commit'
+  raw TEXT NOT NULL,
+  PRIMARY KEY (rev_id, chunk_id)
+);
+-- Типизированные подграфы CPG (заполняются только при наличии Joern)
+CREATE TABLE cfg_edge (
+  rev_id TEXT NOT NULL, src TEXT NOT NULL, dst TEXT NOT NULL,
+  func_node_id TEXT NOT NULL, edge_order INTEGER
+);
+CREATE TABLE dfg_edge (
+  rev_id TEXT NOT NULL, src TEXT NOT NULL, dst TEXT NOT NULL,
+  var_name TEXT, evidence_line INTEGER
+);
+-- Внешние контракты
+CREATE TABLE db_table (
+  rev_id TEXT NOT NULL, table_id TEXT NOT NULL, table_name TEXT NOT NULL,
+  engine TEXT, row_estimate INTEGER, source TEXT NOT NULL,  -- 'information_schema' | 'migration'
+  PRIMARY KEY (rev_id, table_id)
+);
+CREATE TABLE db_column (
+  rev_id TEXT NOT NULL, table_id TEXT NOT NULL, column_name TEXT NOT NULL,
+  data_type TEXT, is_nullable INTEGER, column_key TEXT
+);
+CREATE TABLE db_fk (
+  rev_id TEXT NOT NULL, from_table TEXT NOT NULL, from_column TEXT NOT NULL,
+  to_table TEXT NOT NULL, to_column TEXT NOT NULL
+);
+CREATE TABLE web_route (
+  rev_id TEXT NOT NULL, node_id TEXT NOT NULL, route TEXT NOT NULL,
+  method TEXT, evidence_path TEXT, evidence_line INTEGER
+);
+-- Инвалидация и покрытие
+CREATE TABLE invalidated (
+  rev_id TEXT NOT NULL, path TEXT, node_id TEXT, reason TEXT NOT NULL, ts TEXT NOT NULL
+);
+CREATE TABLE coverage (
+  rev_id TEXT NOT NULL, metric TEXT NOT NULL, value REAL, note TEXT
+);
+-- Дополнительные индексы
+CREATE INDEX idx_node_fqn ON node(rev_id, fqn);
+CREATE INDEX idx_node_path ON node(rev_id, path);
+CREATE INDEX idx_text_owner ON text_chunk(rev_id, owner_node_id);
+```
+
+**Почему `fqn` отдельной колонкой, а не «в JSON».** Операции `symbol` и `references` — самые частые; выборка по ним должна быть индексной.
+
+### 4.2 `lex/lexvec.sqlite` — поиск по тексту
+
+```sql
+-- Лексика: точные имена, пути, SQL-литералы, идентификаторы.
+-- ВАЖНО: все содержательные колонки — ТОКЕНИЗИРОВАННЫЕ формы, а не исходный
+-- текст: fts5 хранит токены, поэтому прочитать код из ft_chunk нельзя.
+-- Число колонок здесь — часть контракта: весов bm25() в lexvec.py ровно
+-- столько же, а snippet() адресует колонку ПО НОМЕРУ (замер 12.10.2026:
+-- snippet(ft_chunk, 4, ...) попадает в code_tokens и отдаёт «def op code ...»).
+CREATE VIRTUAL TABLE ft_chunk USING fts5(
+  rev_id UNINDEXED, chunk_id UNINDEXED, path UNINDEXED,
+  symbol_tokens, code_tokens, sql_tokens, text_tokens,
+  tokenize = 'unicode61'
+);
+-- Сырой текст чанка — ОТДЕЛЬНАЯ таблица, а не колонка ft_chunk.
+-- Добавлена 12.10.2026: ответ должен отдавать фрагмент за один запрос
+-- (`search --with-text`), а адрес второго шага — разрешаться без похода
+-- на диск (`code --entry-ids`). Колонкой в fts5 этого сделать нельзя:
+-- восьмая колонка сдвинула бы все веса bm25 молча, а sqlite3 удаляет
+-- колонки UNINDEXED из индекса, поэтому по номеру текст не читается.
+-- Строка 0 текста — служебный заголовок чанка («function f (path:line)»),
+-- код начинается со строки 1 и соответствует chunk_map.start_line.
+CREATE TABLE chunk_text (
+  rev_id TEXT NOT NULL, chunk_id TEXT NOT NULL,
+  path TEXT, text TEXT NOT NULL,
+  PRIMARY KEY (rev_id, chunk_id)
+);
+-- Вектор: 384 измерения (paraphrase-multilingual-MiniLM-L12-v2)
+CREATE VIRTUAL TABLE vec_chunk USING vec0(
+  rev_id TEXT, chunk_id TEXT, embedding FLOAT[384]
+);
+-- Сопоставление чанк ↔ источник
+CREATE TABLE chunk_map (
+  rev_id TEXT NOT NULL, chunk_id TEXT NOT NULL,
+  source_kind TEXT NOT NULL,        -- 'symbol' | 'file' | 'table' | 'route' | 'doc'
+  path TEXT, node_id TEXT, start_line INTEGER, end_line INTEGER,
+  PRIMARY KEY (rev_id, chunk_id)
+);
+CREATE TABLE vec_meta (
+  rev_id TEXT NOT NULL, chunk_id TEXT NOT NULL,
+  model TEXT NOT NULL, model_version TEXT, chunk_sha256 TEXT NOT NULL,
+  PRIMARY KEY (rev_id, chunk_id)
+);
+```
+
+**Важно:** `chunk_id` включает `rev_id`-независимый контентный хэш (см. §5.3), поэтому **вектор не приходится пересчитывать** для неизменённых чанков при переиндексации — это главный источник экономии времени на повторных сборках.
+
+**Ограничения, принятые сознательно:**
+- `sqlite-vec` заявляет «pre-v1, expect breaking changes» → все обращения спрятаны за одним модулем `ragraf.store.vec`, замена движка не затронет ТЗ.
+- ANN-индекса у `sqlite-vec` нет (KNN-скан) → при > ~500 тыс. чанков оценивается переход на `qdrant-client` в файловом режиме. Порог выносится в замер, а не в код заранее.
+
+### 4.3 `control.sqlite` — ревизии, покрытие, ledger (append-only)
+
+```sql
+CREATE TABLE rev_history (
+  rev_id TEXT PRIMARY KEY, parent_rev TEXT,
+  state TEXT NOT NULL,              -- 'ready' | 'failed' | 'archived'
+  created_at TEXT NOT NULL, sealed_at TEXT,
+  corpus_hash TEXT NOT NULL, files INTEGER, nodes INTEGER, edges INTEGER,
+  joern_used INTEGER NOT NULL       -- 0/1: была ли доступна CPG
+);
+CREATE TABLE drift_entry (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  index_rev TEXT NOT NULL,
+  ts TEXT NOT NULL,
+  path TEXT NOT NULL,               -- или 'db://schema', 'git://commit'
+  kind TEXT NOT NULL,               -- add|modify|delete|rename|schema_change|slice_boundary
+  old_hash TEXT, new_hash TEXT,
+  symbols_added TEXT, symbols_removed TEXT, symbols_changed TEXT,  -- JSON-массивы имён
+  edges_invalidated TEXT,           -- JSON-массив edge_uid
+  detected_by TEXT NOT NULL,        -- hook:session-start|compare|git-diff|db-schema-diff|manual
+  commit_sha TEXT,
+  ack TEXT,                         -- JSON: {by, ts} — кто учёл дельту
+  note TEXT,
+  dedupe_key TEXT NOT NULL UNIQUE   -- (path, old_hash, new_hash, kind)
+);
+CREATE TABLE drift_archive (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  from_rev TEXT NOT NULL, to_rev TEXT NOT NULL,
+  archived_at TEXT NOT NULL, entries INTEGER NOT NULL,
+  report_path TEXT NOT NULL
+);
+CREATE TABLE calibration (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at TEXT NOT NULL, kind TEXT NOT NULL,   -- 'threshold' | 'confidence' | 'embedding'
+  params TEXT NOT NULL,             -- JSON
+  sample_size INTEGER NOT NULL, note TEXT
+);
+CREATE TABLE stale_edge (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  index_rev TEXT NOT NULL, edge_uid TEXT NOT NULL,
+  reason TEXT NOT NULL, drift_entry_id INTEGER NOT NULL,
+  acked_at TEXT
+);
+```
+
+`stale_edge` — материализация того, какие рёбра перестали быть достоверными из-за ledger. Нужна, чтобы `drift` отвечал быстро, не пересчитывая пересечения на лету.
+
+---
+
+## 5. Модель данных
+
+### 5.1 Узлы (`node.kind`)
+
+| Группа | Виды | Источник |
+|---|---|---|
+| Структура | `repo`, `file`, `namespace`, `class`, `trait`, `interface`, `enum` | CPG + tree-sitter |
+| Код | `function`, `method`, `property`, `constant`, `parameter`, `sql_literal` | CPG + SCIP |
+| База данных | `db_table`, `db_column`, `db_view` | `information_schema` + миграции |
+| Точки входа | `web_route`, `http_endpoint`, `form`, `cli_command`, `cron_job` | роутинг-эвристики (`$_GET/$_POST`, `include`-граф, SSI) + конфиги |
+| Знания | `doc`, `doc_section`, `commit`, `config_key` (**без значений**) | md-парсер, git, конфиг-сканер |
+
+### 5.2 Рёбра (`edge.kind`) и их достоверность
+
+Колонка `provenance` обязательна и принимает всего два значения:
+- **`stated`** — ребро доказано анализатором: точная строка кода, конкретное объявление, конкретное обращение к БД. `confidence = 1.0` по умолчанию.
+- **`derived`** — ребро выведено эвристикой или статистикой (динамический вызов, совпадение имён, вывод из истории). `confidence` берётся из `confidence.yaml`.
+
+| Вид | Тип | Пример доказательства |
+|---|---|---|
+| `contains`, `defines` | stated | `src/Pipeline/PipelineEngine.php:120` |
+| `imports`, `extends`, `implements`, `overrides` | stated | строка объявления |
+| `calls` | stated | строка вызова + совпадение объявления |
+| `calls_heuristic` | derived | переменная-функция, `call_user_func`, `include`-обёртка |
+| `reads`, `writes`, `flows_to`, `returns`, `type_of` | stated (CPG) | ребро DFG с номером строки |
+| `queries`, `references_table` | stated | SQL-литерал → таблица |
+| `fk_to` | stated | `information_schema` |
+| `handles`, `renders`, `submits`, `posts_to` | derived | связывание по имени/пути с пониженной достоверностью |
+| `tested_by`, `documented_by`, `changed_in`, `mentions` | stated | тест-класс, md-ссылка, коммит |
+| `similar_to` | derived | близость эмбеддингов (никогда не подаётся как структурный факт) |
+
+`confidence.yaml` — стартовая таблица (калибруется на ~20 примерах, ФТ-11 ТЗ):
+
+| Категория | Начальное значение |
+|---|---|
+| Прямая статика (CPG, объявления, `information_schema`) | 1.00 |
+| Однозначная эвристика (единственный кандидат по имени, `include` с литеральным путём) | 0.60 |
+| Неоднозначная эвристика (несколько кандидатов, динамический путь, magic-метод) | 0.40 |
+| Вывод из истории/эмбеддингов | 0.30 |
+
+### 5.3 Идентификаторы
+
+- `node_id` = `sha1(kind|fqn|path|start_line)` — **строчный компонент обязателен**: две одинаковые функции в разных местах — разные узлы. Имя узла при этом остаётся `fqn`, и по нему работает `symbol`.
+- `edge_uid` = `sha1(src|dst|kind|evidence_path|evidence_line)` — **без строки ребро не воспроизводимо**, и тогда его нельзя ни подтвердить, ни инвалидировать.
+- `chunk_id` = `sha1(content_sha256|chunk_kind|model)` — **намеренно без ревизии и без пути**: переименование файла или повторная индексация не заставляют пересчитывать эмбеддинг.
+- `corpus_hash` = `sha1` от отсортированного списка `(path, sha256)` всех учтённых файлов — признак «вход не менялся».
+
+---
+
+## 6. Извлечение для PHP (релиз 1)
+
+### 6.1 Четыре источника и их роли
+
+| Источник | Что даёт | Роль | Отказ → |
+|---|---|---|---|
+| **Joern (`php2cpg`)** + JDK 19 | AST+CFG+DFG+PDG, вызовы, срезы, потоки данных | Основной для связей и срезов | Деградация (см. §6.4) |
+| **SCIP (`scip-php`) / PHPStan / Psalm** | определения, ссылки, реализации, типы | Резольвер имён и «кто на что ссылается» | Остаются tree-sitter + Joern |
+| **tree-sitter PHP** | скелет файла, границы символов, токены для FTS/вектора, инкрементальный разбор | Всегда доступен; страховка и разметка строк | Индексация невозможна → ошибка ревизии |
+| **`information_schema` + `migrations/*.sql`** | таблицы, колонки, ключи, связи | Внешние контракты | Индексируется то, что есть в миграциях |
+
+**Правило приоритета доказательств при конфликте:** `information_schema` > миграции > CPG > SCIP > tree-sitter-эвристика. Конфликт **не разрешается молча** — в `coverage` пишется метрика `conflict.*`, а ребро получает пометку в `sources`.
+
+### 6.2 Типичные проблемы PHP и как они закрываются
+
+| Проблема | Решение | Достоверность |
+|---|---|---|
+| `include`/`require` с литеральным путём | ребро `imports` по нормализованному пути | stated, 1.0 |
+| `include` с переменной/склейкой | перебор кандидатов по `glob`-правилам конфига | derived, 0.40–0.60 |
+| `include` внутри условия | ребро + признак условности в `props` | stated по факту, но помечено как условное |
+| Переменная-функция, `call_user_func`, `eval` | `calls_heuristic` по всем одноимённым кандидатам; при нескольких — 0.40 | derived |
+| Magic-методы `__call`/`__get` | связь с `magic`-пометкой, не как обычный вызов | derived, 0.30 |
+| SQL в строках (у пилота — 52 файла, 327 вхождений) | разбор литералов: `references_table` по таблицам из `information_schema` | stated при точном совпадении имени таблицы |
+| `SELECT *` и динамическая сборка SQL | ребро только к таблице, колонки — «неизвестны» (явный признак в ответе, не выдуманные колонки) | derived, 0.40 |
+| Суперглобальные `$_GET/$_POST/$_REQUEST` | узлы-точки входа: `http_endpoint` + `flows_to` от них (CPG) | stated |
+| Один класс в нескольких копиях (у наших проектов — Editor-PHP в 5+ копиях) | исключения путей §11 + метрика дублей | — |
+
+**Принципиальное решение:** эвристические рёбра **включаются** в граф (иначе агенту не найти связь в динамическом PHP вообще), но **отдельным видом** (`calls_heuristic`) и всегда с пониженной достоверностью. Операции, требующие гарантий (`impact` по «жёсткому» режиму), отдают их отдельной секцией.
+
+### 6.3 Что граф не увидит (и это будет сказано агенту прямо)
+
+Всё, что приходит извне статического анализа: значения из БД, вычисленные имена классов, конфигурация во время выполнения, реальный порядок вызовов при наследовании через теги, SSI-включения. Формулировка для ответа фасада: `limit: "статический анализ; динамика не покрыта"`. Это обязательный элемент ответа, а не опциональный.
+
+### 6.4 Деградация при недоступности Joern
+
+Joern недоступен (JVM сломана, JDK обновлён, тайм-аут, нехватка памяти на 162 тыс. строк PHP) — конвейер **не должен падать**:
+
+| Режим | Условие | Что доступно | Что помечено |
+|---|---|---|---|
+| `full` | CPG построена | всё, включая срезы и потоки данных | — |
+| `degraded` | CPG не построена | AST-связи, символы, схема БД, маршруты, лексика, вектор | В `rev_history.joern_used = 0`; **каждый ответ фасада несёт `capability: degraded`**; операции `slice` и `flow` возвращают отказ с причиной |
+
+Правило: **деградация никогда не молчаливая.** Агент, не знающий, что у него нет срезов, будет строить выводы на неполной картине.
+
+---
+
+## 7. Операции фасада (контракты)
+
+Все операции возвращают общий «конверт». Единый формат — это требование ФТ-10/ФТ-13: агент всегда видит, чему он доверяет.
+
+```json
+{
+  "op": "impact",
+  "index_rev": "rev-0007",
+  "capability": "full",
+  "drift": { "files": 3, "symbols": 7, "entries": 4 },
+  "provenance": "index",
+  "limits": ["статический анализ; динамика не покрыта"],
+  "result": [ /* ... */ ],
+  "stale_warnings": [
+    { "path": "src/Pipeline/PipelineEngine.php", "reason": "modify после rev-0007",
+      "since": "2026-10-04T14:32:00+03:00", "suggest": "live_read" }
+  ]
+}
+```
+
+Значения `provenance`: `index` (только индекс) · `live` (только чтение файлов) · `mixed` (оба; каждая запись помечена). `stale_warnings` заполняется **автоматически** для всех затронутых ledger путей, `suggest` обязателен.
+
+| # | Операция | Вход | Выход (суть) | Реализация (релиз 1) |
+|---|---|---|---|---|
+| 1 | `search` | `{query, kinds?, lang?, limit?}` | гибридный поиск: лексика (FTS5) + вектор, RRF-слияние; каждый хит с `chunk_id`, `path:line`, `score`, `why` | SQLite + fastembed |
+| 2 | `symbol` | `{name \| fqn, path?}` | узел(ы): вид, файл, строки, сигнатура, кто объявил | индекс по `fqn` |
+| 3 | `references` | `{node_id или fqn}` | все места использования: `path:line`, контекст строки | SCIP + tree-sitter |
+| 4 | `callers` | `{fqn, depth=1..3, hard_only?}` | вызывающие с достоверностью, раздельно stated/derived | CPG + эвристики |
+| 5 | `callees` | `{fqn, depth=1..3, hard_only?}` | вызываемые | CPG |
+| 6 | `impact` | `{node_id или path или table_name, mode: hard\|full}` | затронутые файлы/символы/таблицы/маршруты/тесты, раздельно по доказанности | граф + sql-связи |
+| 7 | `slice` | `{node_id, direction: back\|forward, mode}` | **структурный срез**: список узлов+строк+рёбер с доказательствами, **без тел функций** | CPG (Joern) |
+| 8 | `code` | `{node_id или path, style: compact\|signatures}` | тела символов по запросу (только по явному запросу — иначе принцип RepBench) | tree-sitter |
+| 9 | `repo_map` | `{scope?, budget_tokens=2000, detail}` | карта репозитория: модули → файлы → ключевые символы, ранжирование по связности и по «центральности» в графе | граф |
+| 10 | `schema` | `{table?}` | таблицы, колонки, ключи, источник (БД/миграции), расхождения | `information_schema` + миграции |
+| 11 | `table_usage` | `{table}` | кто читает/пишет таблицу: символы, SQL-литералы, файлы | SQL-литералы + CPG |
+| 12 | `routes` | `{path?}` | маршруты/точки входа и их обработчики | эвристики + конфиги |
+| 13 | `index_status` | `{}` | ревизия, время, объёмы, покрытие, деградация, размер ledger | control + graph |
+| 14 | `drift_report` | `{since?}` | журнал расхождений: файлы, символы, затронутые рёбра | control |
+| 15 | `drift_ack` | `{entry_ids, note?}` | признание дельт учтёнными (дописывает `ack`, не удаляет запись) | control |
+| 16 | `live_read` | `{path, start?, end?}` | чтение актуального файла — **с обязательным выделением** фрагментов, отличающихся от индекса | файловая система + сравнение |
+| 17 | `calibrate` | `{kind, samples}` | пересчёт порогов/уровней достоверности, запись в `calibration` | control |
+
+**Запреты контракта:** произвольный запрос к графу (ФТ-4), запись в индекс через фасад (ФТ-9), возврат факта без `evidence` (ФТ-7), молчаливая выдача `derived` рядом со `stated` без разделения (P2/TZ).
+
+---
+
+## 8. Журнал расхождений (drift ledger)
+
+### 8.1 Инварианты
+
+- **I1.** Индекс ревизии неизменен до `reindex --commit`.
+- **I2.** Ledger append-only: ошибка исправляется новой записью, не перезаписью или удалением.
+- **I3.** Ответ фасада при непустом ledger не может **молча** опираться на затронутый факт: либо `stale_warnings`, либо `provenance: live`.
+- **I4.** Запись `kind = slice_boundary` (вынос кода в функцию/метод, изменение границ срезов) ставится **отдельно** от `modify` — это единственный вид изменения, ломающий граф устойчиво (RepBench/LLMxCPG: срез устойчив к переименованию, но не к смене границ).
+- **I5.** После `reindex --commit` архив содержит ответ на вопрос «что изменилось в знаниях», а не просто список файлов.
+
+### 8.2 Обнаружение дельт
+
+| Способ | Когда | Что даёт |
+|---|---|---|
+| `hook:session-start` | начало сессии агента | `drift_report` целиком: что изменилось с ревизии |
+| `compare` | по команде `ragraf drift --scan` | полное сравнение: `sha256` файлов против `file.sha256` + список символов через tree-sitter |
+| `git-diff` | если есть git (у пилота есть) | быстрый скан изменённых файлов + коммит-связь |
+| `db-schema-diff` | перед `impact`/`schema` | сравнение `information_schema` с графом (появилась/удалена колонка) |
+| `manual` | вызов человека/агента | запись с пояснением |
+
+### 8.3 Жизненный цикл
+
+```
+1. reindex --commit → rev-0008 → ledger пуст, stale_edge пуст
+2. правки агента → compare/git-diff → drift_entry (add/modify/…) → LEDGER.md
+3. правки, меняющие границы срезов → отдельная запись slice_boundary
+4. любой ответ фасада → stale_warnings для затронутых путей → агент решает: live_read или индекс
+5. reindex --commit → rev-0009 → ledger → archive/<from>_<to>.md → арифметика изменений в знаниях
+```
+
+Шаг 4 — сердце системы: именно он не даёт агенту сделать вывод по устаревшему факту, **не запрещая** при этом работу.
+
+### 8.4 Содержимое архива (человекочитаемый отчёт)
+
+```markdown
+# Переиндексация rev-0007 → rev-0008 · 2026-10-04 21:40
+
+Изменений в ledger: 4 · файлов: 3 · символов затронуто: 7 · устаревших рёбер: 12
+
+## Что появилось/изменилось
+- `src/Favorites.php` (add): 12 символов, 3 новых маршрута
+- `src/Auth/AuthService.php` (modify): изменены `verify`, `$ttl`
+
+## Что устарело в знаниях между ревизиями
+- 12 рёбер `calls` от `AuthService#verify` — перепроверены и подтверждены в rev-0008
+- 2 ребра `handles` по `Favorites#index` — не подтвердились (маршрут переименован)
+
+## Границы срезов
+- `slice_boundary`: код вынесен из `PipelineEngine#run` в `applyStage` — срезы вокруг `run` изменились
+```
+
+Последний раздел — практическая реализация вывода I4: агент видит, что срез вокруг функции больше не совпадает с тем, что было.
+
+---
+
+## 9. Индексация и переиндексация
+
+### 9.1 Конвейер
+
+```
+0. Проверка версий и доступности (Joern/JDK, scip-php, PHP, tree-sitter) → capabilities
+1. Скан корпуса: отбор файлов, исключения, sha256, языки               → corpus_hash
+2. Разбор AST (tree-sitter, параллельно): границы символов, токены, строки
+3. Символы (SCIP + PHPStan/Psalm): определения, ссылки, типы
+4. CPG (Joern): вызовы, CFG/DFG/PDG, срезы; при отказе → degraded
+5. Внешние контракты: information_schema + migrations/*.sql → таблицы/колонки/FK
+6. Точки входа: роутинг, формы, CLI/cron, SSI
+7. Документация: md → doc/doc_section, связь documented_by
+8. Потоковый T1: узлы + рёбра → graph.sqlite (батчами)
+9. Потоковый T2: чанки → FTS5 + эмбеддинги → lexvec.sqlite (переиспользование по chunk_sha256)
+10. Покрытие, конфликты, дубли → coverage
+11. Инварианты + детерминизм (см. §9.3) → rev.state = 'ready'
+```
+
+Потоки T1 и T2 выполняются параллельно: граф не зависит от векторов.
+
+### 9.2 Инкрементальная переиндексация
+
+Разрешение заказчика на JVM не отменяет принцип P1: **инкрементальная переиндексация разрешена только в момент `reindex`**, а не во время доработки.
+
+Внутри одной переиндексации:
+- AST/tree-sitter — инкрементально по `Tree.edit` там, где есть сохранённое дерево (реализация релиза 1: сохранять деревья для горячих файлов — опционально, см. замер);
+- символы — по изменённым файлам;
+- **CPG — полностью** (пересборка на 162 тыс. строк, ограничение по времени: NFR-2);
+- **эмбеддинги — только для чанков, чей `chunk_sha256` изменился** (главная экономия);
+- схема БД — по `information_schema` всегда.
+
+**Ожидаемый бюджет (проверяется замером, не объявляется фактом):** полная сборка пилота ≤ 15 мин (NFR-2), переиндексация после небольшой правки — минуты.
+
+### 9.3 Детерминированность (NFR-4)
+
+- Все `node_id`/`edge_uid`/`chunk_id` — от содержимого, не от времени и не от порядка обхода.
+- Список файлов сортируется; загрузка идёт батчами в детерминированном порядке; никаких UUIDv4 и временных меток внутри идентификаторов.
+- Проверка: сборка одной и той же ревизии дважды → `corpus_hash`, число узлов/рёбер и `edge_uid`-множество совпадают.
+
+---
+
+## 10. Ревизии и хранение
+
+**Решение: полные ревизии, без дельт.** Место не ограничение (~1131 ГБ свободно), а дельта-логика — источник тонких ошибок в идентификаторах и в ответах «а это из какой ревизии?».
+
+Правило изоляции данных: всё в `graph.sqlite` и `lexvec.sqlite` помечено `rev_id`; «текущая» ревизия берётся из `rev.json`. Активной может быть **ровно одна** ревизия, параллельных сборок нет.
+
+Политика хранения: `retain_revs: 3` в конфиге; при превышении самая старая ревизия удаляется из хранилищ, **но `rev_history` и `drift_archive` остаются навсегда** (это история знаний, она не удаляется никогда).
+
+---
+
+## 11. Конфигурация корпуса (`config/project.yaml`)
+
+```yaml
+project: второй PHP-корпус
+root: <рабочий каталог>/второй PHP-корпус
+languages: [php]                # релиз 1
+include: ["**/*.php", "**/*.md", "db/migrations/*.sql"]
+exclude:
+  - "**/.git/**"
+  - "**/node_modules/**"
+  - "**/vendor/**"
+  - "**/.zwork/**"
+  - "**/var/**"
+  - "**/*_bak*"
+  - "**/Editor-PHP-*/**"        # вендорные копии редактора
+  - "**/*.min.js"
+secrets_exclude:                # NFR-3: только исключение, никакой маскировки
+  - "**/config/*.local.php"
+  - "**/.env"
+  - "**/.env.*"
+  - "**/*.key"
+  - "**/auth.json"
+db:
+  dsn_from: "src/Core/Config.php"   # откуда брать реквизиты (значения НЕ индексируются)
+  schema_source: ["information_schema", "db/migrations/*.sql"]
+embedding:
+  model: paraphrase-multilingual-MiniLM-L12-v2
+  dim: 384
+chunking:
+  by_symbol: true
+  max_chunk_lines: 120            # для гигантов (у пилота есть файл на 9222 строки)
+index:
+  retain_revs: 3
+```
+
+**Ограничение по секретам.** Значения из `secrets_exclude` не попадают даже в `text_chunk`. Для `db.dsn_from` индексируется **только факт** «этот символ ссылается на конфиг», без значений. Это и есть NFR-3 в исполнении.
+
+---
+
+## 12. Интеграция с агентом
+
+1. **MCP-сервер** — основной канал: операции §7 как инструменты, имена совпадают с таблицей (`ragraf_search`, `ragraf_impact`, …).
+2. **CLI** `ragraf` — для индексации, переиндексации, отладки и ручных проверок; MCP-сервер сам является обёрткой над этим ядром.
+3. **Регламент в `AGENTS.md` проекта** — порядок действий агента:
+
+```
+1. ragraf_index_status   → узнать ревизию, деградацию, размер ledger
+2. ragraf_drift_report   → если ledger непуст, учесть расхождения ДО любых выводов
+3. ответ на задачу через ragraf_symbol / callers / impact / slice
+4. grубое изучение репозитория (rg, чтение файлов) — только когда индекс ответил
+   «не найдено» или когда факт помечен stale
+5. после правок: ragraf drift --scan (регистрация дельты). Индекс не обновлять.
+6. по завершении доработки: ragraf reindex --commit
+```
+
+4. **Skill RAGRAF** в AutoClaw: короткая инструкция «сначала индекс, потом `rg`», с примерами запросов и правилом правки №4.
+
+Пункт 5 — то, что отвечает прямому требованию заказчика: **во время разработки индекс не трогаем, копим различия**; переиндексация — отдельный акт «доработка завершена».
+
+---
+
+## 13. Производительность и ресурсы
+
+| Операция | Ожидание | Как обеспечивается |
+|---|---|---|
+| Полная индексация пилота (162 тыс. строк PHP) | ≤ 15 мин (NFR-2) | Параллельный разбор (8 ядер/16 потоков), потоковая загрузка, батчи; CPG — самая дорогая часть, замеряется отдельно |
+| Переиндексация после правки | минуты | переиспользование эмбеддингов по `chunk_sha256`; CPG пересобирается целиком (ограничение заявлено явно) |
+| `symbol`, `references`, `callers` | ≤ 200 мс | индексы по `fqn`, `src/dst` |
+| `impact` (глубина 2–3) | ≤ 1 с | рекурсивные CTE по `edge` |
+| `search` (гибрид) | ≤ 1 с | FTS5 + KNN-скан 384-мерных |
+| `slice` | ≤ 2 с | CPG-запрос внутри Joern |
+| Запись дельты в ledger | ≤ 100 мс | append-only |
+
+Память: Joern на PHP такого объёма — самая требовательная часть; сервер имеет 64 ГБ, ограничение задаётся флагом `-Xmx` и выносится в конфиг (замер на первом прогоне).
+
+---
+
+## 14. Наблюдаемость и диагностика
+
+- **`ragraf status`**: ревизия, `capability`, покрытие по языкам, число узлов/рёбер, размер ledger, время последних операций.
+- **Покрытие** — обязательные метрики, попадающие в `coverage`: разобрано/не разобрано, `partial`, `calls_heuristic`, конфликты (`conflict.*`), дубли файлов, чанки без символа-владельца, число рёбер по `sources`.
+- **Логи** — `logs/`, ротация по размеру; **без содержимого секретоносных файлов** и без значений конфигов.
+- **Трассировка ответа**: каждый ответ фасада может быть воспроизведён по `op` + конверту (`index_rev`, параметры) — это опора для метрики M6 (проверяемость).
+
+---
+
+## 15. Обработка ошибок
+
+| Ситуация | Поведение |
+|---|---|
+| Joern не запускается / тайм-аут | Ревизия `degraded` (`joern_used = 0`), `slice`/`flow` отказывают с причиной. Индексация не падает |
+| Файл не разобран | `parse_status = 'failed'` + причина; файл **не исчезает** из `file` (иначе «покрытие» соврёт) |
+| Частичный разбор (незакрытые конструкции) | `partial` + пометка в ответах, затрагивающих этот файл |
+| Недоступен MySQL | Схема строится только из миграций, `source` помечается как `migration`; `schema` сообщает о неполноте |
+| Не скачалась модель эмбеддингов | Индексация идёт, векторный слой помечается `unavailable`, `search` работает по лексике, `capability` сообщает об этом |
+| Конфликт доказательств | Разрешается по приоритету §6.1, конфликт пишется в `coverage`, ребро помечается в `sources` |
+| Диск/место | Порог проверяется перед сборкой; при нехватке — отказ с расчётом необходимого объёма |
+
+---
+
+## 16. Открытые вопросы (решаются замерами, не догадками)
+
+| № | Вопрос | Как решается |
+|---|---|---|
+| 1 | Реальный бюджет полной сборки CPG на 162 тыс. строк PHP | Замер на первом прогоне; при выходе за NFR-2 — решение о сужении CPG (только изменённые файлы + их вызывающие) |
+| 2 | Качество `php2cpg` на реальном коде пилота | Метрика покрытия вызовов и сравнение с SCIP/PHPStan на 20 ручных примерах |
+| 3 | Порог перехода с `sqlite-vec` на `qdrant-client` | Замер `search` на 100 / 300 / 500 тыс. чанков |
+| 4 | Нужны ли сохранённые tree-sitter деревья для инкрементального разбора | Замер выигрыша против повторного парсинга на 10% изменённых файлов |
+| 5 | Оптимальный `max_chunk_lines` для файлов на 9 тыс. строк | Замер качества `search` на 20 примерах |
+| 6 | Сколько уровней `repo_map` укладывается в 2000 токенов | Прямой расчёт на пилоте через `tiktoken` |

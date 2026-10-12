@@ -1,0 +1,258 @@
+/* ==========================================================================
+   RAGRAF — панель управления: оформление
+   ==========================================================================
+   Стиль построен по приёмам shadcn/ui, но без Tailwind и сборки: значения
+   токенов перенесены в CSS-переменные (справочник — docs/04_research/
+   SHADCN_LOGIN_REFERENCE.md). Причина выбора: панель запускается одной командой
+   из Python, и любая зависимость от сборки противоречила бы этому.
+
+   Значения взяты из документации shadcn:
+     * поле ввода 36px (h-9 = 2.25rem), кнопка 40px (h-10);
+     * кольцо фокуса 3px с прозрачностью 50%;
+     * карточка: радиус из токена, граница, поверхность.
+   Цвета — только через переменные: тёмная тема переключается одним атрибутом.
+   ========================================================================== */
+
+:root {
+  --bg: oklch(0.985 0 0);
+  --fg: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-fg: oklch(0.5 0 0);
+  --border: oklch(0.91 0 0);
+  --primary: oklch(0.3 0.06 250);
+  --on-primary: oklch(0.99 0 0);
+  --ring: oklch(0.62 0.1 250);
+  --ok: oklch(0.55 0.13 155);
+  --warn: oklch(0.68 0.14 75);
+  --bad: oklch(0.55 0.19 27);
+  --accent-soft: oklch(0.96 0.02 250);
+  --radius: 0.65rem;
+  --radius-sm: 0.5rem;
+  --font: "Segoe UI", "Helvetica Neue", Arial, system-ui, sans-serif;
+  --mono: "Cascadia Mono", Consolas, Menlo, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: oklch(0.16 0.01 250);
+    --fg: oklch(0.95 0 0);
+    --card: oklch(0.21 0.012 250);
+    --muted: oklch(0.26 0.012 250);
+    --muted-fg: oklch(0.7 0 0);
+    --border: oklch(0.32 0.012 250);
+    --primary: oklch(0.7 0.12 250);
+    --on-primary: oklch(0.16 0.01 250);
+    --ring: oklch(0.6 0.12 250);
+    --accent-soft: oklch(0.26 0.02 250);
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.mono { font-family: var(--mono); font-size: 12.5px; }
+.muted { color: var(--muted-fg); }
+.small { font-size: 12.5px; }
+
+/* --- верхняя панель --- */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 22px;
+  border-bottom: 1px solid var(--border);
+  background: var(--card);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+.brand { display: flex; align-items: baseline; gap: 10px; }
+.brand__mark {
+  width: 12px; height: 12px; border-radius: 3px;
+  background: var(--primary);
+  display: inline-block;
+  transform: translateY(1px);
+}
+.brand__name { font-weight: 650; font-size: 16px; letter-spacing: -.01em; }
+.brand__sub { color: var(--muted-fg); font-size: 12.5px; }
+.topbar__actions { display: flex; align-items: center; gap: 10px; }
+
+.status {
+  font-size: 12.5px;
+  color: var(--muted-fg);
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--muted);
+}
+.status--ok { color: var(--ok); }
+.status--bad { color: var(--bad); }
+
+/* --- кнопки: высота 40px, как в shadcn (кнопка выше поля) --- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--fg);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color .15s, border-color .15s;
+}
+.btn:hover { background: var(--muted); }
+.btn:focus-visible {
+  outline: none;
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 40%, transparent);
+}
+.btn--primary {
+  background: var(--primary);
+  color: var(--on-primary);
+  border-color: var(--primary);
+}
+.btn--primary:hover { background: color-mix(in oklab, var(--primary) 90%, var(--fg)); }
+.btn--ghost { background: transparent; }
+.btn--sm { height: 32px; padding: 0 10px; font-size: 13px; }
+.btn[disabled] { opacity: .5; cursor: not-allowed; }
+
+/* --- каркас --- */
+.layout {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.card__title { margin: 0; font-size: 15px; font-weight: 620; }
+.card__body { padding: 16px 18px; }
+.card__body--flush { padding: 0; }
+
+/* --- таблицы --- */
+table { width: 100%; border-collapse: collapse; }
+th, td {
+  text-align: left;
+  padding: 9px 18px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+th {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-fg);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  background: var(--muted);
+}
+tbody tr:last-child td { border-bottom: 0; }
+tbody tr:hover { background: color-mix(in oklab, var(--muted) 55%, transparent); }
+
+/* --- подписи состояний --- */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: var(--muted);
+  white-space: nowrap;
+}
+.chip--ok { color: var(--ok); border-color: color-mix(in oklab, var(--ok) 40%, transparent); background: color-mix(in oklab, var(--ok) 12%, transparent); }
+.chip--warn { color: var(--warn); border-color: color-mix(in oklab, var(--warn) 40%, transparent); background: color-mix(in oklab, var(--warn) 12%, transparent); }
+.chip--bad { color: var(--bad); border-color: color-mix(in oklab, var(--bad) 40%, transparent); background: color-mix(in oklab, var(--bad) 12%, transparent); }
+
+/* --- поля ввода: 36px, как в shadcn --- */
+label { display: block; font-size: 13px; font-weight: 550; margin-bottom: 5px; }
+.hint { font-size: 12px; color: var(--muted-fg); margin: 4px 0 0; }
+input[type="number"], input[type="text"], select {
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+}
+input:focus-visible, select:focus-visible {
+  outline: none;
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 40%, transparent);
+}
+.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.field { display: flex; flex-direction: column; }
+.row-actions { display: flex; gap: 10px; align-items: center; margin-top: 14px; flex-wrap: wrap; }
+
+/* --- уведомления --- */
+.notice {
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--muted);
+  font-size: 13px;
+}
+.notice--ok { border-color: color-mix(in oklab, var(--ok) 45%, transparent); background: color-mix(in oklab, var(--ok) 10%, transparent); }
+.notice--bad { border-color: color-mix(in oklab, var(--bad) 45%, transparent); background: color-mix(in oklab, var(--bad) 10%, transparent); }
+.notice--warn { border-color: color-mix(in oklab, var(--warn) 45%, transparent); background: color-mix(in oklab, var(--warn) 10%, transparent); }
+
+/* --- показатели --- */
+.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.metric {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--muted);
+}
+.metric__label { font-size: 11.5px; color: var(--muted-fg); text-transform: uppercase; letter-spacing: .04em; }
+.metric__value { font-size: 20px; font-weight: 650; margin-top: 3px; font-variant-numeric: tabular-nums; }
+.metric__note { font-size: 11.5px; color: var(--muted-fg); margin-top: 2px; }
+
+details { border-top: 1px solid var(--border); }
+details > summary {
+  cursor: pointer;
+  padding: 11px 18px;
+  font-size: 13px;
+  font-weight: 550;
+  list-style: none;
+}
+details > summary::-webkit-details-marker { display: none; }
+details > summary::before { content: "▸ "; color: var(--muted-fg); }
+details[open] > summary::before { content: "▾ "; }
+details .card__body { padding-top: 0; }
+
+.stack { display: flex; flex-direction: column; gap: 14px; }
+.inline { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }

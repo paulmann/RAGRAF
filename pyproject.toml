@@ -1,0 +1,63 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ragraf"
+version = "0.1.0"
+description = "RAGRAF — графово-векторная база знаний о коде для LLM-агентов"
+readme = "README.md"
+requires-python = ">=3.13"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Mikhail Deynekin", email = "mid1977@gmail.com" },
+]
+keywords = ["code-analysis", "knowledge-graph", "vector-search", "llm-agents", "mcp", "sqlite"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Documentation",
+    "Topic :: Software Development :: Quality Assurance",
+]
+# Классификатор лицензии здесь СОЗНАТЕЛЬНО отсутствует: по PEP 639 выражение
+# `license = "MIT"` и старый классификатор «License :: OSI Approved :: MIT License»
+# несовместимы, и setuptools отвергает сборку целиком
+# (InvalidConfigError: «License classifiers have been superseded by license
+# expressions»). Проверено запуском 12.10.2026: с классификатором
+# `pip install -e .` падал на стадии разбора требований.
+dependencies = [
+    "PyYAML>=6.0,<7.0",
+    "tree-sitter>=0.26,<0.27",
+    "tree-sitter-language-pack>=1.20,<2.0",
+    "sqlite-vec>=0.1.9,<0.2",
+    "fastembed>=0.8,<0.9",
+    "ijson>=3.5,<4.0",
+    "tiktoken>=0.14,<0.15",
+]
+
+# Дополнительные наборы.
+# tls — системное хранилище сертификатов для загрузки модели эмбеддингов.
+#   Нужен там, где в сети стоит TLS-инспекция (корпоративный прокси):
+#   без него загрузка модели падает на 'certificate verify failed'.
+#   Измерено 12.10.2026 на Windows: без пакета — отказ, с пакетом — 240 МБ
+#   скачиваются за 9,2 с. В домашней сети не требуется.
+[project.optional-dependencies]
+tls = ["truststore>=0.10"]
+
+[project.urls]
+Homepage = "https://github.com/paulmann/RAGRAF"
+Repository = "https://github.com/paulmann/RAGRAF"
+Issues = "https://github.com/paulmann/RAGRAF/issues"
+
+[project.scripts]
+ragraf = "ragraf.cli:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["ragraf*"]
