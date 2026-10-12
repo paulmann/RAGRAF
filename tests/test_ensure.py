@@ -17,6 +17,17 @@ import sys
 import tempfile
 from pathlib import Path
 
+
+# Отчёт печатается по-русски, а консоль Windows по умолчанию не UTF-8: без этой
+# настройки запуск падал UnicodeEncodeError ('charmap' codec can't encode),
+# причём только на Windows и только вне UTF-8-консоли — в CI это валило job.
+# Проверено: PYTHONIOENCODING=cp1252 -> exit 1. Настройка делает тест
+# независимым от локали/консоли (Python 3.7+: TextIOWrapper.reconfigure).
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
 REPO = Path(__file__).resolve().parents[1]
 SRC = REPO / "src"
 if str(SRC) not in sys.path:
