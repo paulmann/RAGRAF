@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ragraf"
 version = "0.1.0"
-description = "RAGRAF — графово-векторная база знаний о коде для LLM-агентов"
+description = "RAGRAF — a graph-and-vector knowledge base of code for LLM agents: verifiable file:line facts instead of blind grep"
 readme = "README.md"
 requires-python = ">=3.13"
 license = "MIT"

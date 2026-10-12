@@ -1,114 +1,123 @@
 ---
 name: ragraf-core
-description: Работа с ядром RAGRAF (<репозиторий>) — графово-векторным индексом кода для агентов. Use when работа идёт с индексом корпуса, операциями чтения, свежестью, схлопыванием дублей, исключениями, языками, CPG/Joern, телеметрией; когда индекс отдаёт устаревшие факты, capability=degraded, реестр пуст; когда нужно выбрать операцию вместо чтения файлов.
+description: Working with the RAGRAF core (<repository>) — the graph-and-vector code index for agents. Use when the work involves the corpus index, read operations, freshness, duplicate collapsing, exclusions, languages, CPG/Joern, telemetry; when the index returns stale facts, capability=degraded, or an empty registry; when an operation must be chosen instead of reading files.
 ---
 
 # RAGRAF Core
 
-Навык работы с ядром RAGRAF: как получить факт из индекса, как понять, что факту
-нельзя верить, и что делать, когда индекс сломан. Всё опирается на файлы проекта
-`<репозиторий>`; где стоит `файл:строка` — это проверено чтением, а не памятью.
+The skill of working with the RAGRAF core: how to get a fact from the index, how to
+recognize a fact that must not be trusted, and what to do when the index is broken.
+Everything rests on the files of the `<repository>` project; wherever a
+`file:line` appears, it was verified by reading, not from memory.
 
-Правила проекта лежат в `AGENTS.md` в корне проекта (читается автоматически),
-глубокий паспорт — `docs/AGENTS-context.md`, чекер конвенций —
+The project rules live in `AGENTS.md` at the project root (read automatically;
+*not shipped in the public repository*), the deep passport is
+`docs/AGENTS-context.md` (*not shipped*), and the convention checker is
 `tools/Invoke-ProjectDoctrine.ps1`.
 
-## 1. Когда этот навык применяется
+## 1. When this skill applies
 
-- Нужен ответ о коде проекта вместо чтения файлов: где определено, кто вызывает,
-  что сломается, что в таблице, где запись в таблицу, где применяется класс.
-- Индекс и код разошлись: результат выглядит устаревшим, ревизия старая,
-  сторож сообщает о расхождении.
-- Корпус не отвечает: `capability=degraded`, операция отказывает, срез недоступен.
-- Меняются исключения, список языков или настройки корпуса.
-- Реестр разработок показывает пустую ревизию или нули при живом индексе.
+- An answer about the project's code is needed instead of reading files: where
+  something is defined, who calls it, what will break, what is in a table, where
+  a table is written, where a class is applied.
+- The index and the code diverged: a result looks stale, the revision is old, the
+  guard reports a divergence.
+- The corpus does not answer: `capability=degraded`, an operation refuses, a slice
+  is unavailable.
+- Exclusions, the language list or corpus settings are changing.
+- The development registry shows an empty revision or zeros against a live index.
 
-## 2. Первый шаг любой задачи — актуализировать корпус
+## 2. The first step of any task — refresh the corpus
 
-Факты берутся из индекса, поэтому устаревший индекс запрещён:
+Facts come from the index, so a stale index is forbidden:
 
 ```powershell
-python tools/ragraf.py ensure <каталог проекта>      # найти, пересобрать, создать
-python tools/ragraf.py -p config/ragraf.yaml check   # только сверка суммы
+python tools/ragraf.py ensure <project directory>      # find, rebuild, create
+python tools/ragraf.py -p config/ragraf.yaml check     # checksum comparison only
 ```
 
-`ensure` отвечает полем `status`: `actual` — индекс актуален, `reindexed` —
-пересобран только что, `created` — корпуса не было и он создан, `not_a_project` —
-каталог не похож на проект, `error` — причина в поле `reason`.
+`ensure` answers with a `status` field: `actual` — the index is current,
+`reindexed` — just rebuilt, `created` — there was no corpus and one was created,
+`not_a_project` — the directory does not look like a project, `error` — the reason
+is in the `reason` field.
 
-Признак `stale` в ответе любой операции означает, что код ушёл вперёд и факты
-индекса неверны. Работать по ним нельзя.
+A `stale` marker in any operation's answer means the code has moved ahead and the
+index's facts are wrong. They must not be worked from.
 
-## 3. Выбор операции вместо чтения файлов
+## 3. Choosing an operation instead of reading files
 
-| Вопрос | Операция |
+| Question | Operation |
 |---|---|
-| «Где определена функция или класс» | `symbol` |
-| «Где описано, как устроено» | `search` |
-| «Кто вызывает» / «что вызывает» | `callers` / `callees` |
-| «Что затронет правка» | `impact` |
-| «Тело функции» (только когда нужен текст) | `code` |
-| «Что в таблице» / «кто читает и пишет» | `schema` / `table_usage` |
-| «Можно ли так записать» — до написания SQL | `write_check` |
-| «Кто и по какому условию получает право» | `policy_trace` |
-| «Есть ли правило в стилях и где класс применён» | `class_usage` |
-| «Актуален ли индекс» | `freshness`, `index_status` |
-| «Общая структура» | `repo_map` |
-| «Что заведено в реестре» | `catalog` |
-| «Актуальное содержимое файла с пометкой отличий» | `live_read` |
+| «Where is the function or class defined» | `symbol` |
+| «Where is it described how something works» | `search` |
+| «Who calls it» / «what does it call» | `callers` / `callees` |
+| «What will an edit affect» | `impact` |
+| «The function body» (only when the text is needed) | `code` |
+| «What is in the table» / «who reads and writes it» | `schema` / `table_usage` |
+| «Is this write valid» — before writing SQL | `write_check` |
+| «Who gets a permission and under which condition» | `policy_trace` |
+| «Is there a rule in the styles, and where is the class applied» | `class_usage` |
+| «Is the index current» | `freshness`, `index_status` |
+| «Overall structure» | `repo_map` |
+| «What is registered in the registry» | `catalog` |
+| «The file's current content with difference marks» | `live_read` |
 
-Через оболочку это `python tools/ragraf.py -p <конфиг> query <операция> …`,
-через инструменты агента — `ragraf_<операция>`. Подробный разбор выбора —
-`reference/operations.md`.
+Through the shell this is `python tools/ragraf.py -p <config> query <operation> …`,
+through the agent's tools — `ragraf_<operation>`. The detailed choice breakdown is
+in `reference/operations.md`.
 
-Чего операция не заменяет: полнотекстового чтения там, где нужны детали. `symbol`
-и `code` возвращают диапазон строк, а не файл целиком.
+What an operation does not replace: full-text reading where details matter.
+`symbol` and `code` return a line range, not the whole file.
 
-## 4. Жёсткие правила
+## 4. Hard rules
 
-1. **Факт без ссылки `файл:строка` — догадка.** Каждый значимый вывод подкреплять
-   ссылкой на код.
-2. **Число из документа проверять по коду.** Проект уже разошёлся с собственной
-   документацией: код объявляет 23 инструмента и 22 операции фасада, а документы
-   называют 18, 16 и 21.
-3. **Не читать секретоносные имена** (перечень — `AGENTS.md`, раздел 6): только имя,
-   размер и правило. Реестра git в проекте нет — единственная защита в том, чтобы
-   не открывать их.
-4. **Не запускать чужой код во время разведки.** Проект исполняется только тогда,
-   когда задача именно об этом.
-5. **Не считать `selftest` гейтом:** он всегда возвращает код 0 (`src/ragraf/cli.py:906`).
-6. **`empty result` — это код 0 с `found=false`**, а не ошибка; код 3 означает
-   «операция невыполнима сейчас», например срез при `capability != "full"`
-   (`src/ragraf/cli.py:336-356`).
+1. **A fact without a `file:line` reference is a guess.** Back every meaningful
+   conclusion with a code reference.
+2. **Verify a number from a document against the code.** The project has already
+   diverged from its own documentation: the code declares 23 tools and 22 facade
+   operations, while documents name 18, 16 and 21.
+3. **Do not read secret-bearing files** (the list is in `AGENTS.md` §6, *not
+   shipped*): only the name, the size and the rule. There is no git history in the
+   project — the only protection is not opening them.
+4. **Do not run foreign code during reconnaissance.** The project is executed only
+   when the task is exactly about that.
+5. **Do not treat `selftest` as a gate:** it always returns exit code 0
+   (`src/ragraf/cli.py:906`).
+6. **`empty result` is exit code 0 with `found=false`**, not an error; exit code 3
+   means «the operation cannot run right now», e.g. a slice at
+   `capability != "full"` (`src/ragraf/cli.py:336-356`).
 
-## 5. Что ломается чаще всего
+## 5. What breaks most often
 
-1. **Реестр расходится с индексом после `ensure`.** `src/ragraf/ensure.py:308-312`
-   регистрирует корпус до индексации и не записывает результат прогона. Измерено:
-   запись с триггером `register` имеет пустые `rev_id`/`capability` и `node_count=0`,
-   тогда как в индексе 1855 узлов. Лечение — рецепт в `reference/repair.md`.
-2. **Правка исключений молча выбрасывает рабочий код.** Сопоставление
-   регистрозависимо (`src/ragraf/util.py:72-158`); `**/cache/**` не ловит `src/Cache/`.
-   Перед расширением списка — `python tools/measure_safe_excludes.py`.
-3. **Схлопывание дублей включают, не понимая цены.** Включение меняет контрольную
-   сумму корпуса: сторож свежести один раз переиндексирует корпус. Выбор главной
-   копии обязан быть детерминированным (`src/ragraf/dedupe.py:165-223`), иначе
-   переиндексация не остановится.
-4. **`capability=degraded` принимают за поломку.** Это честная пометка: CPG не
-   построен, срез недоступен, остальное работает. Причина всегда записана в
-   `index_status`.
-5. **Видеокарта считается гарантией.** Путь вычислений на карте требует
-   `sentence-transformers` и `torch`, не объявленных в описании пакета
-   (`src/ragraf/compute.py:141-146`); порог окупаемости — 1800 текстов для векторов
-   и около 5000 вершин для графа.
+1. **The registry diverges from the index after `ensure`.** `src/ragraf/ensure.py:308-312`
+   used to register the corpus before indexing without recording the run result.
+   Measured: an entry with trigger `register` had empty `rev_id`/`capability` and
+   `node_count=0` while the index held 1855 nodes. *(Fixed in the shipped code:
+   `ensure.py` now calls `record_index_run(..., trigger="ensure:index")`; if you see
+   zeros again — the recipe is in `reference/repair.md`.)*
+2. **An exclusion edit silently throws out working code.** Matching is
+   case-sensitive (`src/ragraf/util.py:72-158`); `**/cache/**` does not catch
+   `src/Cache/`. Before extending the list — `python tools/measure_safe_excludes.py`
+   (*not shipped; see repair.md §4*).
+3. **Duplicate collapsing gets enabled without understanding the price.** Enabling
+   it changes the corpus checksum: the freshness guard reindexes the corpus once.
+   The choice of the primary copy must be deterministic (`src/ragraf/dedupe.py:165-223`),
+   otherwise reindexing never stops.
+4. **`capability=degraded` gets mistaken for breakage.** It is an honest mark: the
+   CPG was not built, the slice is unavailable, everything else works. The reason is
+   always written in `index_status`.
+5. **The GPU is treated as a guarantee.** The GPU compute path requires
+   `sentence-transformers` and `torch`, which are not declared in the package
+   description (`src/ragraf/compute.py:141-146`); the break-even threshold is 1800
+   texts for vectors and about 5000 vertices for the graph.
 
-## 6. Порядок работы
+## 6. Order of work
 
-1. Актуализировать корпус (`ensure`).
-2. Сформулировать вопрос в терминах операции, а не файла.
-3. Получить факты со ссылками и убедиться, что индекс не помечен устаревшим.
-4. Читать файл целиком только там, где операция не отвечает на вопрос.
-5. После правки ядра:
+1. Refresh the corpus (`ensure`).
+2. Formulate the question in terms of an operation, not a file.
+3. Get facts with references and make sure the index is not marked stale.
+4. Read a whole file only where an operation does not answer the question.
+5. After editing the core:
 
 ```powershell
 python tools/ragraf.py -p config/ragraf.yaml reindex
@@ -116,12 +125,12 @@ python tools/ragraf.py -p config/ragraf.yaml check
 pwsh -NoLogo -NoProfile -NonInteractive -File tools/Invoke-ProjectDoctrine.ps1
 ```
 
-6. Чекер знает свой baseline: **2 ошибок, 0 предупреждений** (11 проверок), обе
-   ошибки существовали до передачи проекта (`AGENTS.md`, раздел 10). Третья ошибка
-   или новое предупреждение — находка.
+6. The checker knows its baseline: **2 errors, 0 warnings** (11 checks); both
+   errors predate the project handover (`AGENTS.md` §10, *not shipped*). A third
+   error or a new warning is a finding.
 
-## 7. Файлы навыка
+## 7. Skill files
 
-- `reference/operations.md` — как выбрать операцию и чего она не показывает.
-- `reference/repair.md` — рецепты: устаревший индекс, пустой реестр, `degraded`,
-  зацикливание сторожа, ошибка в исключениях, откат к процессорному вычислителю.
+- `reference/operations.md` — how to choose an operation and what it does not show.
+- `reference/repair.md` — recipes: stale index, empty registry, `degraded`, a
+  looping guard, an exclusion mistake, falling back to the CPU computer.

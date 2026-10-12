@@ -1,76 +1,78 @@
-# Операции RAGRAF: выбор и границы
+# RAGRAF Operations: Choice and Boundaries
 
-Справочник к навыку `ragraf-core`. Задача — выбирать операцию вместо чтения файлов
-и знать, чего операция не показывает.
+Reference for the `ragraf-core` skill. The task is to choose an operation instead of
+reading files — and to know what an operation does not show.
 
-## 1. Полный набор
+## 1. The full set
 
-Фасад объявляет 22 операции вида `op_*` (`src/ragraf/facade.py`). Поверхность
-инструментов агента — 23 инструмента с префиксом `ragraf_`
-(`src/ragraf/mcp_server.py`). Разница не ошибка: инструментов на один больше, потому
-что дополнительно выставлено приведение корпуса в актуальное состояние, а одна
-операция фасада наружу не выставляется.
+The facade declares 22 operations of the form `op_*` (`src/ragraf/facade.py`). The
+agent tool surface is 23 tools with the `ragraf_` prefix (`src/ragraf/mcp_server.py`).
+The difference is not an error: there is one more tool because bringing the corpus to
+a current state is additionally exposed (`ensure`), and one facade operation
+(`calibrate`) is not exposed outward.
 
-## 2. По типу вопроса
+## 2. By question type
 
-| Вопрос | Операция | Что показывает | Чего не показывает |
+| Question | Operation | Shows | Does not show |
 |---|---|---|---|
-| Где определён символ | `symbol` | файл, строки, вид, подпись, разобранные параметры | тела функции |
-| Где ещё используется | `references` | все места со ссылками | порядок выполнения |
-| Кто вызывает | `callers` | вызывающие с доказательством | вызовы через строку или ссылку из данных |
-| Что вызывает | `callees` | вызываемые | то же |
-| Что затронет правка | `impact` | достижимые места по графу | конфликты веток и время выполнения |
-| Структурный срез | `slice` | контекст без тел, только при полной сборке CPG | ничего при `capability=degraded` |
-| Тело символа | `code` | точный текст | смысл вызывающих его мест |
-| Карта репозитория | `repo_map` | файлы и объёмы в бюджете | связи между ними |
-| Поиск по смыслу и словам | `search` | чанки с путями и строками | доказательство связи, это поиск, а не граф |
-| Что в таблице | `schema` | колонки и связи, разобранные из миграций | фактическое состояние живой базы |
-| Кто читает или пишет таблицу | `table_usage` | места чтения и записи | права доступа базы данных |
-| Можно ли так записать | `write_check` | сверка плана записи со схемой до выполнения | типы значений и ограничения |
-| Кто и почему получает право | `policy_trace` | ветви решения, точки отказа | фактическую роль пользователя |
-| Классы оформления | `class_usage` | описано правило или нет, где применён | итоговый вид в браузере, каскад |
-| Маршруты и обработчики | `routes` | HTTP-маршруты и их обработчики | поведение за обработчиком |
-| Актуальность индекса | `freshness` | расхождение сумм, при необходимости реиндексация | качество самих фактов |
-| Состояние индекса | `index_status` | ревизия, полнота разбора, покрытие, стадии | ничего сверх состояния |
-| Журнал расхождений | `drift_report` | что изменилось после ревизии | тела изменений |
-| Живое чтение | `live_read` | текущее содержимое файла с пометкой отличий | связи и граф |
-| Статистика обращений | `usage` | вызовы, факты, экономия | смысл фактов |
-| Реестр разработок | `catalog` | что заведено и с какими числами | содержимое индекса |
+| Where is a symbol defined | `symbol` | file, lines, kind, signature, parsed parameters | the function body |
+| Where else is it used | `references` | all sites with references | execution order |
+| Who calls it | `callers` | callers with evidence | calls through a string or a data reference |
+| What does it call | `callees` | callees | same |
+| What will an edit affect | `impact` | places reachable in the graph | branch conflicts and runtime |
+| Structural slice | `slice` | context without bodies, only on a full CPG build | nothing at `capability=degraded` |
+| A symbol's body | `code` | the exact text | the meaning of the places calling it |
+| Repository map | `repo_map` | files and volumes within a budget | the links between them |
+| Search by meaning and words | `search` | chunks with paths and lines | link evidence — this is search, not the graph |
+| What is in a table | `schema` | columns and relations parsed from migrations | the actual state of a live database |
+| Who reads or writes a table | `table_usage` | read and write sites | database access rights |
+| Is this write valid | `write_check` | the write plan checked against the schema before execution | value types and constraints |
+| Who gets a permission and why | `policy_trace` | decision branches, refusal points | the user's actual role |
+| Styling classes | `class_usage` | whether a rule exists, where the class is applied | the final look in the browser, the cascade |
+| Routes and handlers | `routes` | HTTP routes and their handlers | behavior behind the handler |
+| Index currency | `freshness` | checksum divergence, reindexing when needed | the quality of the facts themselves |
+| Index state | `index_status` | revision, parse completeness, coverage, stages | nothing beyond the state |
+| Divergence ledger | `drift_report` | what changed after the revision | the bodies of the changes |
+| Live reading | `live_read` | the file's current content with difference marks | links and the graph |
+| Call statistics | `usage` | calls, facts, savings | the meaning of the facts |
+| Development registry | `catalog` | what is registered and with which numbers | the index contents |
 
-## 3. Правила выбора
+## 3. Choice rules
 
-1. **Навигация — операция, содержание — чтение.** «Где» отвечает операция; «как
-   именно работает» требует чтения того фрагмента, который операция указала.
-2. **План записи — всегда `write_check`.** Это единственная проверка, которая
-   ловит несуществующую колонку до запуска кода.
-3. **Решения о правах — всегда `policy_trace`.** Читать большой набор ветвей глазами
-   бесполезно: неизвестное действие, оставшееся разрешённым по умолчанию, видно
-   только статически.
-4. **Перед правкой разметки — `class_usage`.** Отсутствие правила в стилях не даёт
-   ошибки: страница отрисуется оформлением браузера и будет работать.
-5. **`slice` только при полной сборке.** Иначе операция откажет с кодом 3 —
-   это ожидаемое поведение, а не поломка.
-6. **`live_read` — когда файл точно изменился после ревизии.** В остальных случаях
-   достаточно индекса, и это дешевле.
+1. **Navigation is an operation; content is reading.** «Where» is answered by an
+   operation; «how exactly it works» requires reading the fragment the operation
+   pointed to.
+2. **A write plan is always `write_check`.** It is the only check that catches a
+   nonexistent column before the code runs.
+3. **Permission decisions are always `policy_trace`.** Reading a large branch set
+   with the eyes is useless: an unknown action left allowed by default is visible
+   only statically.
+4. **Before editing markup — `class_usage`.** A missing rule in the styles is not an
+   error: the page renders with browser defaults and works.
+5. **`slice` only on a full build.** Otherwise the operation refuses with code 3 —
+   that is expected behavior, not breakage.
+6. **`live_read` — when the file definitely changed after the revision.** Otherwise
+   the index suffices, and it is cheaper.
 
-## 4. Как читать ответ
+## 4. How to read an answer
 
-Обязательные поля конверта: `op` (операция), `index_rev` (какая ревизия отвечала),
-`capability` (`full` или `degraded`), `drift` (есть ли незакрытые расхождения),
-`provenance` (откуда данные: индекс, живое чтение или смешанно), `limits`,
-`result`, `stale_warnings`, `found`. Дополнительно бывают `error` и `freshness`.
+Mandatory envelope fields: `op` (operation), `index_rev` (which revision answered),
+`capability` (`full` or `degraded`), `drift` (whether unclosed divergences exist),
+`provenance` (where the data came from: index, live read, or mixed), `limits`,
+`result`, `stale_warnings`, `found`. Additionally there may be `error` and
+`freshness`.
 
-- `found=false` при коде 0 — это «не найдено», а не сбой.
-- Непустые `stale_warnings` означают, что факт мог быть затронут правками после
-  ревизии; такой факт нельзя выдавать за актуальный без пометки.
-- `provenance=live` означает, что данные получены чтением файла, а не из индекса:
-  их доказательство — сам файл, а не ревизия.
+- `found=false` at exit code 0 is «not found», not a failure.
+- Non-empty `stale_warnings` means the fact may have been touched by edits after the
+  revision; such a fact must not be served as current without the mark.
+- `provenance=live` means the data was obtained by reading the file, not from the
+  index: its evidence is the file itself, not the revision.
 
-## 5. Чего в проекте нет
+## 5. What the project does not have
 
-- Нет языка запросов к графу. Только фиксированные операции; текст, похожий на
-  запрос к графу, отвергается с ошибкой вызова.
-- Нет штатной команды проверки версий зависимостей, хотя `requirements.txt`
-  её обещает.
-- Нет единого раннера проверок: конфигурации pytest нет, файлы в каталоге `tests`
-  запускаются по отдельности.
+- There is no graph query language. Fixed operations only; text resembling a graph
+  query is rejected with a call error.
+- There is no standard dependency version-check command, although
+  `requirements.txt` promises one.
+- There is no unified test runner: there is no pytest configuration, and the files
+  in the `tests` directory run individually.
