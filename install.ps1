@@ -288,9 +288,11 @@ function Invoke-Streamed {
         [Parameter(Mandatory)][string]$FilePath,
         [string[]]$Arguments = @()
     )
-    # Вывод не перехватывается: у дочернего процесса свои таймауты, а перехват
-    # большого объёма через пайп как раз и приводит к взаимной блокировке.
-    & $FilePath @Arguments
+    # Вывод уходит на консоль (Out-Host), а НЕ в поток результата. Иначе он
+    # становится частью возвращаемого значения функции, и код возврата теряется
+    # среди строк вывода — замерено 16.10.2026: установка прошла с кодом 0,
+    # а установщик объявил FAIL и напечатал фрагмент чужого отчёта вместо кода.
+    & $FilePath @Arguments | Out-Host
     return $LASTEXITCODE
 }
 
@@ -338,6 +340,20 @@ function Test-Environment {
         return $false
     }
     Add-Result -Step 'Python' -State 'OK' -Detail "$version ($($lines[-1]))"
+
+    # Модуль venv обязателен, и проверяется он ЗДЕСЬ, а не на шаге создания
+    # окружения. Замерено 16.10.2026: `python` в PATH оказался интерпретатором,
+    # встроенным в приложение (идёт вместе с AutoClaw), и модуля venv в нём нет -
+    # без этой проверки отказ выяснялся бы двумя шагами позже и выглядел бы как
+    # ошибка установки, хотя причина в другом интерпретаторе.
+    $venvProbe = Invoke-Capture -FilePath $script:Python -Arguments @('-c', 'import venv')
+    if ($venvProbe.Code -ne 0) {
+        Add-Result -Step 'Модуль venv' -State 'FAIL' -Detail 'в интерпретаторе нет модуля venv (встроенный в приложение?)'
+        Write-Note 'Нужен полный дистрибутив Python 3.13+, а не встроенный в другую программу.'
+        Write-Note 'Укажите его явно: -Python "<путь>\python.exe". Список на этой машине: py -0p'
+        return $false
+    }
+    Add-Result -Step 'Модуль venv' -State 'OK' -Detail 'создание окружений доступно'
 
     if (-not (Test-Path -LiteralPath $script:WorkDir)) {
         $null = New-Item -ItemType Directory -Force -Path $script:WorkDir
@@ -527,8 +543,14 @@ function Install-Dependencies {
     param([string]$Dir, [string]$Venv)
     $script = Join-Path $Dir 'scripts\install.ps1'
     $summary = Join-Path $script:WorkDir 'install-summary.json'
+    # Интерпретатор передаётся дальше явно — тот же, которым проверено окружение
+    # на шаге 1. Без этого найденный по PATH интерпретатор мог оказаться другим
+    # (замерено 16.10.2026: в PATH лежит встроенный в приложение python без
+    # модуля venv), и проверка версии проходила бы по одному, а окружение
+    # создавалось другим — то есть проверка ничего не значила бы.
     $arguments = @('-NoLogo', '-NoProfile', '-File', $script,
-                   '-Source', $Dir, '-Venv', $Venv, '-SummaryJson', $summary)
+                   '-Source', $Dir, '-Venv', $Venv, '-Python', $script:Python,
+                   '-SummaryJson', $summary)
     if ($DependenciesOnly) { $arguments += '-DependenciesOnly' }
     if ($WithTruststore) { $arguments += '-WithTruststore' }
     Write-Note "запускаю штатный установщик продукта: $script"
@@ -823,6 +845,10 @@ try {
 if (-not $VenvDir) { $VenvDir = Join-Path $InstallDir '.venv' }
 Write-Host "  Каталог установки: $InstallDir"
 Write-Host "  Окружение:         $VenvDir"
+Write-Note 'Окружение лежит внутри каталога установки: так удаление установки — это удаление одного'
+Write-Note 'каталога. Штатный установщик продукта предупредит об этом: если вы проиндексируете сам'
+Write-Note 'каталог установки, окружение попадёт в корпус. Обычно индексируются ваши проекты, а не'
+Write-Note 'каталог RAGRAF; если нужно иначе, укажите -VenvDir вне него.'
 
 if (-not (Test-TargetDisk -Path $InstallDir)) {
     Write-Summary
