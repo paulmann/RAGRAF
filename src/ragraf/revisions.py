@@ -33,13 +33,30 @@ class RevInfo:
 
 
 class ControlStore:
-    """Обёртка над control.sqlite (append-only для журнала расхождений)."""
+    """Обёртка над control.sqlite (append-only для журнала расхождений).
+
+    Про режим «только чтение». Обычно хранилище открывается на запись: в него
+    пишут ревизии и телеметрия. Но бывают базы, которые читать можно, а писать
+    нельзя: чужой каталог `.ragraf` без права записи, база на диске только для
+    чтения. Раньше это делало НЕВОЗМОЖНЫМ чтение: конструктор падал, и панель
+    не могла показать ни статистику, ни качество по такой разработке (измерено
+    15.10.2026). Теперь при отказе записи хранилище открывается только для
+    чтения, а `readonly` говорит вызывающему, что записывать нельзя: молча
+    делать вид, что запись прошла, нельзя тем более.
+    """
 
     def __init__(self, cfg: ProjectConfig) -> None:
         self.cfg = cfg
-        cfg.ragraf_dir.mkdir(parents=True, exist_ok=True)
-        self.conn = store.connect(cfg.control_db)
-        store.init_control(self.conn)
+        self.readonly = False
+        try:
+            cfg.ragraf_dir.mkdir(parents=True, exist_ok=True)
+            self.conn = store.connect(cfg.control_db)
+            store.init_control(self.conn)
+        except (OSError, sqlite3.OperationalError):
+            # Запись невозможна — читаем то, что уже есть. Схему не создаём:
+            # создавать её нечем, а читать существующую можно.
+            self.conn = store.connect(cfg.control_db, readonly=True)
+            self.readonly = True
         if not store.table_exists(self.conn, "rev_history"):  # pragma: no cover
             raise RuntimeError("не удалось инициализировать control.sqlite")
 
@@ -106,7 +123,31 @@ class ControlStore:
         edges: int,
         capability: str,
         joern_used: bool,
+        *,
+        extractor_versions: dict[str, str] | None = None,
+        cpg: dict | None = None,
+        corpus_hash: str | None = None,
+        config_hash: str | None = None,
     ) -> None:
+        """Запечатать ревизию и записать rev.json — паспорт активной ревизии.
+
+        Новые поля (`extractor_versions`, `cpg`, `corpus_hash`, `config_hash`)
+        добавлены именованными и со значениями по умолчанию, поэтому прежние
+        вызовы `seal_rev(rev_id, files, nodes, edges, capability, joern_used)`
+        продолжают работать без правок. Пять исходных ключей rev.json
+        (`rev_id`, `capability`, `joern_used`, `sealed_at`, `project`) не
+        переименованы и не удалены: их читают `facade.rev_info` и
+        `facade.op_index_status`.
+
+        Зачем блок `cpg`. Измерено на rev-0069/rev-0070: у первой CPG была
+        собрана (`coverage.cpg_used=1`, добавлено 1203 ребра вызовов), у второй
+        — нет (`cpg_used=0`), но у ОБЕИХ ревизий были одинаковы `capability=full`,
+        `joern_used=1`, `file_count`/`node_count`/`edge_count` и `config_hash`.
+        Отличить сборку от переноса рёбер по rev.json было нельзя вообще:
+        активная ревизия выглядела полноценной. Теперь режим CPG, факт сборки,
+        число добавленных вызовов, донор переноса и признак понижения покрытия
+        лежат в самом файле активной ревизии, а не только в graph.sqlite.
+        """
         self.conn.execute(
             """UPDATE rev_history
                SET state = 'ready', sealed_at = ?, files = ?, nodes = ?, edges = ?,
@@ -122,17 +163,43 @@ class ControlStore:
                 rev_id,
             ),
         )
+        # Нормализация блока CPG: пишутся ВСЕ пять ключей даже когда вызывающий
+        # передал часть. Иначе читатель различал бы «нет данных» и «режим none»
+        # через .get(), то есть молча — а это ровно тот дефект, который здесь
+        # и закрывается.
+        cpg_src = cpg or {}
+        raw_calls = cpg_src.get("calls_added") or 0
+        try:
+            calls_added = int(raw_calls)
+        except (TypeError, ValueError):
+            calls_added = 0
+        cpg_block = {
+            # built — CPG собрана в этом прогоне; carried — не собиралась, но
+            # рёбра вызовов взяты у донора; none — ни того, ни другого.
+            "mode": str(cpg_src.get("mode") or "none"),
+            "used": bool(cpg_src.get("used")),
+            "calls_added": calls_added,
+            "carried_from": cpg_src.get("carried_from"),
+            "downgraded": bool(cpg_src.get("downgraded")),
+        }
         # Активная ревизия ровно одна (архитектура §10).
-        util.write_json(
-            self.cfg.rev_file,
-            {
-                "rev_id": rev_id,
-                "capability": capability,
-                "joern_used": joern_used,
-                "sealed_at": util.now_iso(),
-                "project": self.cfg.project,
-            },
-        )
+        payload: dict = {
+            "rev_id": rev_id,
+            "capability": capability,
+            "joern_used": joern_used,
+            "sealed_at": util.now_iso(),
+            "project": self.cfg.project,
+            "extractor_versions": dict(extractor_versions or {}),
+            "cpg": cpg_block,
+        }
+        # Суммы пишутся только когда вызывающий их передал: `None` здесь значит
+        # «неизвестно», а не «пустая сумма», и подставлять пустую строку нельзя —
+        # сторож свежести сравнивает суммы со своим расчётом.
+        if corpus_hash is not None:
+            payload["corpus_hash"] = corpus_hash
+        if config_hash is not None:
+            payload["config_hash"] = config_hash
+        util.write_json(self.cfg.rev_file, payload)
         self.conn.commit()
 
     def fail_rev(self, rev_id: str, note: str) -> None:
@@ -290,8 +357,8 @@ class GraphWriter:
         return store.executemany_chunked(
             self.conn,
             """INSERT OR REPLACE INTO file(rev_id, path, lang, lines, sha256,
-                                          parse_status, parse_note)
-               VALUES(?, ?, ?, ?, ?, ?, ?)""",
+                                          parse_status, parse_note, encoding)
+               VALUES(?, ?, ?, ?, ?, ?, ?, ?)""",
             rows,
             batch=self.cfg.index.batch_size,
         )
@@ -321,6 +388,24 @@ class GraphWriter:
             self.conn,
             """INSERT OR REPLACE INTO text_chunk(rev_id, chunk_id, owner_node_id, path,
                                                  start_line, end_line, text_kind, raw)
+               VALUES(?, ?, ?, ?, ?, ?, ?, ?)""",
+            rows,
+            batch=self.cfg.index.batch_size,
+        )
+
+    def add_routes(self, rows: list[tuple]) -> int:
+        """Записать точки входа ревизии (P1-3).
+
+        Таблица `web_route` существовала с релиза 1, но вставки в неё не было
+        ни одной: операция `routes` всегда отвечала «не найдено», а
+        `entrypoints` не знал ни одного маршрута. Пишет сюда индексатор, из
+        того, что извлекли PHP/HTML/JS: `action=`, `src=`, `fetch(...)`,
+        `Route::get(...)`, серверные включения.
+        """
+        return store.executemany_chunked(
+            self.conn,
+            """INSERT OR REPLACE INTO web_route(rev_id, route_id, node_id, route, method,
+                                                 evidence_path, evidence_line, confidence)
                VALUES(?, ?, ?, ?, ?, ?, ?, ?)""",
             rows,
             batch=self.cfg.index.batch_size,

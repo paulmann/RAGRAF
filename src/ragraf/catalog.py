@@ -1,8 +1,8 @@
 """Каталог разработок: отдельный учёт по каждому проекту с контрольными суммами.
 
 Назначение
-    RAGRAF индексирует несколько проектов (пилот второй PHP-корпус, полигон
-    пилотный PHP-портал, дальше — любые другие). Требований два:
+    RAGRAF индексирует несколько проектов (пилот revoap.com, полигон
+    z.batteryservice.ru, дальше — любые другие). Требований два:
 
       1. Информация о разработках хранится ОТДЕЛЬНО друг от друга: у каждой
          разработки свои ревизии, свой индекс, своя телеметрия, свой журнал
@@ -40,6 +40,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -90,6 +91,16 @@ class Entry:
     edge_count: int = 0
     embedding_model: str = ""
     runs: list[dict[str, Any]] = field(default_factory=list)
+    # Состояние разработки: `registered` — заведена и суммы зафиксированы, но
+    # индекс не строился; `indexed` — есть ревизия. Нужно потому, что запись
+    # «файлов 54 235, узлов 0» читается как сломанный индекс, хотя означает
+    # ровно обратное: индекса ещё нет. Различие показывается в `catalog`.
+    state: str = ""
+    # Разрешена ли индексация этой разработки. Выключается галочкой в панели:
+    # владелец может вести разработку в реестре, но не тратить место и время
+    # на её индекс. Значение по умолчанию `True` — отсутствие поля в старом
+    # файле реестра читается как «разрешено», а не как «запрещено».
+    index_enabled: bool = True
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -268,26 +279,57 @@ class Catalog:
         самой индексации, и проверка «были ли изменения» потеряла бы смысл.
         """
         entry = self.get(category) or Entry(category=category, root="", config="")
-        entry.rev_id = rev_id
-        entry.capability = capability or entry.capability
-        entry.corpus_hash = corpus_hash
-        entry.config_hash = config_hash
-        entry.file_count = file_count
-        entry.node_count = node_count
-        entry.edge_count = edge_count
-        entry.indexed_at = util.now_iso()
-        entry.runs.insert(0, asdict(RunRecord(
-            rev_id=rev_id,
-            indexed_at=entry.indexed_at,
-            corpus_hash=corpus_hash,
-            config_hash=config_hash,
-            file_count=file_count,
-            node_count=node_count,
-            edge_count=edge_count,
-            seconds=round(seconds, 3),
-            trigger=trigger,
-        )))
-        entry.runs = entry.runs[:MAX_RUNS]
+        # В историю прогонов (runs) попадает ТОЛЬКО прогон, построивший ревизию.
+        #
+        # Что было не так. Регистрация разработки (`watch.register_project`)
+        # фиксирует суммы корпуса ДО индексации и зовёт эту же точку с пустым
+        # rev_id. Из-за этого в `runs` оказывалась запись «прогон, ревизия
+        # пустая, узлов 0», а в реестре — разработка AutoClaw с 54 235 файлами
+        # и нулём узлов (измерено 14.10.2026). Читается это как сломанный
+        # индекс, хотя индекса там нет вовсе (`C:\AutoClaw\.ragraf`
+        # не существует). Правило P0-1 «пустая ревизия не записывается»
+        # относится и к этому пути.
+        rev_built = bool(str(rev_id or "").strip())
+        if rev_built:
+            entry.rev_id = rev_id
+            entry.capability = capability or entry.capability
+            entry.corpus_hash = corpus_hash
+            entry.config_hash = config_hash
+            entry.file_count = file_count
+            entry.node_count = node_count
+            entry.edge_count = edge_count
+            entry.indexed_at = util.now_iso()
+            entry.runs.insert(0, asdict(RunRecord(
+                rev_id=rev_id,
+                indexed_at=entry.indexed_at,
+                corpus_hash=corpus_hash,
+                config_hash=config_hash,
+                file_count=file_count,
+                node_count=node_count,
+                edge_count=edge_count,
+                seconds=round(seconds, 3),
+                trigger=trigger,
+            )))
+            entry.runs = entry.runs[:MAX_RUNS]
+            entry.state = "indexed"
+        else:
+            # Регистрация: заполняются ТОЛЬКО пустые поля.
+            #
+            # Почему не «просто записать». Уже проиндексированная разработка
+            # после повторной регистрации теряла ревизию (проверка поймала:
+            # rev-0001 превращался в пустую строку), а её сумма корпуса
+            # подменялась свежей — то есть устаревший индекс объявлялся
+            # актуальным. Запись о построенном индексе принадлежит прогону,
+            # а не регистрации.
+            if not entry.corpus_hash:
+                entry.corpus_hash = corpus_hash
+            if not entry.config_hash:
+                entry.config_hash = config_hash
+            if not entry.file_count:
+                entry.file_count = file_count
+            if not entry.indexed_at:
+                entry.indexed_at = util.now_iso()
+            entry.state = "indexed" if entry.rev_id else "registered"
         self.put(entry)
         return entry
 
@@ -324,8 +366,90 @@ class Catalog:
                 "edges": entry.edge_count,
                 "embedding_model": entry.embedding_model,
                 "runs": len(entry.runs),
+                "state": entry.state or ("indexed" if entry.rev_id else "registered"),
+                "index_enabled": bool(entry.index_enabled),
             })
         return {"version": CATALOG_VERSION, "count": len(out), "entries": out}
+
+    def set_index_enabled(self, category: str, enabled: bool) -> Entry:
+        """Разрешить или запретить индексацию разработки.
+
+        Запрет не удаляет данные: он только снимает разрешение ИНДЕКСИРОВАТЬ.
+        Очистка индекса — отдельное действие (`clear_index`), потому что
+        «больше не индексировать» и «стереть то, что уже посчитано» — разные
+        решения, и связывать их молча нельзя: владелец выключил галочку, а у
+        него пропали данные.
+        """
+        entry = self.get(category)
+        if entry is None:
+            raise KeyError(category)
+        entry.index_enabled = bool(enabled)
+        self.put(entry)
+        return entry
+
+    def clear_index(self, category: str) -> dict[str, Any]:
+        """Удалить посчитанный индекс разработки. Реестр и история остаются.
+
+        Удаляется каталог `.ragraf` корпуса целиком: индекс, векторный слой,
+        журнал и телеметрия лежат в нём, и частичное удаление оставило бы
+        разработку в состоянии «индекс есть, но неполный», которое панель
+        показывала бы как сломанное. Реестр (`catalog/catalog.json`) лежит
+        ВНЕ корпуса и не трогается: запись о разработке сохраняется, иначе
+        её нечем было бы включить обратно.
+
+        Возвращаются освобождённые байты и перечень удалённого, чтобы
+        владелец видел, что именно исчезло, а не верил на слово.
+        """
+        entry = self.get(category)
+        if entry is None:
+            raise KeyError(category)
+        root = Path(entry.root)
+        ragraf_dir = root / ".ragraf"
+        report: dict[str, Any] = {
+            "category": category, "root": util.to_posix(root),
+            "removed": False, "bytes": 0, "items": [],
+        }
+        # Предохранитель: удаляется только каталог с именем `.ragraf` и только
+        # внутри корня разработки. Проверка нужна на случай повреждённой записи
+        # реестра: цена ошибки — чужие данные.
+        if ragraf_dir.name != ".ragraf" or not str(ragraf_dir).startswith(str(root)):
+            raise ValueError("отказ: путь индекса вне корня разработки")
+        if ragraf_dir.exists():
+            freed = 0
+            for path in sorted(ragraf_dir.rglob("*")):
+                try:
+                    if path.is_file():
+                        freed += path.stat().st_size
+                except OSError:
+                    pass
+            report["bytes"] = freed
+            report["items"] = ["index", "lexvec", "control", "logs", "revisions"]
+            try:
+                shutil.rmtree(ragraf_dir)
+                report["removed"] = True
+            except OSError as exc:
+                # Отказ удаления — это находка, а не успех. Измерено: под
+                # файловой песочницей каталог чужой разработки не удаляется,
+                # и прежняя редакция сообщала «removed: true», потому что
+                # проверяла существование каталога ДО попытки. Владелец видел
+                # «удалено», а индекс оставался на месте.
+                report["removed"] = not ragraf_dir.exists()
+                report["error"] = f"{type(exc).__name__}: {exc}"
+            if not report["removed"]:
+                # Запись НЕ переводится в «индекса нет»: данные на месте, и
+                # снять ревизию значило бы соврать о состоянии.
+                return report
+        # Запись остаётся, но переходит в состояние «заведена, индекса нет»:
+        # иначе панель показывала бы ревизию, данных которой больше нет.
+        fresh = self.get(category)
+        if fresh is not None:
+            fresh.rev_id = ""
+            fresh.capability = ""
+            fresh.node_count = 0
+            fresh.edge_count = 0
+            fresh.state = "registered"
+            self.put(fresh)
+        return report
 
 
 def _norm(path: str | Path) -> str:

@@ -50,6 +50,39 @@ def extract_sql_tokens(text: str) -> str:
     return " ".join(sorted({p.lower() for p in parts}))
 
 
+#: Куски регулярного выражения, которые можно искать подстрокой: длинные
+#: последовательности «обычных» символов. По ним делается предварительный
+#: отбор, а точное совпадение всё равно проверяется регуляркой.
+_LITERAL_RUN = re.compile(r"[A-Za-z0-9_А-Яа-яЁё \t]{3,}")
+
+
+def _literal_core(pattern: str) -> str:
+    """Самая длинная буквенно-цифровая часть регулярки — для предварительного отбора.
+
+    Нужна, потому что регулярку нельзя выполнить по индексу: сначала надо
+    получить ограниченный набор чанков, и уже в них искать по-настоящему.
+    Если подходящей части нет (регулярка из одних метасимволов), возвращается
+    пустая строка — вызывающий переходит к честному проходу по чанкам.
+    """
+    best = ""
+    for m in _LITERAL_RUN.finditer(pattern):
+        run = m.group(0).strip()
+        if len(run) > len(best):
+            best = run
+    return best
+
+
+def _match_line(text: str, pos: int, width: int = 160) -> str:
+    """Строка текста, в которой найдено совпадение (доказательство, не весь чанк)."""
+    if pos < 0:
+        return ""
+    start = text.rfind("\n", 0, pos) + 1
+    end = text.find("\n", pos)
+    if end < 0:
+        end = len(text)
+    return text[start:end].strip()[:width]
+
+
 @dataclass
 class SearchHit:
     chunk_id: str
@@ -67,23 +100,76 @@ class SearchHit:
 
 
 class LexVecStore:
-    """Запись чанков, лексический и векторный поиск, слияние результатов."""
+    """Запись чанков, лексический и векторный поиск, слияние результатов.
+
+    Про режим «только чтение». Обычно хранилище открывается на запись: в него
+    пишет индексатор. Но чужой каталог `.ragraf` может быть доступен только на
+    чтение, и тогда прежний код падал в конструкторе — панель не могла показать
+    ни качество индекса, ни статистику по такой разработке (измерено
+    15.10.2026). Теперь при отказе записи хранилище открывается только для
+    чтения, а `self.writable` говорит честно, что записывать нельзя: поиск
+    работает, запись — нет.
+    """
 
     def __init__(self, cfg: ProjectConfig) -> None:
         self.cfg = cfg
-        self.conn = store.connect(cfg.lexvec_db)
+        self.writable = True
+        try:
+            self.conn = store.connect(cfg.lexvec_db)
+        except (OSError, sqlite3.OperationalError):
+            self.conn = store.connect(cfg.lexvec_db, readonly=True)
+            self.writable = False
         # Загрузка расширения ОБЯЗАТЕЛЬНА ДО проверки vec0: без неё pragma_module_list
         # не содержит vec0 и векторный слой молча отключался (выявлено сверкой с
         # selftest, где расширение грузилось явно).
         self.extension_loaded = store.try_load_extension(self.conn, "vec0")
-        store.init_lexvec(self.conn)
-        self.vec_ok = store.ensure_vec_table(self.conn)
-        # Догоняющая миграция: роль документа появилась позже самой таблицы.
-        # Без неё на существующих корпусах (существующих корпусах) колонки нет,
-        # и запись чанков упала бы с OperationalError. Тот же приём уже
-        # применён для props в таблице edge.
-        self._migrate_doc_role()
-        self.conn.commit()
+        # Причина отказа сохраняется рядом с признаком: заметка покрытия обязана
+        # называть причину, а не только факт (замер 16.10.2026: покрытие писало
+        # «sqlite-vec не загрузился» там, где отказывала запись в vec0).
+        self.extension_error = store.LAST_EXTENSION_ERROR
+        self.vec_error = ""
+        if self.writable:
+            store.init_lexvec(self.conn)
+            self.vec_ok = store.ensure_vec_table(self.conn)
+            if not self.vec_ok:
+                self.vec_error = store.LAST_VEC_TABLE_ERROR
+            # Догоняющая миграция: роль документа появилась позже самой таблицы.
+            # Без неё на существующих корпусах (z, revoap, md.viewer) колонки нет,
+            # и запись чанков упала бы с OperationalError. Тот же приём уже
+            # применён для props в таблице edge.
+            self._migrate_doc_role()
+            self.conn.commit()
+        else:
+            # Схему не создаём и не меняем: прав нет. Наличие векторного слоя
+            # проверяется чтением, а не созданием таблицы.
+            self.vec_ok = store.table_exists(self.conn, "vec_chunk")
+
+    def _require_writable(self, operation: str) -> None:
+        """Отказать в записи, если хранилище открыто только для чтения.
+
+        Отказ явный и с причиной: молчаливая «успешная» запись в базу, которую
+        нельзя изменить, была бы ложью о состоянии индекса.
+        """
+        if not self.writable:
+            raise sqlite3.OperationalError(
+                f"{operation}: хранилище лексики открыто только для чтения "
+                f"({self.cfg.lexvec_db})"
+            )
+
+    def vec_unavailable_reason(self) -> str:
+        """Причина недоступности вектора словами (пусто, если вектор доступен).
+
+        Нужна заметке покрытия: «sqlite-vec не загрузился» — не универсальная
+        причина. Замер 16.10.2026: расширение загружено, а отказ пришёл от
+        записи в vec0 (INSERT OR REPLACE по существующему ключу).
+        """
+        if self.vec_ok:
+            return ""
+        if self.vec_error:
+            return self.vec_error
+        if self.extension_error:
+            return f"sqlite-vec не загрузился: {self.extension_error}"
+        return "sqlite-vec не загрузился: причина не записана"
 
     def _migrate_doc_role(self) -> None:
         """Добавить колонку роли документа, если её ещё нет."""
@@ -140,6 +226,7 @@ class LexVecStore:
         """Записать чанки в FTS5, chunk_map, vec_meta и (при наличии) vec0."""
         if not chunks:
             return 0
+        self._require_writable("add_chunks")
         fts_rows = []
         map_rows = []
         meta_rows = []
@@ -243,16 +330,41 @@ class LexVecStore:
             batch=self.cfg.index.batch_size,
         )
         if vec_rows and self.vec_ok:
+            # vec0 НЕ поддерживает разрешение конфликта OR REPLACE: повторная
+            # вставка существующего chunk_id падает с «UNIQUE constraint failed
+            # on vec_chunk primary key». Замерено 16.10.2026 на копии хранилища:
+            # 1) INSERT OR REPLACE по существующему ключу — OperationalError;
+            # 2) DELETE по ключу + INSERT — проходит. Поэтому запись идёт в два
+            # шага. Прежняя редакция ловила отказ и молча ставила vec_ok=False,
+            # из-за чего покрытие сообщало неверную причину («sqlite-vec не
+            # загрузился»), а новые векторы переставали записываться вовсе.
+            #
+            # Дедупликация по chunk_id ОБЯЗАТЕЛЬНА: разбор может выдать один и
+            # тот же идентификатор дважды (замер 16.10.2026: ft_chunk на
+            # rev-0152 содержит 3953 строки против 3952 в chunk_map — дубль
+            # административного стиля). Вторая вставка того же ключа оборвала
+            # бы запись на середине (на rev-0152 записались 232 вектора из 3413).
+            unique_rows = list({row[0]: row for row in vec_rows}.values())
             try:
                 store.executemany_chunked(
                     self.conn,
-                    "INSERT OR REPLACE INTO vec_chunk(chunk_id, rev_id, embedding)"
-                    " VALUES(?,?,?)",
-                    vec_rows,
+                    "DELETE FROM vec_chunk WHERE chunk_id = ?",
+                    [(row[0],) for row in unique_rows],
                     batch=self.cfg.index.batch_size,
                 )
-            except sqlite3.Error:
+                store.executemany_chunked(
+                    self.conn,
+                    "INSERT INTO vec_chunk(chunk_id, rev_id, embedding)"
+                    " VALUES(?,?,?)",
+                    unique_rows,
+                    batch=self.cfg.index.batch_size,
+                )
+            except sqlite3.Error as exc:
+                # Отказ записи векторов — это НЕ «расширение не загрузилось».
+                # Причина сохраняется и попадает в заметку покрытия: молчаливый
+                # vec_ok=False не давал разобрать дефект.
                 self.vec_ok = False
+                self.vec_error = f"запись в vec0 не удалась: {type(exc).__name__}: {exc}"
         self.conn.commit()
         return len(chunks)
 
@@ -300,7 +412,7 @@ class LexVecStore:
     def search_vector(self, rev_id: str, vector: list[float], limit: int = 20) -> list[SearchHit]:
         """Векторный поиск с КОРРЕКТНЫМ переводом расстояния в оценку.
 
-        Дефект, найденный замером на полигоне пилотный PHP-портал (tools/probe_vec_metric.py):
+        Дефект, найденный замером на полигоне z.batteryservice.ru (tools/probe_vec_metric.py):
         векторы модели НЕ нормированы (норма ≈ 3.5 у чанков, 4.19 у запроса),
         поэтому L2-расстояние от vec0 лежит в диапазоне ~3.9…4.5. Формула
         score = 1 - dist (а также cos ≈ 1 - dist²/2, годная только для
@@ -489,6 +601,147 @@ class LexVecStore:
                 out[str(r["chunk_id"])] = str(r["text"] or "")
         return out
 
+    def literal_hits(self, rev_id: str, needle: str, *, limit: int = 20,
+                     scan_limit: int = 20000, path_prefix: str | None = None,
+                     regex: bool = False) -> tuple[list[dict], str]:
+        """ЛИТЕРАЛЬНЫЙ (подстрочный) поиск по тексту чанков — P1-1.
+
+        Почему не хватает `search_hybrid`. Гибридный поиск отвечает на вопрос
+        «где об этом написано» и ранжирует по смыслу: он ищет ТОКЕНЫ и потому
+        не находит ни строку со знаками препинания (`'MCH', 'MOL'`), ни
+        фразу, разбитую переносом. Агент же спрашивает буквально: «где в
+        коде встречается вот эта строка» — и ответ обязан быть полным.
+
+        Как устроено. Сначала дешёвый предварительный отбор по FTS (фразовый
+        запрос), затем ПРОВЕРКА точным сравнением по сохранённому тексту чанка.
+        Проверка обязательна: FTS хранит токены, а не текст, и его совпадение
+        само по себе не доказывает подстроку. Если предварительный отбор ничего
+        не дал, выполняется честный проход LIKE по чанкам (с ограничением
+        `scan_limit`), а способ отбора возвращается наружу — в поле `method`
+        ответа. Молчаливое «не найдено» из-за токенизатора недопустимо.
+
+        Возврат: (список хитов, способ отбора). Хит — словарь с `path`, `line`
+        (абсолютная строка совпадения), `chunk_id`, `text` (строка-доказательство),
+        `source_kind`, `lang`.
+        """
+        import re as _re
+
+        needle = str(needle)
+        prefix_sql = ""
+        params_prefix: list = []
+        if path_prefix:
+            prefix_sql = " AND t.path LIKE ?"
+            params_prefix = [f"{path_prefix}%"]
+        core = _literal_core(needle) if regex else needle
+        matcher = None
+        if regex:
+            try:
+                matcher = _re.compile(needle)
+            except _re.error:
+                return [], "regex_error"
+
+        def verify(text: str) -> int:
+            """Позиция совпадения в тексте или -1. Проверка — точная."""
+            if matcher is not None:
+                m = matcher.search(text)
+                return m.start() if m else -1
+            return text.find(needle)
+
+        # --- шаг 1: предварительный отбор по FTS (фразовый запрос) ---
+        candidates: dict[str, dict] = {}
+        if core:
+            tokens = tokenize_for_fts(core).split()
+            if tokens:
+                phrase = '"' + " ".join(tokens) + '"'
+                try:
+                    rows = self.conn.execute(
+                        "SELECT f.chunk_id, f.path, m.start_line, m.source_kind, m.lang"
+                        " FROM ft_chunk f LEFT JOIN chunk_map m"
+                        " ON m.rev_id = f.rev_id AND m.chunk_id = f.chunk_id"
+                        " WHERE f.rev_id = ? AND ft_chunk MATCH ? LIMIT ?",
+                        (rev_id, phrase, scan_limit),
+                    ).fetchall()
+                except sqlite3.Error:
+                    rows = []
+                for r in rows:
+                    candidates[str(r["chunk_id"])] = {
+                        "path": str(r["path"] or ""),
+                        "start_line": int(r["start_line"] or 1),
+                        "source_kind": str(r["source_kind"] or ""),
+                        "lang": str(r["lang"] or ""),
+                    }
+
+        out: list[dict] = []
+
+        def collect(rows_text: dict[str, str], meta: dict[str, dict], method: str) -> list[dict]:
+            hits: list[dict] = []
+            for chunk_id, text in rows_text.items():
+                pos = verify(text)
+                if pos < 0:
+                    continue
+                info = meta.get(chunk_id) or {}
+                start = int(info.get("start_line") or 1)
+                # Строка считается общим правилом `util.text_line`: у чанка-символа
+                # первая строка — служебный заголовок, у чанка-файла его нет.
+                line = util.text_line(text, pos, start)
+                hits.append({
+                    "chunk_id": chunk_id,
+                    "path": str(info.get("path") or ""),
+                    "line": line,
+                    "text": _match_line(text, pos),
+                    "source_kind": str(info.get("source_kind") or "file"),
+                    "lang": str(info.get("lang") or ""),
+                    "method": method,
+                })
+            hits.sort(key=lambda h: (h["path"], h["line"]))
+            return hits
+
+        if candidates:
+            ids = list(candidates)
+            texts = self.chunk_texts(rev_id, ids)
+            out = collect(texts, candidates, "fts")
+            if out:
+                return out[:limit], "fts"
+
+        # --- шаг 2: честный проход по тексту чанков ---
+        if not core and matcher is None:
+            return [], "empty"
+        try:
+            if core:
+                sql = (
+                    "SELECT t.chunk_id, t.path, t.text, COALESCE(m.start_line, 1) AS start_line,"
+                    " m.source_kind, m.lang FROM chunk_text t LEFT JOIN chunk_map m"
+                    " ON m.rev_id = t.rev_id AND m.chunk_id = t.chunk_id"
+                    " WHERE t.rev_id = ? AND t.text LIKE ?" + prefix_sql + " LIMIT ?"
+                )
+                rows = self.conn.execute(
+                    sql, (rev_id, f"%{core}%", *params_prefix, scan_limit)
+                ).fetchall()
+            else:
+                sql = (
+                    "SELECT t.chunk_id, t.path, t.text, COALESCE(m.start_line, 1) AS start_line,"
+                    " m.source_kind, m.lang FROM chunk_text t LEFT JOIN chunk_map m"
+                    " ON m.rev_id = t.rev_id AND m.chunk_id = t.chunk_id"
+                    " WHERE t.rev_id = ?" + prefix_sql + " LIMIT ?"
+                )
+                rows = self.conn.execute(sql, (rev_id, *params_prefix, scan_limit)).fetchall()
+        except sqlite3.Error:
+            return out[:limit], "fts"
+
+        meta = {}
+        texts = {}
+        for r in rows:
+            cid = str(r["chunk_id"])
+            meta[cid] = {
+                "path": str(r["path"] or ""),
+                "start_line": int(r["start_line"] or 1),
+                "source_kind": str(r["source_kind"] or ""),
+                "lang": str(r["lang"] or ""),
+            }
+            texts[cid] = str(r["text"] or "")
+        scanned = collect(texts, meta, "scan")
+        return scanned[:limit], ("scan" if scanned else ("fts" if candidates else "scan"))
+
     def text_for_span(self, rev_id: str, path: str, start_line: int,
                       end_line: int) -> tuple[int, str] | None:
         """Полный текст спана ИЗ ИНДЕКСА: чанки сшиваются по абсолютным строкам.
@@ -664,6 +917,7 @@ class LexVecStore:
 
     def purge_rev(self, rev_id: str) -> None:
         """Удаление данных ревизии. vec0 удаляется по chunk_id из vec_meta."""
+        self._require_writable("purge_rev")
         try:
             ids = [
                 str(r["chunk_id"])
@@ -691,7 +945,10 @@ class LexVecStore:
         self.conn.commit()
 
     def close(self) -> None:
-        self.conn.commit()
+        # Фиксация только там, где соединение на запись: на чтении коммитить
+        # нечего, а попытка завершилась бы отказом при закрытии фасада.
+        if self.writable:
+            self.conn.commit()
         self.conn.close()
 
 

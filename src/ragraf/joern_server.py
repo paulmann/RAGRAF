@@ -265,13 +265,24 @@ class JoernServer:
         оставался java-процесс на 375 МБ, который продолжал держать порт.
         Это утечка: несколько индексаций — несколько висящих JVM.
 
-        Поэтому дерево процессов убивается целиком: сначала сам процесс,
-        затем его потомки, найденные по списку процессов системы.
+        Поэтому дерево процессов убивается целиком: `taskkill /T` завершает и
+        обёртку cmd.exe, и JVM одной командой, а список потомков по системе —
+        запасной путь, если дерево уже распалось.
         """
         proc = self._proc
         if proc is None:
             return
         pid = int(proc.pid or 0)
+        # taskkill /T ДО ожидания: он работает, пока cmd.exe жив и держит связь
+        # с JVM. Замер 16.10.2026: три JVM-сироты держали порты 9500–9502.
+        if pid:
+            try:
+                subprocess.run(
+                    ["taskkill", "/PID", str(pid), "/T", "/F"],
+                    capture_output=True, text=True, timeout=60,
+                )
+            except Exception:
+                pass
         try:
             if proc.poll() is None:
                 proc.terminate()

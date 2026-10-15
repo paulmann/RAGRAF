@@ -23,7 +23,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .. import util
+from .. import textdec, util
 
 EXT_PREFIX = "@ext:"          # маркер неразрешённого внешнего имени
 TABLE_PREFIX = "@table:"      # ребро к таблице БД
@@ -157,6 +157,242 @@ INCLUDE_TYPES = {
     "require_once_expression": "require_once",
 }
 
+# --- P1-3: точки входа, плейсхолдеры переводов, SQL вне строк PHP ---
+
+#: Атрибуты разметки, которые ссылаются на файл как на точку входа.
+#: Объявлены ЗДЕСЬ, а не в analysis.py: по этим же образцам заполняется
+#: реестр маршрутов при индексации, и второй ручной список тех же образцов
+#: разошёлся бы с первым — это в проекте уже случалось.
+ENDPOINT_ATTR_RE = re.compile(
+    r"""(?:action|src|href|source|data-url|data-src|url|endpoint)\s*=\s*["']([^"'\s>]+)["']""",
+    re.IGNORECASE,
+)
+ENDPOINT_CALL_RE = re.compile(
+    r"""(?:fetch|open|load|ajax|\.post|\.get|include|require|\$\.get|XMLHttpRequest)"""
+    r"""\s*[\(=]\s*["']([^"'\s>]+)["']""",
+    re.IGNORECASE,
+)
+#: Регистрация маршрута в коде: `Route::get('/order')`, `$app->post('/x')`.
+ROUTE_CALL_RE = re.compile(
+    r"""(?:Route|Router|route|app|router|server)\s*(?:::|->)\s*"""
+    r"""(get|post|put|patch|delete|options|any|add|match|all)\s*\(\s*["']([^"']+)["']""",
+    re.IGNORECASE,
+)
+#: Подключение файла из разметки: `<script src>`, `<link href>`, `<!--#include virtual-->`.
+INCLUDE_ATTR_RE = re.compile(
+    r"""(?:src|href)\s*=\s*["']([^"'#?]+\.(?:js|css|php|pl|html|htm))["']""",
+    re.IGNORECASE,
+)
+SSI_INCLUDE_RE = re.compile(
+    r"""<!--\s*#include\s+virtual\s*=\s*["']([^"']+)["']""", re.IGNORECASE
+)
+#: Строковый литерал, похожий на путь к файлу корпуса. Нужен, потому что
+#: ссылка на рабочий файл часто лежит ПРОСТО СТРОКОЙ:
+#: `BWO_FILES_ENDPOINT = 'php/Wizard/Files7.php'` — ни include, ни вызова,
+#: только литерал. Без разбора таких литералов вопрос «какой из копий рабочий»
+#: решался запросом LIKE по всему тексту корпуса: измерено на BWO (102 тысячи
+#: чанков) — 0,66 с на файл, то есть 25 секунд на ответ по 25 копиям.
+FILE_LITERAL_RE = re.compile(
+    r"""["']((?:\.{0,2}/)?[A-Za-z0-9_][A-Za-z0-9_./\\-]*"""
+    r"""\.(?:php|phtml|inc|pl|cgi|py|js|mjs|css|html|htm|tpl|sql|json|xml))["']""",
+    re.IGNORECASE,
+)
+#: Имена функций перевода. Их первый строковый аргумент — КЛЮЧ перевода,
+#: и он должен попадать в тот же узел графа, что и плейсхолдер в шаблоне:
+#: тогда `references("tpl:reg.months")` показывает и шаблон, и код.
+TRANSLATE_FNS = frozenset({"translate", "trans", "t", "__", "tr", "gettext", "_t", "lang"})
+#: Плейсхолдеры шаблонов: `%{Key}`, `@{Key}`, `{{Key}}`.
+PLACEHOLDER_RE = re.compile(r"[%@]\{([A-Za-z0-9_.\-]+)\}|\{\{([A-Za-z0-9_.\-]+)\}\}")
+PLACEHOLDER_KIND = "placeholder"
+ROUTE_PREFIX = "@route:"
+
+
+#: Расширения, по которым адрес из разметки считается точкой входа КОДА.
+#: Без этого фильтра в реестр попадали все статические ссылки шаблона:
+#: измерено на BWO — 310 тысяч рёбер маршрутов (23 % всех рёбер корпуса),
+#: почти все на картинки, якоря и страницы без обработчика.
+CODE_EXT = (".php", ".phtml", ".inc", ".pl", ".cgi", ".py", ".js", ".mjs",
+            ".css", ".html", ".htm", ".tpl", ".sql", ".rhtml")
+
+
+def routes_from_text(path: str, text: str) -> list[dict]:
+    """Точки входа из текста файла: маршруты, атрибуты, вызовы, подключения.
+
+    Что попадает: регистрация маршрута в коде (`Route::get('/x')`),
+    ссылки разметки (`action=`, `src=`, `href=`, `source=`), вызовы загрузки
+    (`fetch('...')`, `$.get('...')`) и серверные включения
+    (`<!--#include virtual="...">`).
+
+    Ссылки разметки принимаются, только если адрес ведёт на файл КОДА
+    (расширение из `CODE_EXT`): якоря, картинки и стили точками входа не
+    являются, а их в разметке большинство.
+
+    Возврат: список словарей `{route, method, line, kind}`. Повтор одной и той
+    же пары (route, строка) не дублируется.
+    """
+    out: list[dict] = []
+    seen: set[tuple[str, int, str]] = set()
+
+    def add(route: str, method: str, line: int, kind: str) -> None:
+        route = route.strip()
+        if not route or route.startswith(("#", "mailto:", "javascript:", "data:")):
+            return
+        if kind in ("endpoint", "include"):
+            low = route.split("?")[0].split("#")[0].lower()
+            if not low.endswith(CODE_EXT):
+                return
+        key = (route, line, kind)
+        if key in seen:
+            return
+        seen.add(key)
+        out.append({"route": route, "method": method, "line": line, "kind": kind})
+
+    for m in ROUTE_CALL_RE.finditer(text):
+        add(m.group(2), m.group(1).upper(), text.count("\n", 0, m.start()) + 1, "route")
+    for m in ENDPOINT_ATTR_RE.finditer(text):
+        add(m.group(1), "", text.count("\n", 0, m.start()) + 1, "endpoint")
+    for m in ENDPOINT_CALL_RE.finditer(text):
+        add(m.group(1), "", text.count("\n", 0, m.start()) + 1, "endpoint")
+    for m in INCLUDE_ATTR_RE.finditer(text):
+        add(m.group(1), "", text.count("\n", 0, m.start()) + 1, "include")
+    for m in SSI_INCLUDE_RE.finditer(text):
+        add(m.group(1), "", text.count("\n", 0, m.start()) + 1, "include")
+    out.sort(key=lambda r: (r["line"], r["route"]))
+    return out
+
+
+def file_refs_from_text(text: str) -> list[tuple[str, int]]:
+    """Пути файлов корпуса, упомянутые строковыми литералами.
+
+    Возврат: список (путь, строка). Ссылки «на себя» и адреса с `://`
+    отбрасываются: первое — не связь, второе — внешний мир.
+
+    Зачем на этапе ИНДЕКСАЦИИ, а не запросом при чтении. Разбор один раз
+    на файл дешевле, чем поиск по всему тексту корпуса при каждом вопросе;
+    измерение на BWO показало разницу в три порядка (8 мс против 0,66 с на
+    один файл). Признак связи честный: это `derived`, а не факт вызова.
+    """
+    out: list[tuple[str, int]] = []
+    seen: set[tuple[str, int]] = set()
+    for m in FILE_LITERAL_RE.finditer(text):
+        raw = m.group(1)
+        if "://" in raw or raw.startswith("//"):
+            continue
+        path = util.to_posix(raw).lstrip("/")
+        if path.startswith("./"):
+            path = path[2:]
+        line = text.count("\n", 0, m.start()) + 1
+        if not path or (path, line) in seen:
+            continue
+        seen.add((path, line))
+        out.append((path, line))
+    return out
+
+
+def file_ref_edges(res: FileExtraction, file_id: str, text: str) -> None:
+    """Добавить в извлечение рёбра `imports` на упомянутые строкой файлы.
+
+    Повтор одного и того же пути в файле даёт ОДНО ребро (с первой строкой):
+    иначе один шаблон со списком ссылок порождал десятки рёбер на тот же файл
+    — измерено на BWO, где таких рёбер оказалось 156 тысяч, и их обработка
+    занимала полторы секунды на каждый вопрос о ссылках. Повторы называются
+    счётчиком в свойствах ребра, так что факт «упомянут много раз» не теряется.
+    """
+    seen: dict[str, tuple[int, int]] = {}
+    for path, line in file_refs_from_text(text):
+        first, count = seen.get(path, (line, 0))
+        seen[path] = (first, count + 1)
+    for path, (line, count) in seen.items():
+        res.edges.append(
+            EdgeRec(src=file_id, dst=f"{FILE_PREFIX}{path}", kind="imports",
+                    provenance="derived", evidence_line=line, confidence=0.9,
+                    props={"kind": "literal", "in": res.path, "mentions": count})
+        )
+
+
+def placeholders_from_text(text: str) -> list[tuple[str, int]]:
+    """Ключи плейсхолдеров `%{Key}`, `@{Key}`, `{{Key}}` со строками."""
+    out: list[tuple[str, int]] = []
+    seen: set[tuple[str, int]] = set()
+    for m in PLACEHOLDER_RE.finditer(text):
+        key = m.group(1) or m.group(2)
+        line = text.count("\n", 0, m.start()) + 1
+        if (key, line) in seen:
+            continue
+        seen.add((key, line))
+        out.append((key, line))
+    return out
+
+
+def placeholder_node_id(key: str) -> str:
+    """Идентификатор узла ключа перевода. Один на корпус — по имени ключа.
+
+    Почему без файла в ключе: узел нужен, чтобы связать ШАБЛОН и КОД. Ключ
+    `reg.months` объявлен в таблице переводов, использован в шаблоне через
+    `%{reg.months}` и в PHP через `Translate('reg.months')` — это три разных
+    файла, и если файл входит в идентификатор, они никогда не сопоставятся.
+    """
+    return util.stable_id(PLACEHOLDER_KIND, key, NO_FILE)
+
+
+def placeholder_facts(res: FileExtraction, text: str, file_id: str, path: str) -> None:
+    """Добавить в извлечение узлы ключей перевода и рёбра использования.
+
+    Узел помечается `shared`: он общий для корпуса, поэтому индексатор НЕ
+    записывает ему путь и строку последнего файла (иначе адрес ключа менялся
+    бы от порядка обхода — этот дефект в проекте уже был у внешних заглушек).
+    """
+    for key, line in placeholders_from_text(text):
+        node_id = placeholder_node_id(key)
+        res.symbols.append(
+            SymbolRec(
+                node_id=node_id, kind=PLACEHOLDER_KIND, name=key,
+                fqn=f"tpl:{key}", start_line=line, end_line=line,
+                start_byte=0, end_byte=0, signature=None, parent_fqn=None,
+                props={"lang": res.lang, "shared": True, "key": key},
+            )
+        )
+        res.edges.append(
+            EdgeRec(src=file_id, dst=node_id, kind="uses_key", provenance="stated",
+                    evidence_line=line, confidence=1.0, props={"key": key, "in": path})
+        )
+
+
+def route_edges(res: FileExtraction, file_id: str) -> None:
+    """Добавить рёбра `routes` от файла к его точкам входа.
+
+    Реестр маршрутов (`web_route`) отвечает на вопрос «какие маршруты есть»,
+    а ребро — на вопрос «что затронет правка этого файла»: без него `impact`
+    по файлу точки входа показывал бы пустоту.
+
+    Идентификатор узла считается по НОРМАЛИЗОВАННОМУ адресу (без `?запрос` и
+    `#якорь`). Причина измерена на BWO: в разметке адреса идут со случайными
+    параметрами (`?id=123&tab=list`), и каждый такой вариант давал СВОЙ узел —
+    310 тысяч узлов маршрутов в одном корпусе. Адрес с параметрами — тот же
+    маршрут; параметры остаются в свойствах как доказательство.
+    """
+    for item in res.routes:
+        raw = str(item["route"])
+        normalized = raw.split("?")[0].split("#")[0]
+        node_id = util.stable_id("route", normalized, item.get("method", ""))
+        res.symbols.append(
+            SymbolRec(
+                node_id=node_id, kind="route_node", name=normalized,
+                fqn=f"route:{item.get('method', '')}:{normalized}",
+                start_line=item["line"], end_line=item["line"],
+                start_byte=0, end_byte=0, signature=None, parent_fqn=None,
+                props={"lang": res.lang, "shared": True, "route": normalized,
+                       "raw": raw, "method": item.get("method", "")},
+            )
+        )
+        res.edges.append(
+            EdgeRec(src=file_id, dst=node_id, kind="routes", provenance="stated",
+                    evidence_line=item["line"], confidence=0.9,
+                    props={"route": normalized, "raw": raw,
+                           "method": item.get("method", ""),
+                           "kind": item.get("kind", "endpoint")})
+        )
+
 CLASS_TYPES = {
     "class_declaration": "class",
     "interface_declaration": "interface",
@@ -213,6 +449,10 @@ class FileExtraction:
     sha256: str
     lines: int
     lang: str = "php"
+    #: Кодировка исходного файла (utf-8 | cp1251 | utf-16 | cp1252).
+    #: Хранится отдельно от текста: по ней объясняется, почему поиск нашёл
+    #: строку в файле, который читается не как UTF-8 (P1-1).
+    encoding: str = "utf-8"
     parse_status: str = "ok"
     parse_note: str | None = None
     symbols: list[SymbolRec] = field(default_factory=list)
@@ -221,6 +461,9 @@ class FileExtraction:
     sql_literals: list[dict] = field(default_factory=list)
     includes: list[dict] = field(default_factory=list)
     superglobals: list[dict] = field(default_factory=list)
+    #: Точки входа файла (P1-3): маршруты, атрибуты разметки, подключения.
+    #: Заполняется извлекателем и переносится индексатором в таблицу `web_route`.
+    routes: list[dict] = field(default_factory=list)
     _pending_calls: list[int] = field(default_factory=list, repr=False)
 
     @property
@@ -368,10 +611,18 @@ class PhpExtractor:
     # ---- один файл ----
 
     def extract(self, rel_path: str, data: bytes) -> FileExtraction:
+        # Кодировка определяется ДО разбора: часть файлов BWO в CP1251, и при
+        # чтении «как UTF-8» русские строки превращались в ромбы — то есть
+        # поиск по ним не находил ничего (P1-1). sha256 считается по исходным
+        # байтам, а дереву отдаётся UTF-8-буфер: смещения узлов должны
+        # относиться к тому же буферу, что и нарезка чанков.
+        raw = data
+        _text, enc, data = textdec.prepare(raw, rel_path)
         res = FileExtraction(
             path=util.to_posix(rel_path),
-            sha256=util.sha256_bytes(data),
-            lines=data.count(b"\n") + 1,
+            sha256=util.sha256_bytes(raw),
+            lines=textdec.line_count(raw, _text, enc),
+            encoding=enc,
         )
         file_node_id = util.stable_id("file", res.path)
         res.symbols.append(
@@ -413,6 +664,18 @@ class PhpExtractor:
         # не видны, и расхождение «класс используется, но правила нет»
         # остаётся незамеченным — именно так терялись 32 класса agreements.
         self._scan_markup_classes(file_node_id)
+
+        # P1-3: точки входа и ключи переводов из текста файла. Идёт ПОСЛЕ
+        # обхода дерева, потому что работает по тексту: `action=`, `src=`,
+        # `fetch(...)`, `Route::get(...)`, `%{key}`. Дерево этих конструкций
+        # в PHP-шаблоне не даёт — разметка внутри PHP это просто строки.
+        text = data.decode("utf-8", errors="replace")
+        res.routes = routes_from_text(res.path, text)
+        route_edges(res, file_node_id)
+        placeholder_facts(res, text, file_node_id, res.path)
+        # Ссылки на файлы строковыми литералами (P1-2): без них «какой из
+        # копий рабочий» требовал поиска LIKE по всему корпусу.
+        file_ref_edges(res, file_node_id, text)
 
         # Ребро defines для символов верхнего уровня.
         for s in res.symbols:
@@ -533,6 +796,10 @@ class PhpExtractor:
             if fn is not None and fn.type in ("name", "qualified_name"):
                 callee = node_text(self._data, fn).strip()
                 self._call(container, callee, ns, line_of(node), "calls", 1.0)
+                # Ключ перевода (P1-3): `Translate('reg.months')` и подобные.
+                # Узел ключа — ТОТ ЖЕ, что у плейсхолдера в шаблоне, поэтому
+                # `references("tpl:reg.months")` показывает и шаблон, и код.
+                self._translate_key(node, callee, container)
             else:
                 self._edge(container, f"{EXT_PREFIX}dynamic_func", "calls_heuristic", "derived",
                            line_of(node), 0.4)
@@ -619,6 +886,28 @@ class PhpExtractor:
             self._visit_children(node, ns, class_fqn, func_fqn, container)
             return
 
+        if t in ("heredoc", "nowdoc"):
+            # SQL в HEREDOC/NOWDOC (P1-3). До этой ветви такие запросы не
+            # находились вовсе: извлекатель обрабатывал только узлы `string`
+            # и `encapsed_string`, а в дереве PHP многострочный литерал — это
+            # `heredoc`/`nowdoc` с отдельным телом. Замер на BWO: запросы в
+            # `<<<SQL` не попадали ни в рёбра к таблицам, ни в поиск, то есть
+            # «кто пишет в таблицу» отвечал пусто на существующую запись.
+            body = None
+            for kind in ("heredoc_body", "nowdoc_body"):
+                body = node.child_by_field_name(kind)
+                if body is not None:
+                    break
+            if body is None:
+                for ch in node.children:
+                    if ch.type in ("heredoc_body", "nowdoc_body", "string_content"):
+                        body = ch
+                        break
+            if body is not None:
+                self._handle_string(body, container)
+            self._visit_children(node, ns, class_fqn, func_fqn, container)
+            return
+
         if t == "variable_name":
             raw = node_text(self._data, node).strip()
             if raw in SUPERGLOBALS:
@@ -674,6 +963,33 @@ class PhpExtractor:
 
     # ---- конструкции ----
 
+    def _sql_via(self, node) -> str:
+        """Как запрос попадает в СУБД: прямым вызовом или через подготовку.
+
+        Разница важна для вопроса «кто пишет»: у подготовленного выражения
+        (`$pdo->prepare("INSERT ...")` → `$stmt->execute()`) запись происходит
+        в момент выполнения, а не подготовки, и текст запроса лежит в первом
+        вызове. Показывать это честнее, чем выдавать оба вызова за одно и то же.
+        """
+        p = getattr(node, "parent", None)
+        depth = 0
+        while p is not None and depth < 4:
+            if p.type == "function_call_expression":
+                fn = p.child_by_field_name("function")
+                nm = node_text(self._data, fn).strip() if fn is not None else ""
+            elif p.type in ("member_call_expression", "scoped_call_expression"):
+                nm = self._field(p, "name") or ""
+            else:
+                nm = ""
+            low = str(nm).lower()
+            if low == "prepare":
+                return "prepared"
+            if low in ("query", "exec", "execute", "do", "mysqli_query", "pg_query"):
+                return f"direct:{low}"
+            p = getattr(p, "parent", None)
+            depth += 1
+        return "literal"
+
     def _handle_string(self, node, container: str) -> None:
         raw = node_text(self._data, node)
         if len(raw) < 8 or not SQL_RE.search(raw):
@@ -684,14 +1000,19 @@ class PhpExtractor:
         # table_usage не могла ответить, какие вызовы пишут в журнал. Для правки
         # схемы это ключевой вопрос: важно знать, где именно идёт вставка.
         access = _sql_access(raw)
+        via = self._sql_via(node)
+        # Кавычки строкового литерала в текст запроса не переносятся: агенту
+        # нужен запрос (`INSERT INTO ...`), а не его литерал в PHP (`"INSERT ..."`).
+        sql_text = _collapse(raw.strip("'\""), 400)
         self._res.sql_literals.append(
             {
                 "line": line_of(node),
                 "owner": container,
-                "sql": _collapse(raw, 400),
+                "sql": sql_text,
                 "tables": tables,
                 "write": access != "select",
                 "access": access,
+                "via": via,
             }
         )
         for tbl in tables:
@@ -702,8 +1023,58 @@ class PhpExtractor:
                 "stated",
                 line_of(node),
                 0.8,
-                props={"write": access != "select", "access": access},
+                props={"write": access != "select", "access": access,
+                       "sql": _collapse(raw.strip("'\""), 200), "via": via},
             )
+
+    def _translate_key(self, node, callee: str, container: str) -> None:
+        """Ключ перевода из вызова функции перевода (P1-3).
+
+        `Translate('reg.months')` — это использование ключа, и оно должно
+        попасть в ТОТ ЖЕ узел, что плейсхолдер `%{reg.months}` в шаблоне.
+        Тогда один вопрос «где используется ключ» получает оба ответа:
+        шаблон и код. Имя функции сверяется по списку и БЕЗ учёта регистра,
+        но только если первый аргумент — строковый литерал: `Translate($key)`
+        о статическом анализе ничего не говорит, и выдумывать ключ нельзя.
+        """
+        base = callee.split("\\")[-1].strip().lower()
+        if base not in TRANSLATE_FNS:
+            return
+        args = node.child_by_field_name("arguments")
+        if args is None:
+            return
+        first = None
+        for ch in args.children:
+            if ch.type in ("(", ")", ",", " "):
+                continue
+            # Аргумент обёрнут в узел `argument` (проверено вызовом грамматики:
+            # `Translate('reg.months')` → arguments → argument → string).
+            # Без разворота этой обёртки ключ не находился вовсе.
+            first = ch
+            break
+        if first is None:
+            return
+        if first.type == "argument":
+            first = next((c for c in first.children
+                          if c.type in ("string", "encapsed_string")), None)
+        if first is None or first.type not in ("string", "encapsed_string"):
+            # Первый аргумент — переменная или выражение: ключ неизвестен.
+            return
+        raw = node_text(self._data, first).strip()
+        key = raw.strip("'\"")
+        if not key or len(key) > 120 or "\n" in key:
+            return
+        node_id = placeholder_node_id(key)
+        self._res.symbols.append(
+            SymbolRec(
+                node_id=node_id, kind=PLACEHOLDER_KIND, name=key,
+                fqn=f"tpl:{key}", start_line=line_of(first), end_line=end_line_of(first),
+                start_byte=0, end_byte=0, signature=None, parent_fqn=None,
+                props={"lang": "php", "shared": True, "key": key},
+            )
+        )
+        self._edge(container, node_id, "uses_key", "stated", line_of(first), 1.0,
+                   props={"key": key, "fn": callee})
 
     def _call(self, owner: str, callee: str, ns: str, line: int, kind: str, conf: float) -> None:
         """Ребро вызова. Если цель ещё не объявлена — откладывается до конца файла."""
@@ -1145,13 +1516,13 @@ def build_chunks(
     """Чанки для лексического и векторного индекса.
 
     Три случая, каждый проверен на реальном корпусе
-    (tools/probe_chunks.py на пилотный PHP-портал):
+    (tools/probe_chunks.py на z.batteryservice.ru):
 
     1. Символы есть — один чанк на символ; крупные символы режутся окнами
        (у пилота есть метод на 1217 строк).
 
     2. СИМВОЛОВ НЕТ — процедурный PHP: страницы и скрипты часто не содержат
-       ни одной функции. На пилотный PHP-портал таких файлов 20: mail/index.php,
+       ни одной функции. На z.batteryservice.ru таких файлов 20: mail/index.php,
        admin/*.php, config.php и другие. Прежняя реализация делала из такого файла
        ОДИН чанк на весь файл (до 11 331 токена, строки 1..304) — он размывал
        поиск: слабо совпадал со всем подряд и в гибридном ранжировании вылезал
@@ -1166,7 +1537,12 @@ def build_chunks(
     if not by_symbol:
         return _chunk_file_whole_or_windows(res, data, max_lines, min_lines)
 
-    targets = [s for s in res.symbols if s.kind not in ("file", "namespace")]
+    targets = [s for s in res.symbols if s.kind not in (
+        "file", "namespace",
+        # Служебные «якоря» (P1-3) чанками не являются: см. пояснение в
+        # `extract/generic.py` — иначе индекс BWO вырос втрое на том же коде.
+        "route_node", "placeholder", "variable",
+    )]
     if not targets:
         # Случай 2: процедурный файл без символов.
         return _chunk_file_whole_or_windows(res, data, max_lines, min_lines)

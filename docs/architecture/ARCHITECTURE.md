@@ -410,7 +410,7 @@ Rule: **degradation is never silent.** An agent that does not know it has no sli
 
 ## 7. Facade operations (contracts)
 
-> **Translation note (doc↔code sync):** this section historically listed **17** operations (release-1 scope). The shipped facade implements **22** operations, exposed as **23 MCP tools** (adds `ensure`, omits `calibrate`) and **23 CLI query operations** (adds `usage`). The five operations added after the spec — `write_check`, `policy_trace`, `class_usage`, `freshness`, `catalog` — are described in the README capability table and `docs/skills/ragraf-core/reference/operations.md`. Requirement IDs below keep the original numbering (ФТ-n → FT-n).
+> **Translation note (doc↔code sync):** this section historically listed **17** operations (release-1 scope). As counted in the sources on 2026-10-16, the shipped facade implements **38** operations, exposed as **40 MCP tools**: five tools have no facade operation of their own (`context`, `ensure`, `task`, `usage`, `use_project`), and three facade operations are not exposed as tools (`calibrate`, `gate`, `task_set`). The five operations added after the spec — `write_check`, `policy_trace`, `class_usage`, `freshness`, `catalog` — are described in the README capability table and `docs/skills/ragraf-core/reference/operations.md`. Requirement IDs below keep the original numbering (ФТ-n → FT-n).
 
 All operations return a common «envelope». The uniform format is requirement FT-10/FT-13: the agent always sees what it is trusting.
 

@@ -14,47 +14,132 @@ from typing import Any, Iterable, Sequence
 
 from . import SCHEMA_VERSION
 
+# Причины отказов векторного слоя. Отказ был молчаливым (`return False`), и
+# покрытие сообщало «sqlite-vec не загрузился» без причины — разбор упирался
+# в догадки. Замер 16.10.2026: расширение загружалось нормально, а отказ
+# приходил от записи в vec0; при этом диагностика не видела разницы. Поэтому
+# каждый отказ называет себя, а вызывающий код обязан его показать.
+LAST_EXTENSION_ERROR = ""
+LAST_VEC_TABLE_ERROR = ""
+
 
 def connect(path: str | Path, *, readonly: bool = False) -> sqlite3.Connection:
     """Открыть SQLite-соединение с нужными прагмами.
 
-    WAL — чтобы читатели (агент) не блокировали писателя (индексатор).
-    foreign_keys выключены: целостность обеспечивается логикой загрузки,
-    а не каскадами (иначе порядок вставки становится хрупким).
+    Про режим WAL и чтение. На соединении `mode=ro` прагма `journal_mode=WAL`
+    не выставляется: это запись, и там, где каталог базы недоступен для записи,
+    она падает с `unable to open database file` (измерено 15.10.2026 на
+    `C:\\AutoClaw\\MD.Viewer\\.ragraf\\control.sqlite`: копия базы читается, а
+    открыть её на месте нельзя). База уже в WAL — читать её можно, менять режим
+    для чтения не нужно. Прежняя редакция выставляла WAL и на `readonly`,
+    поэтому ЧТЕНИЕ требовало права записи, и панель не могла показать
+    статистику по чужой разработке.
+
+    Про запасной путь `immutable=1`. Если база не открывается даже так,
+    она открывается как неизменяемая: SQLite тогда не создаёт `-shm`/`-wal` и
+    не берёт блокировок, поэтому чтение возможно и в каталоге без права записи.
+    Цена названа честно: `immutable` запрещает замечать чужие изменения, и если
+    индекс прямо сейчас пишет другой процесс, читатель увидит состояние на
+    момент открытия. Для панели, которая показывает размеры и статистику, это
+    допустимо, а для агента — нет, поэтому запасной путь включается ТОЛЬКО на
+    явно read-only соединении.
     """
     p = Path(path)
     if readonly:
-        uri = f"file:{p.as_posix()}?mode=ro"
-        conn = sqlite3.connect(uri, uri=True)
+        conn = _connect_readonly(p)
     else:
         p.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(str(p))
     conn.row_factory = sqlite3.Row
+    # Таймаут ожидания ставится ПЕРВЫМ: смена режима журнала требует
+    # исключительной блокировки, и без уже установленного обработчика занятости
+    # она падает сразу, а не ждёт писателя (AGENTS.md: соединение с WAL и
+    # busy_timeout — контракт, а не оптимизация; порядок установки здесь и есть
+    # часть контракта).
+    conn.execute("PRAGMA busy_timeout=10000")
+    if readonly:
+        conn.execute("PRAGMA temp_store=MEMORY")
+        return conn
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA temp_store=MEMORY")
-    conn.execute("PRAGMA busy_timeout=10000")
-    if not readonly:
-        conn.execute("PRAGMA foreign_keys=OFF")
+    conn.execute("PRAGMA foreign_keys=OFF")
     return conn
 
 
+def _connect_readonly(path: Path) -> sqlite3.Connection:
+    """Соединение только для чтения. Запасной путь — `immutable=1`.
+
+    Соединение ПРОВЕРЯЕТСЯ пробой. `sqlite3.connect()` ленив: он не открывает
+    файл до первого обращения, поэтому попытка поймать отказ вокруг самого
+    вызова бесполезна — исключение приходит позже, у вызывающего кода
+    (измерено 15.10.2026: запасной путь не срабатывал, и панель продолжала
+    показывать `OperationalError`). Проба `PRAGMA schema_version` открывает
+    файл и делает отказ видимым здесь.
+    """
+    attempts = (
+        f"file:{path.as_posix()}?mode=ro",
+        f"file:{path.as_posix()}?immutable=1",
+    )
+    last: sqlite3.OperationalError | None = None
+    for uri in attempts:
+        try:
+            conn = sqlite3.connect(uri, uri=True)
+        except sqlite3.OperationalError as exc:
+            last = exc
+            continue
+        try:
+            conn.execute("PRAGMA schema_version").fetchone()
+            return conn
+        except sqlite3.OperationalError as exc:
+            # Именно здесь проявляется недоступность каталога: WAL требует
+            # `-shm`, который нельзя создать без права записи.
+            last = exc
+            conn.close()
+    # Сообщение `${path} не существует` отличает «индекс не собран» от «нет
+    # права записи»: обе причины дают один и тот же текст SQLite
+    # `unable to open database file`, а подсказки у них разные. Замерено
+    # 15.10.2026 на разработке AutoClaw: есть только `control.sqlite`, баз
+    # графа и лексики нет вовсе, и панель советовала проверить права.
+    if not path.exists():
+        raise sqlite3.OperationalError(f"{path} не существует")
+    raise last if last else sqlite3.OperationalError("cannot open database")
+
+
 def try_load_extension(conn: sqlite3.Connection, library_name: str) -> bool:
-    """Попытка загрузить расширение SQLite (sqlite-vec). Пустая = только лексика."""
+    """Попытка загрузить расширение SQLite (sqlite-vec). Пустая = только лексика.
+
+    Причина отказа запоминается в `LAST_EXTENSION_ERROR`: молчаливый False
+    превращал любую поломку в догадку, а в покрытии оставалась неверная фраза
+    «sqlite-vec не загрузился». Исключение не подавляется — оно становится
+    диагностикой.
+    """
+    global LAST_EXTENSION_ERROR
+    LAST_EXTENSION_ERROR = ""
     try:
         if not hasattr(conn, "enable_load_extension"):
+            LAST_EXTENSION_ERROR = "модуль sqlite3 без поддержки загрузки расширений"
             return False
         conn.enable_load_extension(True)
         try:
             import sqlite_vec  # type: ignore
 
             sqlite_vec.load(conn)
-        except Exception:
-            conn.load_extension(library_name)
+        except Exception as exc:
+            first = f"sqlite_vec.load: {type(exc).__name__}: {exc}"
+            try:
+                conn.load_extension(library_name)
+            except Exception as exc2:
+                LAST_EXTENSION_ERROR = (
+                    f"{first}; запасной путь ({library_name}): "
+                    f"{type(exc2).__name__}: {exc2}"
+                )
+                return False
         finally:
             conn.enable_load_extension(False)
         return True
-    except Exception:
+    except Exception as exc:
+        LAST_EXTENSION_ERROR = f"{type(exc).__name__}: {exc}"
         return False
 
 
@@ -127,6 +212,11 @@ CREATE TABLE IF NOT EXISTS file (
   sha256 TEXT NOT NULL,
   parse_status TEXT NOT NULL,     -- ok|partial|failed|skipped
   parse_note TEXT,
+  -- Кодировка исходного файла (utf-8|cp1251|utf-16|cp1252). Нужна, чтобы
+  -- ответ поиска объяснял, ПОЧЕМУ строка нашлась в файле, который читается
+  -- не как UTF-8: без этого признака «нашлось в cp1251» выглядело бы так же,
+  -- как «нашлось в utf-8», и потерю кодировки нельзя было бы заметить.
+  encoding TEXT NOT NULL DEFAULT 'utf-8',
   PRIMARY KEY (rev_id, path)
 );
 
@@ -204,6 +294,14 @@ CREATE TABLE IF NOT EXISTS db_table (
 CREATE TABLE IF NOT EXISTS db_column (
   rev_id TEXT NOT NULL, table_id TEXT NOT NULL, column_name TEXT NOT NULL,
   data_type TEXT, is_nullable INTEGER, column_key TEXT, ordinal INTEGER,
+  -- P1-4: признаки, по которым решается «можно ли писать» и «это ключ».
+  -- Отдельные колонки, а не строка `extra`: разбор строки в каждом читателе
+  -- уже дал измеренный дефект (колонка считалась генерируемой по подстроке
+  -- "GENERATED", из-за чего 92 обычные колонки объявлялись нерехзаписываемыми).
+  is_unique INTEGER NOT NULL DEFAULT 0,
+  auto_increment INTEGER NOT NULL DEFAULT 0,
+  generated_kind TEXT NOT NULL DEFAULT '',
+  has_default INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (rev_id, table_id, column_name)
 );
 
@@ -393,6 +491,19 @@ def _migrate_graph(conn: sqlite3.Connection) -> None:
         # DDL передаётся отдельной строкой без f-подстановки: в тексте есть
         # фигурные скобки (значение по умолчанию '{}'), а f-строка их ломает.
         ("edge", "props", "TEXT NOT NULL DEFAULT '" + "{}" + "'"),
+        # Кодировка файла появилась с P1-1. На уже построенных корпусах
+        # колонки нет, и `INSERT INTO file(..., encoding)` упал бы с
+        # «no such column» — то есть первый же `ensure` после обновления
+        # сломал бы индексацию. Значение по умолчанию 'utf-8' выбрано как
+        # честное «не знаем»: до этой правки всё и читалось как UTF-8.
+        ("file", "encoding", "TEXT NOT NULL DEFAULT 'utf-8'"),
+        # Признаки колонок схемы из миграций (P1-4). На существующих базах
+        # колонок нет, а вставка уже их перечисляет — без этой миграции
+        # первый же прогон упал бы с «no such column».
+        ("db_column", "is_unique", "INTEGER NOT NULL DEFAULT 0"),
+        ("db_column", "auto_increment", "INTEGER NOT NULL DEFAULT 0"),
+        ("db_column", "generated_kind", "TEXT NOT NULL DEFAULT ''"),
+        ("db_column", "has_default", "INTEGER NOT NULL DEFAULT 0"),
     ]
     for table, column, ddl in migrations:
         try:
@@ -417,8 +528,8 @@ def _migrate_graph(conn: sqlite3.Connection) -> None:
 def init_lexvec(conn: sqlite3.Connection) -> None:
     conn.executescript(LEXVEC_DDL_FTS)
     # Догоняющая миграция FTS-хранилища: таблица сырого текста появилась позже
-    # самой схемы. CREATE TABLE IF NOT EXISTS просто создаёт таблицу на
-    # существующих корпусах; чанки прежних ревизий в неё не попадают,
+    # самой схемы. CREATE TABLE IF NOT EXISTS на существующих корпусах (z, revoap,
+    # md.viewer) просто создаёт таблицу; чанки прежних ревизий в неё не попадают,
     # и читатель честно уходит на диск — данные не подделываются.
     conn.executescript(LEXVEC_DDL_CHUNK_TEXT)
     conn.execute(
@@ -429,15 +540,45 @@ def init_lexvec(conn: sqlite3.Connection) -> None:
 
 def init_control(conn: sqlite3.Connection) -> None:
     conn.executescript(CONTROL_DDL)
+    # Версия схемы пишется только при РАСХОЖДЕНИИ. Раньше здесь стоял
+    # безусловный `INSERT OR REPLACE`, то есть КАЖДОЕ открытие журнала было
+    # записью и требовало блокировки записи. Замерено 13.10.2026: пока другой
+    # процесс переиндексировал корпус (он держит блокировку десятки секунд),
+    # создание фасада во втором процессе падало с
+    # `OperationalError: database is locked` — то есть читатель не мог даже
+    # ОТКРЫТЬ журнал рядом с писателем, ради чего и заведён WAL. Проверка
+    # версии блокировки записи не требует, поэтому она идёт первой, а запись
+    # остаётся там, где значение действительно меняется.
+    row = conn.execute(
+        "SELECT value FROM meta WHERE key='schema_version'"
+    ).fetchone()
+    if row is not None and str(row[0]) == str(SCHEMA_VERSION):
+        return
     conn.execute(
         "INSERT OR REPLACE INTO meta(key, value) VALUES('schema_version', ?)",
         (str(SCHEMA_VERSION),),
     )
+    # Коммит здесь, а не у вызывающего: иначе открытая транзакция живёт до
+    # первой удачной записи этого соединения и всё это время держит блокировку
+    # записи журнала — то есть второй процесс (CLI рядом с MCP, сторож при
+    # живом сервере) писал в него не может вовсе.
+    conn.commit()
 
 
 def ensure_vec_table(conn: sqlite3.Connection) -> bool:
-    """Создать vec0-таблицу, если расширение доступно. False — вектор недоступен."""
+    """Создать vec0-таблицу, если расширение доступно. False — вектор недоступен.
+
+    Причина отказа запоминается в `LAST_VEC_TABLE_ERROR` (см.
+    `try_load_extension`): без неё нельзя отличить «расширение не загрузилось»
+    от «таблица не создалась».
+    """
+    global LAST_VEC_TABLE_ERROR
+    LAST_VEC_TABLE_ERROR = ""
     if not vec_available(conn):
+        LAST_VEC_TABLE_ERROR = (
+            "vec0 отсутствует в pragma_module_list: расширение не загружено "
+            "на соединении"
+        )
         return False
     try:
         conn.execute(
@@ -445,5 +586,6 @@ def ensure_vec_table(conn: sqlite3.Connection) -> bool:
             "chunk_id TEXT PRIMARY KEY, rev_id TEXT, embedding FLOAT[384])"
         )
         return True
-    except sqlite3.Error:
+    except sqlite3.Error as exc:
+        LAST_VEC_TABLE_ERROR = f"CREATE vec_chunk: {type(exc).__name__}: {exc}"
         return False

@@ -134,7 +134,17 @@ def _joern_path(cfg: ProjectConfig) -> Path | None:
     env = os.environ.get("RAGRAF_JOERN_HOME")
     if env:
         candidates.append(Path(env))
-    candidates.append(Path(__file__).resolve().parents[2] / ".tools" / "joern")
+    # Установка лежит в .tools/joern-cli — так её ищет и сам слой CPG
+    # (cpg.find_joern_scripts, cpg.py:147-149). Здесь раньше был только
+    # .tools/joern, и это ИЗМЕРЕНО давало ложную запись: при ключе
+    # joern_enabled=true в extractor_versions обеих ревизий стояло
+    # joern: "MISSING", хотя rev-0069 реально добавила 1203 ребра вызовов.
+    # То есть версия инструмента в паспорте ревизии не отражала его работу,
+    # а паспорт — единственное место, где окружение прогона видно потом.
+    # Старый путь оставлен запасным: в чужих установках он рабочий.
+    tools = Path(__file__).resolve().parents[2] / ".tools"
+    candidates.append(tools / "joern-cli")
+    candidates.append(tools / "joern")
     for base in candidates:
         for name in ("joern-cli/joern.bat", "joern.bat", "joern-cli/joern", "joern"):
             p = base / name

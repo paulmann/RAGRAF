@@ -32,6 +32,45 @@ def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+# --------------------------------------------------------------------------
+# Адрес строки внутри текста чанка
+# --------------------------------------------------------------------------
+
+#: Служебный заголовок чанка: `function indexed_hashes (src/ragraf/watch.py:151)`.
+#: Его пишет чанкер, и он НЕ является частью файла.
+_CHUNK_HEADER_RE = re.compile(r"\((?:[^()\n]{1,240}):\d+\)\s*$")
+
+
+def chunk_header_lines(text: str) -> int:
+    """Сколько строк текста занимает служебный заголовок чанка (0 или 1).
+
+    Зачем это нужно считать, а не предполагать. У чанков-СИМВОЛОВ первая строка
+    — заголовок, и код начинается со строки 1, соответствующей
+    `chunk_map.start_line`.У чанков-файлов (разметка, документация, текстовые
+    языки) заголовка нет, и первая строка текста и есть `start_line`. Одна
+    формула на оба случая давала сдвиг: замер 14.10.2026 — строка
+    «бюджет исчерпан на стадии» лежит в `src/ragraf/indexer.py:99`, а индекс
+    отдавал `100`. Ссылка `path:line` — контракт доверия, поэтому сдвиг на
+    строку означал бы, что каждая ссылка внутри функции показывает не ту строку.
+    """
+    if not text:
+        return 0
+    first = text.split("\n", 1)[0]
+    return 1 if _CHUNK_HEADER_RE.search(first) else 0
+
+
+def text_line(text: str, pos: int, start_line: int) -> int:
+    """Номер строки ФАЙЛА по позиции в тексте чанка.
+
+    Единственное место этого пересчёта: и лексический поиск (`lexvec`), и
+    структурный анализ (`analysis`) обязаны считать одинаково, иначе два ответа
+    об одном и том же коде назовут разные строки.
+    """
+    if pos < 0:
+        return max(1, int(start_line))
+    return max(1, int(start_line) + text.count("\n", 0, pos) - chunk_header_lines(text))
+
+
 def sha256_file(path: str | Path, chunk: int = 1 << 20) -> str:
     """sha256 файла. Чтение блоками: файлы бывают крупными."""
     h = hashlib.sha256()
@@ -288,6 +327,19 @@ def _levenshtein(a: str, b: str) -> int:
             cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb)))
         prev = cur
     return prev[-1]
+
+
+def decode_text(data: bytes, path: str | None = None) -> str:
+    """Текст файла с определением кодировки (UTF-8/CP1251/UTF-16).
+
+    Единая точка чтения текста: до неё в четырёх местах стояло
+    `data.decode("utf-8", errors="replace")`, и файл в CP1251 терял кириллицу
+    целиком — поиск по русской строке отвечал «не найдено» на существующее.
+    Правила определения и обоснование порогов — в `ragraf/textdec.py`.
+    """
+    from . import textdec
+
+    return textdec.decode(data, path)[0]
 
 
 def is_binary(path: str | Path, sniff: int = 8192) -> bool:

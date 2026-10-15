@@ -33,13 +33,15 @@
 from __future__ import annotations
 
 import hashlib
+import sqlite3
+import sys
 import time
 from dataclasses import dataclass
 from typing import Any
 
 # Оценка стоимости одной строки кода в символах: используется для перевода
 # «числа возвращённых фактов» в «объём, который не пришлось читать файлами».
-# Значение 45 взято как среднее по двум корпусам (второй PHP-корпус и пилотный PHP-портал),
+# Значение 45 взято как среднее по двум корпусам (revoap.com и z.batteryservice.ru),
 # замерено, а не придумано: см. tools/bench_corpus.py, AVG_CHARS_PER_FILE.
 CHARS_PER_LINE = 45
 
@@ -101,6 +103,18 @@ class CallRecord:
     tool: str = "unknown"
     arg_hash: str = ""
     arg_digest: str = ""
+    # Метрики P2-4. `stale` — ответ отдан с пометкой устаревания (факт мог
+    # относиться к прошлому состоянию кода), `missed` — «не найдено» без ошибки.
+    # Оба нужны для приёмки «индекс используется правильно»: доля попаданий
+    # (`hit_rate`) считается по ним, а `stale_served` обязан быть нулём.
+    stale: bool = False
+    missed: bool = False
+    # TOKEN-ATTRIBUTION-PATCH: чем пришёл вызов — идентификатор и метка выданного доступа.
+    # Пустые значения означают «без него»: так выглядят CLI, доступ сессии
+    # и прежние записи журнала. Поля нужны, чтобы статистика отвечала на
+    # вопрос «кто и по какому праву», а не только «какой агент».
+    token_id: str = ""
+    token_label: str = ""
 
     @property
     def est_tokens(self) -> int:
@@ -122,7 +136,8 @@ class Telemetry:
     """
 
     def __init__(self, control, tool: str = "unknown", agent: str = "unknown",
-                 agent_kind: str = "unknown", task: str = "") -> None:
+                 agent_kind: str = "unknown", task: str = "",
+                 token_id: str = "", token_label: str = "") -> None:
         """Журнал использования.
 
         Разделяются ДВЕ разные вещи, которые раньше смешивались в поле `tool`:
@@ -130,7 +145,7 @@ class Telemetry:
           * `tool` — КАНАЛ вызова: mcp, cli, admin, dev, selftest. Отвечает
             на вопрос «откуда пришёл вызов».
           * `agent` — КТО именно вызвал: имя агента (например `AutoClaw`,
-            `небольшой PHP-корпус`, `RdpAudit`). Отвечает на вопрос владельца
+            `MD.Viewer`, `RdpAudit`). Отвечает на вопрос владельца
             «какой агент использовал RAGRAF».
           * `agent_kind` — СЕМЕЙСТВО агента: `autoclaw` или `external`.
             Нужно для общей статистики по всем агентам AutoClaw отдельно
@@ -147,13 +162,116 @@ class Telemetry:
         self.agent_kind = agent_kind or "unknown"
         # Метка задачи: позволяет собрать статистику за ОДНУ задачу
         # пользователя, а не за один запуск процесса. Нужна команде
-        # `/RAGRAF` в внешний проект: там каждый вызов инструмента — новый процесс,
+        # `/RAGRAF` в SagaAI: там каждый вызов инструмента — новый процесс,
         # поэтому «сессия RAGRAF» с задачей не совпадает.
         self.task = (task or "").strip()
+        # TOKEN-ATTRIBUTION-PATCH: атрибуция доступа на уровне процесса. Сервер MCP знает,
+        # каким доступом его вызвали, и передаёт это сюда; пусто — без него.
+        self.token_id = (token_id or "").strip()
+        self.token_label = (token_label or "").strip()
+        # --- учёт потерь журнала ---
+        # Ошибка записи не прерывает операцию (журнал вспомогательный), но
+        # молчать о ней нельзя. Измерено 13.10.2026 в сессии HARNESS: 12 вызовов
+        # за ход не изменили сводку `usage`, потому что `record()` глушил
+        # исключение `except Exception: pass`. Владелец видел вывод «агент почти
+        # не пользовался RAGRAF» вместо «журнал не смог записать».
+        self.write_failures = 0
+        self.write_error = ""
+        self._warned_failures: set[str] = set()
         self._ensure_schema()
         self.session_id = self._start_session()
 
+    @classmethod
+    def for_reading(cls, control) -> "Telemetry":
+        """Журнал только на чтение: сводка без старта новой сессии.
+
+        Раньше это собиралось вручную через `Telemetry.__new__` в фасаде, и
+        любое новое поле (например `write_failures`) там оказывалось
+        неинициализированным. Одна точка создания убирает этот класс ошибок.
+        """
+        reading = cls.__new__(cls)
+        reading.control = control
+        reading.tool = "reader"
+        reading.agent = "reader"
+        reading.agent_kind = "internal"
+        reading.task = ""
+        reading.token_id = ""
+        reading.token_label = ""
+        reading.write_failures = 0
+        reading.write_error = ""
+        reading._warned_failures = set()
+        reading.session_id = ""
+        reading._ensure_schema()
+        return reading
+
+    def _note_failure(self, where: str, exc: BaseException) -> None:
+        """Запомнить потерянную запись и сказать об этом в stderr.
+
+        Каждый ВИД ошибки печатается один раз: иначе долгоживущий сервер зальёт
+        диагностику повторами одного и того же отказа.
+        """
+        self.write_failures += 1
+        self.write_error = f"{where}: {type(exc).__name__}: {exc}"
+        key = f"{where}:{type(exc).__name__}"
+        if key in self._warned_failures:
+            return
+        self._warned_failures.add(key)
+        try:
+            sys.stderr.write(
+                f"[ragraf-telemetry] запись в журнал не удалась: {self.write_error} "
+                "(повторов этого вида больше не будет)\n"
+            )
+            sys.stderr.flush()
+        except Exception:  # noqa: BLE001 — диагностика не должна ронять операцию
+            pass
+
+    def _write(self, where: str, sql: str, params: tuple) -> bool:
+        """Записать строку журнала, пережив кратковременную блокировку базы.
+
+        `busy_timeout=10000` уже стоит на соединении, но одного его мало:
+        административная панель и MCP-сервер пишут в ОДИН журнал контрольной
+        базы, и при конкуренции вызов всё равно получает
+        `database is locked`. Три коротких повтора снимают дрожание, а если не
+        помогли — потеря попадает в счётчик, а не исчезает бесследно.
+        """
+        for attempt in range(3):
+            try:
+                self.control.conn.execute(sql, params)
+                self.control.conn.commit()
+                return True
+            except sqlite3.OperationalError as exc:
+                # Откат обязателен: `sqlite3` открывает транзакцию ДО оператора,
+                # поэтому неудачная запись оставляет соединение «в транзакции».
+                # Если до неё в этой же транзакции успела пройти другая запись,
+                # блокировка записи журнала остаётся за процессом НАВСЕГДА:
+                # замерено 13.10.2026 — живой MCP-сервер держал control.sqlite,
+                # и ни переиндексация, ни второй сервер, ни тесты записать не
+                # могли (Restart Manager показал держателя — pid сервера).
+                self._rollback()
+                if attempt == 2:
+                    self._note_failure(where, exc)
+                    return False
+                time.sleep(0.05 * (2 ** attempt))
+            except Exception as exc:  # noqa: BLE001 — журнал не ломает операцию
+                self._rollback()
+                self._note_failure(where, exc)
+                return False
+        return False
+
+    def _rollback(self) -> None:
+        """Снять незавершённую транзакцию: иначе соединение держит блокировку."""
+        try:
+            self.control.conn.rollback()
+        except Exception:  # noqa: BLE001 — откат не должен ломать операцию
+            pass
+
     def _ensure_schema(self) -> None:
+        # На хранилище только для чтения схему не создаём и не мигрируем:
+        # прав нет, а попытка падала бы при создании фасада и делала чтение
+        # статистики невозможным (измерено 15.10.2026 на чужом каталоге
+        # `.ragraf` без права записи). Читателю нужны колонки, а не их создание.
+        if getattr(self.control, "readonly", False):
+            return
         self.control.conn.executescript(
             """
             CREATE TABLE IF NOT EXISTS usage_call (
@@ -192,7 +310,7 @@ class Telemetry:
         # Догоняющая миграция: колонки агента добавляются к существующим
         # таблицам — прежние журналы не должны требовать удаления.
         # Это важно: в корпусах уже накоплена история (190 сессий в z,
-        # 59 в myproject), и терять её ради новой колонки нельзя.
+        # 59 в revoap), и терять её ради новой колонки нельзя.
         for column, table in (("agent", "usage_session"),
                               ("agent_kind", "usage_session"),
                               ("task", "usage_session"),
@@ -206,6 +324,16 @@ class Telemetry:
                 )
             except Exception:
                 pass   # колонка уже есть: это норма при повторном запуске
+        # Числовые метрики P2-4: `stale` (ответ отдан с пометкой устаревания) и
+        # `missed` (не найдено). Отдельный список, потому что тип INTEGER, а не
+        # TEXT, и смешивать их в одном цикле значило бы положить числа в текст.
+        for column in ("stale", "missed"):
+            try:
+                self.control.conn.execute(
+                    f"ALTER TABLE usage_call ADD COLUMN {column} INTEGER"
+                )
+            except Exception:
+                pass
         # Индексы по агенту: без них фильтрация статистики по агенту
         # делала бы полный перебор журнала.
         for index_sql in (
@@ -228,6 +356,28 @@ class Telemetry:
                 self.control.conn.execute(f"ALTER TABLE usage_call ADD COLUMN {column} TEXT")
             except Exception:
                 pass   # колонка уже есть: это норма при повторном запуске
+        # TOKEN-ATTRIBUTION-PATCH
+        # Догоняющая миграция колонок доступа: прежние журналы не требуют
+        # удаления — тот же приём, которым добавлялись agent/task/arg_hash.
+        # Пустое значение означает «без него» и в сводке видно отдельной
+        # строкой, чтобы разница не выглядела потерей данных.
+        for column, table in (("token_id", "usage_call"),
+                              ("token_label", "usage_call"),
+                              ("token_id", "usage_session"),
+                              ("token_label", "usage_session")):
+            try:
+                self.control.conn.execute(
+                    f"ALTER TABLE {table} ADD COLUMN {column} TEXT")
+            except Exception:
+                pass   # колонка уже есть: норма при повторном запуске
+        try:
+            self.control.conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_usage_call_token_id "
+                "ON usage_call(token_id)"
+            )
+        except Exception:
+            pass
+        self.control.conn.commit()
         # Индекс по аргументу создаётся ПОСЛЕ добавления колонки: попытка создать
         # его в executescript выше падала на существующей таблице без колонки и
         # прерывала всю догоняющую миграцию (найдено прогоном на живом корпусе).
@@ -244,18 +394,21 @@ class Telemetry:
 
         Сессия = один запуск инструмента (CLI-вызов или запуск сервера MCP).
         Без неё «сколько было обращений» смешивалось бы между разными задачами.
+
+        На хранилище только для чтения сессия НЕ открывается: записать её
+        нельзя, а выдуманный номер сессии попал бы в ответ как существующий.
         """
         sid = f"s{int(time.time() * 1000)}-{id(self) % 100000:05d}"
-        try:
-            self.control.conn.execute(
-                "INSERT INTO usage_session(session_id, started_at, tool, agent,"
-                " agent_kind, task, note) VALUES(?,?,?,?,?,?,?)",
-                (sid, time.time(), self.tool, self.agent, self.agent_kind,
-                 self.task, ""),
-            )
-            self.control.conn.commit()
-        except Exception:
-            pass
+        if getattr(self.control, "readonly", False):
+            return ""
+        self._write(
+            "usage_session",
+            "INSERT INTO usage_session(session_id, started_at, tool, agent,"
+            " agent_kind, task, note, token_id, token_label)"
+            " VALUES(?,?,?,?,?,?,?,?,?)",
+            (sid, time.time(), self.tool, self.agent, self.agent_kind,
+             self.task, "", self.token_id, self.token_label),
+        )
         return sid
 
     def record(self, rec: CallRecord) -> None:
@@ -267,43 +420,52 @@ class Telemetry:
         в обоих местах, можно отвечать и на вопрос «сколько сессий у агента»,
         и на «сколько вызовов от агента», а они могут расходиться.
         """
-        try:
-            self.control.conn.execute(
-                """INSERT INTO usage_call(session_id, ts, op, rev_id, capability, duration_ms,
+        self._write(
+            "usage_call",
+            """INSERT INTO usage_call(session_id, ts, op, rev_id, capability, duration_ms,
                        found, fact_count, facts_with_span, result_chars, est_tokens,
                        replaces, error, tool, agent, agent_kind, task,
-                       arg_hash, arg_digest)
-                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                (
-                    self.session_id,
-                    time.time(),
-                    rec.op,
-                    rec.rev_id,
-                    rec.capability,
-                    rec.duration_ms,
-                    1 if rec.found else 0,
-                    rec.fact_count,
-                    rec.facts_with_span,
-                    rec.result_chars,
-                    rec.est_tokens,
-                    1 if rec.replaces_reading else 0,
-                    rec.error,
-                    rec.tool,
-                    self.agent,
-                    self.agent_kind,
-                    self.task,
-                    rec.arg_hash,
-                    rec.arg_digest,
-                ),
-            )
-            self.control.conn.commit()
-        except Exception:
-            pass
+                       arg_hash, arg_digest, token_id, token_label,
+                       stale, missed)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                self.session_id,
+                time.time(),
+                rec.op,
+                rec.rev_id,
+                rec.capability,
+                rec.duration_ms,
+                1 if rec.found else 0,
+                rec.fact_count,
+                rec.facts_with_span,
+                rec.result_chars,
+                rec.est_tokens,
+                1 if rec.replaces_reading else 0,
+                rec.error,
+                rec.tool,
+                self.agent,
+                self.agent_kind,
+                self.task,
+                rec.arg_hash,
+                rec.arg_digest,
+                # ACCESS-FALLBACK-PATCH: доступ, названный вызовом, имеет приоритет; если
+                # его нет — берётся доступ ПРОЦЕССА. Это разные вещи:
+                # CallRecord описывает вызов, а Telemetry знает контекст
+                # процесса (агент, семейство, задачу, доступ). Без подстановки
+                # метка терялась: обёртка фасада доступа не заполняет, и в
+                # статистике всё выглядело как «без доступа» (измерено).
+                rec.token_id or self.token_id,
+                rec.token_label or self.token_label,
+                1 if rec.stale else 0,
+                1 if rec.missed else 0,
+            ),
+        )
 
     # ---------------- сводка ----------------
 
     def summary(self, since_session: bool = False, agent: str | None = None,
-                agent_kind: str | None = None, task: str | None = None) -> dict:
+                agent_kind: str | None = None, task: str | None = None,
+                scope: str = "", session_id: str | None = None) -> dict:
         """Сводка по журналу: общая, по сессии или по агенту.
 
         Три режима, которые нужны владельцу:
@@ -317,9 +479,21 @@ class Telemetry:
         """
         where = ""
         params: tuple = ()
-        if since_session:
+        # `scope` — явный выбор контекста (B7). Измеренный дефект: поле
+        # `calls_in_session` всегда было `null`, а спросить «сколько вызовов
+        # сделала ЭТА сессия» было нечем — интегратор не мог проверить свои же
+        # вызовы и делал вывод «RAGRAF не используется» по пустой сводке.
+        # scope="session" — по сессии процесса (или по переданному session_id),
+        # scope="agent" — по агенту процесса, scope="all" — по всему журналу.
+        scope = (scope or "").strip().lower()
+        if scope not in ("", "all", "session", "agent"):
+            scope = ""
+        if scope == "agent" and not agent and not agent_kind:
+            agent = self.agent
+        sid = (session_id or "").strip()
+        if scope == "session" or (since_session and not scope):
             where = "WHERE session_id = ?"
-            params = (self.session_id,)
+            params = (sid or self.session_id,)
         if agent:
             # Специальный случай: агент `unknown` — это НЕ строка `unknown`
             # в базе, а записи с NULL (старые, до появления поля) и пустые.
@@ -367,7 +541,9 @@ class Telemetry:
                            SUM(result_chars)              AS chars,
                            SUM(CASE WHEN replaces = 1 THEN result_chars ELSE 0 END) AS replacing_chars,
                            ROUND(AVG(duration_ms), 2)     AS avg_ms,
-                           SUM(CASE WHEN error IS NOT NULL THEN 1 ELSE 0 END) AS errors
+                           SUM(CASE WHEN error IS NOT NULL THEN 1 ELSE 0 END) AS errors,
+                           SUM(COALESCE(stale, 0))        AS stale_served,
+                           SUM(COALESCE(missed, 0))       AS misses
                       FROM usage_call {where}
                      GROUP BY op ORDER BY calls DESC""",
                 params,
@@ -386,6 +562,12 @@ class Telemetry:
         try:
             sess_where = ""
             sess_params: tuple = ()
+            # Сессии считаются по тому же контексту, что и вызовы: при
+            # scope="session" фильтр по session_id берётся из уже собранного
+            # WHERE, иначе число сессий разошлось бы с числом вызовов.
+            if where.startswith("WHERE session_id"):
+                sess_where = "WHERE session_id = ?"
+                sess_params = params
             if agent:
                 # Та же логика, что и для вызовов: `unknown` — это NULL.
                 if agent == "unknown":
@@ -441,6 +623,43 @@ class Telemetry:
         chars = sum(r["chars"] or 0 for r in by_op)
         replacing = sum(r["replacing_chars"] or 0 for r in by_op)
         errors = sum(r["errors"] or 0 for r in by_op)
+        # Метрики приёмки «индекс используется всегда» (пункт 3.4 ТЗ):
+        # `stale_served` — сколько ответов отдано с пометкой устаревания
+        # (обязано быть нулём), `misses` — сколько раз индекс честно ответил
+        # «не найдено», `hit_rate` — доля вызовов, принёсших хотя бы один факт.
+        stale_served = sum(int(r.get("stale_served") or 0) for r in by_op)
+        misses = sum(int(r.get("misses") or 0) for r in by_op)
+        # `saved_calls`: вызов, который ЗАМЕНИЛ чтение файла или поиск по нему.
+        # Считается по журналу: операция из списка `READ_REPLACING_OPS`, вернувшая
+        # хотя бы один факт. Вызов без фактов ничего не заменил — он лишь показал,
+        # что искать там нечего, и в это число не входит.
+        try:
+            saved_row = conn.execute(
+                f"""SELECT SUM(CASE WHEN COALESCE(replaces, 0) = 1
+                                     AND COALESCE(fact_count, 0) > 0
+                                THEN 1 ELSE 0 END) AS saved
+                      FROM usage_call {where}""",
+                params,
+            ).fetchone()
+            saved_calls = int(saved_row["saved"] or 0) if saved_row else 0
+        except Exception:
+            saved_calls = 0
+        # Доля попаданий считается ПО ВЫЗОВАМ, а не по операциям: «операция
+        # приносила факты хоть раз» и «вызов принёс факт» — разные утверждения,
+        # и подмена дала бы hit_rate 0,0135 вместо настоящей доли (измерено).
+        try:
+            agg = conn.execute(
+                f"""SELECT SUM(CASE WHEN COALESCE(fact_count, 0) > 0 THEN 1 ELSE 0 END)
+                              AS calls_with_facts,
+                           ROUND(AVG(duration_ms), 2) AS avg_ms
+                      FROM usage_call {where}""",
+                params,
+            ).fetchone()
+            calls_with_facts = int(agg["calls_with_facts"] or 0) if agg else 0
+            avg_ms = float(agg["avg_ms"] or 0.0) if agg else 0.0
+        except Exception:
+            calls_with_facts = 0
+            avg_ms = 0.0
 
         # --- разбивка по агентам ---
         # Это ответ на запрос владельца: видеть, КАКОЙ агент использовал
@@ -560,14 +779,59 @@ class Telemetry:
                 (row["replacing_chars"] or 0) / CHARS_PER_LINE
             )
 
+        # TOKEN-ATTRIBUTION-PATCH
+        # Разрез по выданному доступу: сколько обращений сделал каждый,
+        # сколько успешных, сколько с ошибками, сколько фактов принёс.
+        # Записи без него (CLI, прежние журналы) собраны строкой
+        # «(без доступа)»: иначе «не пользовались» и «поле пустое» были бы
+        # неотличимы. Условие фильтра берётся то же, что у сводки, иначе
+        # разрез разошёлся бы с итогами.
+        try:
+            access_rows = self.control.conn.execute(
+                "SELECT COALESCE(NULLIF(token_label, ''), '(без доступа)') AS label,"
+                "       COUNT(*) AS calls,"
+                "       SUM(CASE WHEN error IS NULL OR error = '' THEN 1 ELSE 0 END) AS ok_calls,"
+                "       SUM(CASE WHEN error IS NOT NULL AND error <> '' THEN 1 ELSE 0 END) AS failed_calls,"
+                "       SUM(fact_count) AS facts,"
+                "       MAX(ts) AS last_ts"
+                "  FROM usage_call " + where +
+                " GROUP BY label ORDER BY calls DESC",
+                params,
+            ).fetchall()
+        except Exception:
+            access_rows = []
+        by_access = [
+            {"label": row["label"], "calls": row["calls"],
+             "ok": row["ok_calls"], "failed": row["failed_calls"],
+             "facts": row["facts"], "last_ts": row["last_ts"]}
+            for row in access_rows
+        ]
+
         return {
+            "by_access": by_access,
             # sessions_total — сессии, попавшие под фильтр; sessions_total_all
             # — все сессии журнала. Разделение нужно потому, что при фильтре
             # по агенту числа различаются, и путать их нельзя.
             "sessions_total": sessions_filtered,
             "sessions_total_all": sessions,
             "calls_total": total,
-            "calls_in_session": total if since_session else None,
+            # `calls_in_session` — число вызовов выбранного контекста. Раньше
+            # поле было `null` во всех режимах, кроме `since_session`, и вопрос
+            # «видит ли сводка мои вызовы» оставался без ответа (B7).
+            "calls_in_session": total if (since_session or scope == "session") else None,
+            "session_id": sid or (
+                self.session_id if (since_session or scope == "session") else ""
+            ),
+            # Потери журнала: ошибка записи не прерывает операцию, но и не
+            # скрывается. Ненулевое значение означает, что настоящих обращений
+            # было больше, чем показано ниже.
+            "write_failures": getattr(self, "write_failures", 0),
+            "write_error": getattr(self, "write_error", ""),
+            "warning": (
+                f"журнал не записал {getattr(self, 'write_failures', 0)} вызовов "
+                f"({getattr(self, 'write_error', '')}): фактических обращений больше, "
+                "чем в этой сводке"
+            ) if getattr(self, "write_failures", 0) else None,
             # Фильтр отдаётся наружу: потребитель сводки должен видеть,
             # по какому агенту она построена, а не догадываться.
             "filter": {
@@ -575,6 +839,10 @@ class Telemetry:
                 "agent_kind": agent_kind,
                 "task": task,
                 "since_session": since_session,
+                "scope": scope or ("session" if since_session else "all"),
+                "session_id": sid or (
+                    self.session_id if (since_session or scope == "session") else ""
+                ),
             },
             "agents_total": len(by_agent),
             "by_agent": by_agent,
@@ -585,6 +853,26 @@ class Telemetry:
             "facts_total": facts,
             "facts_with_span": with_span,
             "verifiable_ratio": round(with_span / facts, 4) if facts else 0.0,
+            # --- метрики эффекта (P2-4 ТЗ) ---
+            # Без них нельзя доказать, что индекс окупается: «вызовов много» и
+            # «вызовы приносили факты» — разные утверждения.
+            "hit_rate": round(calls_with_facts / total, 4) if total else 0.0,
+            "calls_with_facts": calls_with_facts,
+            "avg_ms": avg_ms,
+            "misses": misses,
+            "stale_served": stale_served,
+            "saved_calls": saved_calls,
+            "saves_reading": bool(READ_REPLACING_OPS),
+            "saved_calls_note": (
+                "saved_calls — вызовы, заменившие чтение файлов или поиск по ним: "
+                "операция из списка READ_REPLACING_OPS, вернувшая хотя бы один факт. "
+                "Это измерение по журналу; оценка экономии в строках — "
+                "est_lines_not_read"
+            ),
+            "stale_note": (
+                "stale_served обязан быть нулём: ответ с пометкой устаревания "
+                "означает, что факт мог относиться к прошлому состоянию кода"
+            ),
             "result_chars_total": chars,
             "result_chars_replacing_reading": replacing,
             "est_tokens_total": int(chars / CHARS_PER_UNIT),

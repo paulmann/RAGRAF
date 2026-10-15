@@ -5,6 +5,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: [S
 
 ## [Unreleased]
 
+### Added (publication pass, 2026-10-16)
+- Root `install.ps1` — deployment installer: fetches the package from `github.com/paulmann/RAGRAF` (or deploys from a local copy with `-SourceDir`), asks for the target directory (default `C:\RAGRAF`), delegates the virtual environment and dependencies to `scripts/install.ps1`, offers to locate AutoClaw and DeepSeek Harness and to configure the connection, and finishes with admin-panel instructions and an access warning. An existing installation is never overwritten silently, `-SkipDeps` runs a rehearsal, exit codes follow the documented 0/1/2/3 contract, and a transcript is written to `~/.ragraf/logs/`.
+- `install.ps1` shows AutoClaw values obtained from the product itself (`client_setup.state()`) instead of hardcoding them, and says plainly why it does not write them: AutoClaw accepts MCP servers only through its own interface, and its store belongs to the product. The Harness profile block is written for real — with a backup and a parse check.
+- `docs/ru/**` refreshed from the current Russian originals; `README.ru.md` follows the current code.
+
+### Changed
+- `src/ragraf/client_setup.py`, `src/ragraf/probes.py`: the hardcoded SagaAI project path is gone; the location comes from `RAGRAF_SAGA_ROOT`, and an unset value is reported as «not found» instead of being guessed.
+- `pyproject.toml`: license expression `MIT` → `PolyForm-Noncommercial-1.0.0`, matching `LICENSE` since 2026-10-15.
+- `.gitignore`: the whole `/catalog/` directory is ignored — it holds `db_access.json` with a database secret, which the previous per-file rules left uncovered.
+- English documentation counts brought back in line with the code (38 facade operations, 40 MCP tools); the tool list and the capability table were regenerated from the sources.
+
 ### Added
 - English documentation tree (`README.md`, `docs/architecture/`, `docs/implementation/`, `docs/article/`, `docs/skills/`) — full translation of the Russian originals with doc↔code sync notes; Russian originals preserved as `README.ru.md` and `docs/ru/`.
 - `ROADMAP.md` with stable improvement IDs (R-*) derived from the 2026-10 production revision.

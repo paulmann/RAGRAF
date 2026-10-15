@@ -5,10 +5,10 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ragraf"
 version = "0.1.0"
-description = "RAGRAF — a graph-and-vector knowledge base of code for LLM agents: verifiable file:line facts instead of blind grep"
+description = "RAGRAF — графово-векторная база знаний о коде для LLM-агентов"
 readme = "README.md"
 requires-python = ">=3.13"
-license = "MIT"
+license = "PolyForm-Noncommercial-1.0.0"
 license-files = ["LICENSE"]
 authors = [
     { name = "Mikhail Deynekin", email = "mid1977@gmail.com" },

@@ -6,9 +6,11 @@
 [![PowerShell 7.6+](https://img.shields.io/badge/PowerShell-7.6%2B-5391FE?logo=powershell&logoColor=white)](https://aka.ms/pwsh)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)](#installation)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![MCP](https://img.shields.io/badge/MCP-23%20tools-8A2BE2)](docs/implementation/INTEGRATION.md)
+[![MCP](https://img.shields.io/badge/MCP-40%20tools-8A2BE2)](docs/implementation/INTEGRATION.md)
 
 An assistant that answers an agent's questions about a codebase — *where is it, who calls it, what breaks if I change it, how is it done elsewhere* — with verifiable facts (`file:line`) instead of blind `rg` and full-file reads. Python 3.13+, SQLite (graph + FTS5 + vectors in one place), tree-sitter, local embeddings without torch. An optional property-graph layer (Java + Joern) unlocks slicing; without it the product still works and says so honestly.
+
+> **Documentation status.** This English tree is a translation of the `v0.1.0` snapshot, while the code has kept moving. Counted in the sources on 2026-10-16: `src/ragraf/facade.py` declares **38** `op_*` operations and `src/ragraf/mcp_server.py` declares **40** tools. The capability table below, `README.ru.md` and the Russian originals under `docs/ru/` follow the current code; the remaining English pages that still carry older counts are tracked as `R-DOC-1` in `ROADMAP.md`.
 
 ---
 
@@ -52,11 +54,15 @@ One caveat usually omitted: **the 2–3× win applies to localization tasks** (�
 
 ## Capabilities
 
-**Twenty-two operations** over a repository — a fixed set, with no graph query language:
+**Thirty-eight operations** over a repository — a fixed set, with no graph query language:
 
 | Operation | Answers the question |
 |---|---|
 | `search` | where is this written about (hybrid: BM25 lexicon + vector) |
+| `search_multi` | where several strings occur at once; file copies and which one is live |
+| `duplicates` | which files are copies of each other, and what proves the main copy is live |
+| `entrypoints` | entry points: routes, HTTP handlers, CLI, markup endpoints |
+| `dead_code` | files and routines with no references and outside reachability |
 | `symbol` | where is the symbol defined: kind, file, lines, signature |
 | `references` | where else is it used |
 | `callers` / `callees` | who calls it / what does it call |
@@ -76,8 +82,12 @@ One caveat usually omitted: **the 2–3× win applies to localization tasks** (�
 | `catalog` | corpus registry: what is indexed and with which checksums |
 | `calibrate` | threshold calibration |
 | `usage` | call telemetry and effect estimation |
+| `diff` | what changed between revisions: files, symbols, edges, regressions |
+| `task_stats` | per-task report: index calls, gate decisions |
+| `gate` | gate decision for a tool call: `allow` / `ask` / `deny` |
+| `note` / `notes` | record and read a decision note — knowledge between sessions |
 
-The same operations are available as **23 MCP tools** (`ragraf_*`) — to attach to an agent as a server — and through the CLI.
+The same operations are available as **40 MCP tools** (`ragraf_*`) — to attach to an agent as a server — and through the CLI.
 
 **Sixteen languages** are parsed as trees (graph nodes and edges): PHP, Python, JavaScript, TypeScript, Java, C#, C, C++, Ruby, Lua, Go, Perl, bash, PowerShell, CSS, HTML. Ten more are attached as text — files are findable by search but yield no nodes: Markdown, SQL, YAML, JSON, TOML, INI, XML, RST, batch, plain text.
 
@@ -108,6 +118,19 @@ The same operations are available as **23 MCP tools** (`ragraf_*`) — to attach
 ## Installation
 
 Requires **Python 3.13 or newer**. No administrator rights needed.
+
+### Quick start (one command)
+
+The bootstrap installer fetches the package from GitHub and deploys it in a dialogue:
+
+```powershell
+iwr -OutFile install.ps1 https://raw.githubusercontent.com/paulmann/RAGRAF/main/install.ps1
+pwsh -NoLogo -NoProfile -File .\install.ps1
+```
+
+It asks for the installation directory (default `C:\RAGRAF`), creates the virtual environment and installs dependencies through `scripts/install.ps1`, offers to locate AutoClaw and DeepSeek Harness and to set up the connection, and finally prints how to start the admin panel plus a warning about access to it.
+
+It states plainly what it does not do: **AutoClaw values are shown, not written** — AutoClaw accepts MCP servers only through its own interface, and its store belongs to the product. For **Harness** the installer can write the profile block, with a backup and a parse check afterwards. An existing installation is never overwritten silently, and a rehearsal run that skips dependencies is available: `-SkipDeps`.
 
 ### Windows (PowerShell 7.6+)
 

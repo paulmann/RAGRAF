@@ -13,7 +13,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import util
+from . import textdec, util
 from .config import ProjectConfig
 from .corpus import CorpusScan
 from .embeddings import Embedder, EmbeddingUnavailable, truncate_for_embedding
@@ -31,6 +31,9 @@ class IndexReport:
     capability: str
     seconds: float
     stages: list[dict] = field(default_factory=list)
+    # Слой баз: собран или нет и почему. Нужен в ответе индексации, иначе не
+    # отличить «базы нет» от «сбор настроен и отработал».
+    databases: dict = field(default_factory=dict)
     files: int = 0
     nodes: int = 0
     edges: int = 0
@@ -45,6 +48,14 @@ class IndexReport:
     counts_by_edge: dict[str, int] = field(default_factory=dict)
     parse_status: dict[str, int] = field(default_factory=dict)
     resolved_by_name: int = 0
+    # Прогон прерван по бюджету времени: ревизия НЕ закреплена, прежний индекс рабочий.
+    # Поле нужно вызывающему (`ensure`), чтобы вернуть статус «partial», а не молчание.
+    budget_exceeded: bool = False
+    # Где именно встал прогон: стадия и сколько файлов успело обработаться.
+    # Нужны потому, что «бюджет исчерпан» без адреса не подсказывает, что делать:
+    # на `ast` помогает исключение каталога, на `resolve` — сокращение корпуса.
+    budget_stage: str = ""
+    budget_files_done: int = 0
 
     def to_dict(self) -> dict:
         return {
@@ -67,7 +78,27 @@ class IndexReport:
             "counts_by_edge": self.counts_by_edge,
             "parse_status": self.parse_status,
             "resolved_by_name": self.resolved_by_name,
+            "budget_exceeded": self.budget_exceeded,
+            "budget_stage": self.budget_stage,
+            "budget_files_done": self.budget_files_done,
         }
+
+
+class _BudgetExceeded(Exception):
+    """Прогон обязан остановиться: бюджет времени исчерпан ВНУТРИ стадии.
+
+    Почему исключение, а не возврат флага. Стадия `ast` — это цикл по файлам,
+    и сообщить о превышении надо ИЗ него; возврат флага из середины цикла
+    потребовал бы протащить результат через все уровни сборки фактов. Исключение
+    перехватывается в `run`, где есть имя стадии, число обработанных файлов и
+    подсказка, — то есть ровно то, чего не хватало ответу «таймаут без деталей»
+    (требование P0-2 ТЗ).
+    """
+
+    def __init__(self, stage: str, files_done: int) -> None:
+        super().__init__(f"бюджет исчерпан на стадии {stage}")
+        self.stage = stage
+        self.files_done = files_done
 
 
 class Indexer:
@@ -88,7 +119,8 @@ class Indexer:
     # Полный прогон
     # ------------------------------------------------------------------
 
-    def run(self, *, with_vectors: bool = True, limit_files: int | None = None) -> IndexReport:
+    def run(self, *, with_vectors: bool = True, limit_files: int | None = None,
+            budget_seconds: float | None = None) -> IndexReport:
         t_start = time.perf_counter()
         cfg = self.cfg
         cfg.ensure_dirs()
@@ -99,6 +131,32 @@ class Indexer:
         parent_rev = self.control.current_rev()
         self.report.rev_id = rev_id
         ctx = StageContext(cfg=cfg, rev_id=rev_id, parent_rev=parent_rev)
+
+        # --- бюджет прогона (P0-2) ---
+        # `ensure` вызывается первым шагом агента и обязан отвечать. Замер на корпусе
+        # BWO (5601 файл): прогон с CPG (Joern) и GPU не завершался за ~11 минут, и
+        # вызов уходил в таймаут. Поэтому: при нехватке времени тяжёлые стадии
+        # пропускаются, а при исчерпании бюджета прогон прерывается ДО закрепления
+        # ревизии — прежний индекс остаётся рабочим, отчёт называет стадию.
+        deadline = (t_start + float(budget_seconds)) if budget_seconds else None
+
+        def budget_left() -> float | None:
+            return None if deadline is None else deadline - time.perf_counter()
+
+        def budget_over(stage: str) -> bool:
+            left = budget_left()
+            if left is None or left > 0:
+                return False
+            self.report.budget_exceeded = True
+            self.report.budget_stage = stage
+            self._abort(
+                rev_id,
+                f"бюджет времени исчерпан на стадии «{stage}»: прогон прерван, ревизия "
+                f"не закреплена, прежний индекс остался рабочим. Увеличьте "
+                f"index.budget_seconds или сократите корпус через exclude.",
+                t_start,
+            )
+            return True
 
         # --- стадия 1: скан ---
         t0 = time.perf_counter()
@@ -124,8 +182,31 @@ class Indexer:
 
         # --- стадия 2: AST и символы ---
         t0 = time.perf_counter()
-        built = self._build_facts(rev_id, scan)
+        # Внутри стадии есть контрольные точки: `ast` — самый долгий этап
+        # (на BWO 370–410 с при бюджете 120 с), и проверка только ПОСЛЕ него
+        # означала, что бюджет соблюдается «в среднем», а не как предел.
+        def check_budget(stage: str, files_done: int) -> None:
+            if budget_left() is not None and budget_left() < 0:
+                raise _BudgetExceeded(stage, files_done)
+
+        try:
+            built = self._build_facts(rev_id, scan, check_budget=check_budget)
+        except _BudgetExceeded as exc:
+            self.report.budget_exceeded = True
+            self.report.budget_stage = exc.stage
+            self.report.budget_files_done = exc.files_done
+            self._abort(
+                rev_id,
+                f"бюджет времени исчерпан на стадии «{exc.stage}» после "
+                f"{exc.files_done} файлов из {len(scan.files)}: прогон прерван, "
+                f"ревизия не закреплена, прежний индекс остался рабочим. "
+                f"Увеличьте index.budget_seconds или сократите корпус через exclude.",
+                t_start,
+            )
+            return self.report
         self._stage(rev_id, "ast", round(time.perf_counter() - t0, 3), len(scan.files))
+        if budget_over("ast"):
+            return self.report
         if built["ast_notes"]:
             self.report.notes.append(
                 f"файлов с неполным разбором: {len(built['ast_notes'])} "
@@ -133,24 +214,39 @@ class Indexer:
             )
 
         # --- стадия 3: загрузка ---
+        # Проверка ПЕРЕД стадией, а не только после: загрузка на BWO пишет
+        # 2,2 млн строк и идёт минуту. Начинать её «в долг» по бюджету — значит
+        # гарантированно выйти за предел и всё равно прервать прогон.
+        if budget_over("load"):
+            return self.report
         t0 = time.perf_counter()
         self.graph.add_files(built["file_rows"])
         self.graph.add_nodes(built["node_rows"])
         self.graph.add_edges(built["edge_rows"])
         self.graph.add_text_chunks(built["text_rows"])
+        # P1-3: реестр точек входа. До этой правки таблица `web_route`
+        # создавалась, но не заполнялась НИКОГДА (в коде не было ни одной
+        # вставки), поэтому операция `routes` всегда отвечала пусто, а
+        # `entrypoints` не знал ни одного маршрута.
+        if built.get("route_rows"):
+            self.graph.add_routes(built["route_rows"])
         self.graph.commit()
         self._stage(
             rev_id, "load", round(time.perf_counter() - t0, 3),
             len(built["file_rows"]) + len(built["node_rows"]) + len(built["edge_rows"])
-            + len(built["text_rows"]),
+            + len(built["text_rows"]) + len(built.get("route_rows") or []),
         )
 
         # --- стадия 4: разрешение внешних имён ---
+        # На BWO эта стадия идёт 218–280 с, поэтому она тоже не начинается,
+        # если бюджета на неё уже нет.
+        if budget_over("resolve"):
+            return self.report
         t0 = time.perf_counter()
         resolved_cnt, ambiguous_cnt = self._resolve_external_names(rev_id)
         # Рёбра наследования разрешаются отдельно и ДО общих счётчиков не
         # подмешиваются: у них своя природа (класс, а не метод) и своя
-        # достоверность. Замер: на myproject все 29 рёбер `extends` вели на
+        # достоверность. Замер: на revoap все 29 рёбер `extends` вели на
         # заглушки, то есть наследование в графе было невидимым.
         inherit_resolved, inherit_ambiguous = self._resolve_inheritance_names(rev_id)
         self._stage(rev_id, "resolve", round(time.perf_counter() - t0, 3), resolved_cnt)
@@ -178,10 +274,40 @@ class Indexer:
             f"схема БД: таблиц {schema_info['tables']}, колонок {schema_info['columns']}, "
             f"связей {schema_info['fks']} (источник: {schema_info['files']} файлов миграций)"
         )
+        if budget_over("schema"):
+            return self.report
 
         # --- стадия 5: CPG (межпроцедурные связи и потоки данных) ---
         t0 = time.perf_counter()
+        # Состояние ключа запоминается ДО стадии. Быстрая переиндексация
+        # выставляет cfg.index.joern_enabled = False на время прогона и
+        # возвращает назад (watch.py:540,542-543,596), поэтому после прогона
+        # значение неотличимо от настройки файла корпуса. Отсюда это отличие
+        # НЕВОССТАНОВИМО: доказано только «ключ был выключен в момент стадии».
+        # Мало времени до дедлайна — CPG (Joern) не собираем: это самая дорогая
+        # стадия, а без неё индекс всё равно пригоден для поиска и схемы.
+        left = budget_left()
+        if left is not None and left < 45.0 and cfg.index.joern_enabled:
+            cfg.index.joern_enabled = False
+            self.report.notes.append(
+                "режим без CPG: до конца бюджета меньше 45 с, стадия Joern пропущена"
+            )
+        joern_disabled_by_run = not bool(cfg.index.joern_enabled)
         cpg_info = self._build_cpg(rev_id)
+        if joern_disabled_by_run and not cpg_info.get("ok"):
+            # ИЗМЕРЕННЫЙ ДЕФЕКТ ФОРМУЛИРОВКИ. status() из cpg.py отдаёт
+            # «CPG отключена в конфигурации (index.joern_enabled=false)», и это
+            # было записано в stage_timing и coverage как причина. Замер
+            # rev-0069/rev-0070: в YAML ключ true, а выключил его код на время
+            # быстрого прогона — то есть причина называлась неверно. Здесь
+            # пишется только доказанное, без домысла о том, кто выключил ключ.
+            cpg_info["note"] = (
+                "CPG в этом прогоне не собиралась (режим без CPG): на момент "
+                "стадии index.joern_enabled был выключен. Быстрое выключение "
+                "на время прогона делает watch.py и возвращает значение назад, "
+                "поэтому «отключена в конфигурации» здесь не утверждается — "
+                "с этой стороны настройка файла и выключение кодом неразличимы"
+            )
 
         # --- стадия 5б: перенос графа свойств кода из предыдущей ревизии ---
         # Зачем. В быстром режиме построение CPG пропускается ради скорости
@@ -197,24 +323,81 @@ class Indexer:
         # ребро не переносится, и связь честно исчезает. Подмена узла из старой
         # ревизии не делается — иначе в графе появились бы связи на несуществующие
         # объекты.
+        #
+        # Понижение покрытия читается ДО переноса и сравнивается с ПРЕДЫДУЩЕЙ
+        # ревизией, а не с донором рёбер: вопрос не «откуда взяли связи», а
+        # «было ли покрытие и пропало ли оно». Замер rev-0069/rev-0070: у первой
+        # cpg_used=1 и cpg_calls_added=1203, у второй оба нуля — при полностью
+        # совпадающих capability, joern_used, счётчиках и config_hash. По сводке
+        # ревизии потеря 1203 рёбер не была видна НИКАК.
+        prev_cpg = self._cpg_coverage_of(parent_rev)
+        prev_had_cpg = bool(prev_cpg["cpg_used"]) or prev_cpg["cpg_calls_added"] > 0
+        cpg_downgraded = bool(prev_had_cpg and not cpg_info.get("ok"))
+        cpg_carried_from: str | None = None
+        carried = 0
+
         if not cpg_info.get("ok"):
             carried = self._carry_cpg_edges(rev_id)
+            cpg_carried_from = getattr(self, "_cpg_carry_source", None) if carried else None
             if carried:
                 cpg_info["carried_from_prev"] = carried
-                self.report.notes.append(
-                    f"граф свойств кода перенесён из предыдущей ревизии: "
-                    f"рёбер {carried} (построение пропущено ради скорости)"
+                cpg_info["carried_from_rev"] = cpg_carried_from
+                if joern_disabled_by_run:
+                    self.report.notes.append(
+                        f"CPG в этом прогоне не собиралась (режим без CPG), "
+                        f"рёбра вызовов перенесены из {cpg_carried_from}: {carried}"
+                    )
+                else:
+                    self.report.notes.append(
+                        f"граф свойств кода перенесён из {cpg_carried_from}: "
+                        f"рёбер {carried} (построение CPG не выполнено)"
+                    )
+                # Донор дописывается и в note стадии: stage_timing читается
+                # позже (`index_status`, CLI) и остаётся единственным следом
+                # прогона для путей вроде `ensure`, которые отчёт индексатора
+                # не показывают.
+                cpg_info["note"] = (
+                    f"{cpg_info.get('note') or 'CPG не построена'}; "
+                    f"рёбра вызовов перенесены из {cpg_carried_from}: {carried}"
                 )
             else:
                 self.report.notes.append(
                     "граф свойств кода не построен и переносить нечего: "
                     "операция slice недоступна"
                 )
+        cpg_info["downgraded"] = cpg_downgraded
+        if cpg_downgraded:
+            # Понижение покрытия сообщается громко и в трёх местах: report.notes
+            # (печатают index и reindex), coverage (виден в index_status) и
+            # rev.json (поле cpg.downgraded). Молчаливое понижение — тот самый
+            # дефект, из-за которого rev-0070 выглядела равноценной rev-0069.
+            downgrade_note = (
+                f"ПОНИЖЕНИЕ ПОКРЫТИЯ CPG: у предыдущей ревизии {parent_rev} "
+                f"cpg_used={int(prev_cpg['cpg_used'])}, рёбер от CPG добавлено "
+                f"{int(prev_cpg['cpg_calls_added'])}; в этом прогоне CPG "
+                f"не собиралась (cpg_used=0, cpg_calls_added=0)"
+            )
+            if carried and cpg_carried_from:
+                downgrade_note += (
+                    f". Связи перенесены из {cpg_carried_from}: {carried} рёбер — "
+                    f"capability остаётся full, но это НЕ сборка CPG этого прогона"
+                )
+            else:
+                downgrade_note += ". Переносить нечего: связей от CPG в этой ревизии нет"
+            cpg_info["downgrade_note"] = downgrade_note
+            self.report.notes.append(downgrade_note)
 
         self._stage(
             rev_id, "cpg", round(time.perf_counter() - t0, 3),
             cpg_info.get("calls_added", 0), cpg_info.get("note"),
         )
+        if cpg_info.get("stderr_tail"):
+            # Вывод Joern показывается при ЛЮБОМ отказе сборки, а не только когда
+            # CPG не подключена вовсе. Замер 16.10.2026: при переносе рёбер отказ
+            # («Joern завершился с кодом 1») оставался без причины — а причина,
+            # «Cannot unpack libzstd-jni…: Access is denied», лежала в начале
+            # stderr и терялась вместе с ним.
+            self.report.notes.append(f"вывод Joern: {cpg_info['stderr_tail']}")
         if cpg_info["ok"]:
             # ВНИМАНИЕ: значение берётся ИЗ РЕЗУЛЬТАТА стадии, а не выставляется
             # жёстко в `full`. Стадия умеет вернуть `partial` — случай, когда
@@ -247,8 +430,6 @@ class Indexer:
             )
         else:
             self.report.notes.append(f"CPG не подключена: {cpg_info['note']}")
-            if cpg_info.get("stderr_tail"):
-                self.report.notes.append(f"вывод Joern: {cpg_info['stderr_tail'][-300:]}")
             # Если связей в графе нет вообще — только тогда режим неполный.
             try:
                 have_cpg = self.graph.conn.execute(
@@ -261,9 +442,39 @@ class Indexer:
                 capability = "full"
                 joern_used = True
 
+        # Режим CPG для rev.json. Различие обязательно и измерено: у
+        # rev-0069/rev-0070 capability и joern_used совпадали, потому что после
+        # переноса рёбер ревизия объявляется полной. Только это поле показывает,
+        # что во второй CPG не собиралась.
+        cpg_info["mode"] = (
+            "built" if cpg_info.get("ok")
+            else ("carried" if cpg_info.get("carried_from_prev") else "none")
+        )
+
+        # --- стадия 5.5: слой баз данных (только если сбор включён) ---
+        # Стоит ПЕРЕД лексикой намеренно: примеры баз попадают в те же чанки, и
+        # вычислитель векторов получает их одним проходом, а не вторым запуском.
+        # Перед сбором — проверка бюджета: сбор баз ходит в СУБД и на большом
+        # наборе баз стоит десятки секунд.
+        if budget_over("databases"):
+            return self.report
+        db_stats = self._collect_databases(rev_id)
+
         # --- стадия 6: лексика и вектор ---
+        # Лексика с векторами на BWO идёт 150–180 с: не начинаем её без
+        # остатка бюджета, иначе прогон выйдет за предел обязательно.
+        if budget_over("lexvec"):
+            return self.report
         t0 = time.perf_counter()
         lex = self._build_lexvec(rev_id, built["chunks"], with_vectors)
+        # Слой баз показывается отдельной стадией: видно, собран он или
+        # почему не собран. Без этого «пусто» и «выключено» выглядят
+        # одинаково, а это разные состояния.
+        if db_stats:
+            self.report.databases = db_stats
+            graph_stats = db_stats.get("graph") or {}
+            self._stage(rev_id, "databases", 0.0,
+                        int(graph_stats.get("tables", 0)))
         self._stage(rev_id, "lexvec", round(time.perf_counter() - t0, 3), len(built["chunks"]))
         if lex["note"]:
             self.report.notes.append(f"векторный слой: {lex['note']}")
@@ -311,7 +522,24 @@ class Indexer:
         self.control.seal_rev(
             rev_id, len(built["file_rows"]), unique_nodes,
             actual_edges, capability, joern_used,
+            # Паспорт ревизии: окружение (версии извлекателей), режим CPG и
+            # суммы — в rev.json, а не только в graph.sqlite. Замер
+            # rev-0069/rev-0070 показал, что без этого активная ревизия
+            # выглядит равноценной даже когда CPG в ней не собиралась.
+            extractor_versions=ctx.extractor_versions,
+            cpg={
+                "mode": cpg_info.get("mode"),
+                "used": bool(cpg_info.get("ok")),
+                "calls_added": int(cpg_info.get("calls_added", 0) or 0),
+                "carried_from": cpg_info.get("carried_from_rev"),
+                "downgraded": bool(cpg_info.get("downgraded")),
+            },
+            corpus_hash=scan.corpus_hash,
+            config_hash=cfg.config_hash,
         )
+        if budget_over("lexvec"):
+            return self.report
+
         rotated = self.control.rotate(cfg.index.retain_revs)
         if rotated:
             self.report.notes.append(
@@ -350,13 +578,14 @@ class Indexer:
             result.files = result.files[:limit_files]
         return result
 
-    def _build_facts(self, rev_id: str, scan: CorpusScan) -> dict:
+    def _build_facts(self, rev_id: str, scan: CorpusScan, check_budget=None) -> dict:
         cfg = self.cfg
         file_rows: list[tuple] = []
         node_rows: list[tuple] = []
         edge_rows: list[tuple] = []
         text_rows: list[tuple] = []
         chunks: list[ChunkRec] = []
+        route_rows: list[tuple] = []
         kind_counts: dict[str, int] = {}
         edge_counts: dict[str, int] = {}
         parse_status: dict[str, int] = {}
@@ -375,13 +604,21 @@ class Indexer:
         # расширений и индексатором больше невозможно.
         parse_langs = self._parse_languages()
 
+        # Контрольная точка бюджета: каждые 32 файла, а не на каждом — вызов
+        # `time.perf_counter` и проверка дедлайна дешевы, но не бесплатны, а
+        # стадия идёт по тысячам файлов. Шаг выбран так, чтобы остановка
+        # укладывалась в доли секунды от момента исчерпания бюджета.
+        processed = 0
         for cf in scan.files:
+            processed += 1
+            if check_budget is not None and processed % 32 == 0:
+                check_budget("ast", processed)
             try:
                 data = cf.abs_path.read_bytes()
             except OSError as exc:
                 file_rows.append(
                     (rev_id, cf.path, cf.lang, cf.lines, cf.sha256, "failed",
-                     f"чтение: {exc}")
+                     f"чтение: {exc}", "")
                 )
                 parse_status["failed"] = parse_status.get("failed", 0) + 1
                 continue
@@ -392,7 +629,8 @@ class Indexer:
                 # отбрасывались, поэтому по документации, конфигам и скриптам
                 # batch/SQL поиск ничего не находил.
                 file_rows.append(
-                    (rev_id, cf.path, cf.lang, cf.lines, cf.sha256, "text", None)
+                    (rev_id, cf.path, cf.lang, cf.lines, cf.sha256, "text", None,
+                     textdec.detect(data))
                 )
                 parse_status["text"] = parse_status.get("text", 0) + 1
                 chunks.extend(self._text_chunks(cf.path, data, cfg, cf.lang))
@@ -400,15 +638,42 @@ class Indexer:
 
             res = self.extractor.extract(cf.path, data)
             file_rows.append(
-                (rev_id, cf.path, cf.lang, res.lines, res.sha256, res.parse_status, res.parse_note)
+                (rev_id, cf.path, cf.lang, res.lines, res.sha256, res.parse_status,
+                 res.parse_note, res.encoding)
             )
             parse_status[res.parse_status] = parse_status.get(res.parse_status, 0) + 1
 
             for s in res.symbols:
+                # B5: заглушка внешней цели НЕ ОБЪЯВЛЕНА НИ В ОДНОМ файле —
+                # `extract/generic.py:585` делает ОДИН узел на весь корпус.
+                # Прежняя редакция писала ей путь и строки текущего файла,
+                # а ключ таблицы `node` — `(rev_id, node_id)` и запись идёт
+                # `INSERT OR REPLACE` (`revisions.py`): у общей заглушки
+                # оставался путь ПОСЛЕДНЕГО файла, который её упомянул.
+                # Измерено на rev-0070 и подтверждено на rev-0073: узел
+                # `fqn='python:cwd'`, `kind='external'` имел
+                # `path='tools/ragraf-mcp-http.py'`, `start_line=138`, хотя
+                # объявления в этом файле нет; в callees это читалось как связь
+                # с чужим файлом. Схема допускает NULL в этих колонках
+                # (`store.py:133-146` — `path TEXT`, `start_line INTEGER`).
+                # `end_line` обнуляется вместе с `start_line`: оставить его —
+                # значит сохранить выдуманный адрес в чужом файле.
+                #
+                # Свойство `shared` (P1-3): так помечены узлы, ОБЩИЕ для
+                # корпуса, — ключ перевода (`tpl:reg.months`), маршрут,
+                # пакетная переменная Perl. Их адрес — тоже чужой: `%{key}`
+                # встречается в десяти шаблонах, и запись пути последнего из
+                # них выдала бы один шаблон за место объявления ключа.
+                is_stub = s.kind == "external" or bool(
+                    (getattr(s, "props", None) or {}).get("shared")
+                )
                 node_rows.append(
                     (
-                        rev_id, s.node_id, s.kind, s.name, s.fqn, res.path,
-                        s.start_line, s.end_line, s.signature, util.dumps(s.props), "structural",
+                        rev_id, s.node_id, s.kind, s.name, s.fqn,
+                        None if is_stub else res.path,
+                        None if is_stub else s.start_line,
+                        None if is_stub else s.end_line,
+                        s.signature, util.dumps(s.props), "structural",
                     )
                 )
                 kind_counts[s.kind] = kind_counts.get(s.kind, 0) + 1
@@ -429,6 +694,31 @@ class Indexer:
                 text_rows.append(
                     (rev_id, t.chunk_id, t.owner_node_id, res.path, t.start_line, t.end_line,
                      t.text_kind, t.raw)
+                )
+            route_seen: set[tuple[str, str]] = set()
+            for rt in getattr(res, "routes", None) or []:
+                route_key = str(rt.get("route", ""))
+                method = str(rt.get("method", ""))
+                # Повтор маршрута в файле даёт одну запись реестра: строки
+                # разных вызовов одного и того же адреса — не разные точки
+                # входа. Иначе на BWO в реестре оказалось 169 тысяч строк
+                # (одна разметка даёт десятки повторов), и операция `routes`
+                # перебирала их секундами.
+                pair = (route_key, method)
+                if pair in route_seen:
+                    continue
+                route_seen.add(pair)
+                route_rows.append(
+                    (
+                        rev_id,
+                        util.stable_id("route", res.path, route_key),
+                        res.file_node_id,
+                        route_key,
+                        method,
+                        res.path,
+                        int(rt.get("line", 0) or 0),
+                        0.9,
+                    )
                 )
             file_chunks = self.extractor.chunks(
                 res, data,
@@ -452,12 +742,48 @@ class Indexer:
             "node_rows": node_rows,
             "edge_rows": edge_rows,
             "text_rows": text_rows,
+            "route_rows": route_rows,
             "chunks": chunks,
             "kind_counts": kind_counts,
             "edge_counts": edge_counts,
             "parse_status": parse_status,
             "ast_notes": ast_notes,
         }
+
+    def _cpg_coverage_of(self, rev_id: str | None) -> dict[str, float]:
+        """Покрытие CPG указанной ревизии: собран ли граф и сколько рёбер добавлено.
+
+        Нужно, чтобы понижение покрытия было видно. Измерено на rev-0069/rev-0070:
+        у rev-0069 `coverage.cpg_used=1` и `cpg_calls_added=1203`, у rev-0070 оба
+        нуля, но у обеих ревизий совпадали `capability=full`, `joern_used=1`,
+        счётчики файлов/узлов/рёбер и `config_hash` — по сводке ревизии потеря
+        покрытия не читалась вообще. Сравнение с предыдущей ревизией — единственный
+        способ её заметить изнутри прогона.
+
+        Чтение идёт по позиции столбца, а не по имени: у обычного соединения
+        sqlite3 нет row_factory, и обращение по имени упало бы с TypeError.
+        Возвращаются нули, если данных нет — «неизвестно» здесь неотличимо от
+        «не было», и в обе стороны это безопаснее выдуманного значения.
+        """
+        out = {"cpg_used": 0.0, "cpg_calls_added": 0.0}
+        if not rev_id:
+            return out
+        try:
+            rows = self.graph.conn.execute(
+                "SELECT metric, value FROM coverage WHERE rev_id = ?"
+                " AND metric IN ('cpg_used', 'cpg_calls_added')",
+                (rev_id,),
+            ).fetchall()
+        except Exception:
+            return out
+        for row in rows:
+            try:
+                metric = str(row[0])
+                if metric in out:
+                    out[metric] = float(row[1] or 0)
+            except (TypeError, ValueError, IndexError):
+                continue
+        return out
 
     def _carry_cpg_edges(self, rev_id: str) -> int:
         """Перенести рёбра графа свойств кода из свежей ревизии, где они есть.
@@ -478,8 +804,12 @@ class Indexer:
           * идентификатор ребра сохраняется, поэтому повторный запуск
             не создаёт дубликатов (запись идёт через INSERT OR REPLACE).
 
-        Возвращается число перенесённых рёбер.
+        Возвращается число перенесённых рёбер (сигнатура не меняется: значение
+        читают вызывающий код и проверки). Ревизия-донор запоминается в
+        `self._cpg_carry_source` — она нужна в rev.json и в текстах отчёта,
+        чтобы перенос был отличим от собственной сборки CPG.
         """
+        self._cpg_carry_source: str | None = None
         try:
             # Ищется самая свежая ДРУГАЯ ревизия, в которой были рёбра от Joern.
             row = self.graph.conn.execute(
@@ -491,6 +821,7 @@ class Indexer:
             if not row or not row["c"]:
                 return 0
             source_rev = str(row["rev_id"])
+            self._cpg_carry_source = source_rev
 
             # Узлы текущей ревизии: по ним проверяются концы рёбер.
             current_nodes = {
@@ -671,11 +1002,11 @@ class Indexer:
         ЗАЧЕМ. Извлекатель наследования ставит ребро на заглушку
         (`@ext:<имя базового класса>`, см. `extract/php_ast.py`), потому что
         базовый класс может быть объявлен в другом файле или вообще вне корпуса.
-        Замерено на myproject (PHP, rev-0034): все 29 рёбер `extends` указывали на
+        Замерено на revoap (PHP, rev-0034): все 29 рёбер `extends` указывали на
         заглушки, и **ни одно** не вело на настоящий узел класса. То есть факты
         о наследовании в графе были невидимы для операций: имя базы есть, цели нет.
 
-        КАК разрешается. По последнему сегменту имени: в myproject классы записаны
+        КАК разрешается. По последнему сегменту имени: в revoap классы записаны
         квалифицированно (`App\\Connectors\\AbstractConnector`), а извлекатель
         может дать и полное имя, и короткое (`AbstractConnector`). Сопоставление
         идёт по полю `name` узла класса, поэтому обе формы находят одну цель.
@@ -772,6 +1103,50 @@ class Indexer:
             self.graph.commit()
         return resolved, ambiguous
 
+    def _collect_databases(self, rev_id: str) -> dict:
+        """Собрать структуру живых баз в индекс, если сбор включён.
+
+        Условие «сбор включён» обязательно: у большинства корпусов своей базы нет,
+        и попытка подключиться к СУБД на каждой индексации была бы и медленной, и
+        бессмысленной. Отсутствие базы — нормальное состояние, а не ошибка прогона.
+        """
+        try:
+            from . import db_access as access_mod
+
+            access = access_mod.DbAccessStore().load()
+        except Exception as exc:
+            return {"collected": False, "reason": f"{type(exc).__name__}: {exc}"}
+        if not access.enabled:
+            return {"collected": False, "reason": "сбор баз выключен в настройках"}
+
+        try:
+            from . import db_collect as collect_mod
+
+            collected = collect_mod.collect(access)
+            if collected.get("result") is None:
+                return {"collected": False,
+                        "reason": collected.get("reason") or "сбор не выполнен"}
+            from . import db_writer as writer_mod
+
+            stats = writer_mod.write_introspection(self.graph, rev_id,
+                                                   collected["result"],
+                                                   collected.get("samples") or {})
+            lex = writer_mod.write_lexvec(self.lexvec, self.embedder, rev_id,
+                                          collected["result"],
+                                          collected.get("samples") or {})
+            # Отпечаток запоминается: по нему сторож поймёт, изменилась ли
+            # структура, не читая базу заново.
+            from . import db_index as db_index_mod
+
+            db_index_mod.record_fingerprint(self.control.conn, rev_id,
+                                            collected["fingerprint"],
+                                            access.dialect)
+            return {"collected": True, "graph": stats, "lexvec": lex,
+                    "fingerprint": collected["fingerprint"]}
+        except Exception as exc:
+            # Сбой слоя баз не должен отменять индексацию кода.
+            return {"collected": False, "reason": f"{type(exc).__name__}: {exc}"}
+
     def _build_lexvec(self, rev_id: str, chunks: list[ChunkRec], with_vectors: bool) -> dict:
         """Лексика всегда; вектор — если доступны модель и расширение vec0."""
         note: str | None = None
@@ -801,9 +1176,17 @@ class Indexer:
                     except EmbeddingUnavailable as exc:
                         note = str(exc)
         elif with_vectors and not self.lexvec.vec_ok:
-            note = "vec0 недоступен: sqlite-vec не загрузился"
+            # Причина называется как есть. Раньше здесь всегда стояло «sqlite-vec
+            # не загрузился», и это было НЕВЕРНО, когда отказывала запись в vec0:
+            # расширение загружено, а падает вставка (замер 16.10.2026).
+            note = f"векторный слой недоступен: {self.lexvec.vec_unavailable_reason()}"
 
         self.lexvec.add_chunks(rev_id, chunks, vectors)
+        # Отказ записи мог случиться ВНУТРИ add_chunks (там сбрасывается vec_ok) —
+        # заметка обязана сказать об этом в ЭТОМ же прогоне, а не в следующем:
+        # ветка выше решает про vec_ok, каким он был ДО записи.
+        if note is None and getattr(self.lexvec, "vec_error", ""):
+            note = f"векторный слой отключён: {self.lexvec.vec_error}"
         return {"note": note, "reused": reused, "created": created}
 
     def _build_cpg_via_server(self, runner, rev_id: str) -> dict | None:
@@ -814,7 +1197,7 @@ class Indexer:
 
         Почему это быстрее. Индексация делает ДВА отдельных запуска Joern,
         и каждый платит 5,53 с за загрузку классов. Сервер строит граф в памяти
-        и отдаёт данные запросами: замерено на корпусе пилотный PHP-портал —
+        и отдаёт данные запросами: замерено на корпусе z.batteryservice.ru —
         importCode 7,42 с и запрос вызовов 4,13 с. Данные те же: 32 619 записей
         с полями srcMethod, callee, line и другими.
 
@@ -874,7 +1257,8 @@ class Indexer:
                 f"CPG (через сервер): вызовов после фильтрации {len(calls)} "
                 f"из {len(raw_calls)}, подтверждено в графе {stats['added']} "
                 f"(по полному имени {stats.get('by_fullname', 0)}, "
-                f"по имени и файлу {stats.get('by_name_file', 0)}), "
+                f"по имени и файлу {stats.get('by_name_file', 0)}, "
+                f"по имени без файла {stats.get('by_name_only', 0)}), "
                 f"встроенных PHP {stats.get('builtin_skipped', 0)}, "
                 f"не разрешено {stats['unresolved']}, уже было {stats['duplicate']}"
             ),
@@ -933,6 +1317,25 @@ class Indexer:
                 (cpg_info or {}).get("note"),
             ),
             ("cpg_calls_added", float((cpg_info or {}).get("calls_added", 0)), None),
+            # Понижение покрытия — отдельной метрикой, а не только текстом в notes.
+            # Измерено на rev-0069/rev-0070: сводки ревизий совпадали полностью
+            # (capability=full, joern_used=1, одинаковые счётчики и config_hash),
+            # и потерю 1203 рёбер можно было заметить только сравнением строк
+            # coverage двух ревизий вручную. Две записи, потому что проверять
+            # по индексу удобно числом, а человеку нужен текст: значение метрики
+            # отвечает «было ли понижение», note — «что именно пропало и откуда
+            # взяты связи». Ноль пишется явно: «проверено, понижения нет» и
+            # «проверки не было» (старые ревизии) — разные состояния.
+            (
+                "cpg_downgrade",
+                1.0 if (cpg_info or {}).get("downgraded") else 0.0,
+                (cpg_info or {}).get("downgrade_note"),
+            ),
+            (
+                "cpg_downgrade_note",
+                1.0 if (cpg_info or {}).get("downgraded") else 0.0,
+                (cpg_info or {}).get("downgrade_note"),
+            ),
         ]
         for lang, info in scan.by_lang.items():
             cov.append((f"lines_{lang}", float(info["lines"]), None))
@@ -1007,7 +1410,20 @@ class Indexer:
             sql += " LIMIT 5"
             rows = self.graph.conn.execute(sql, tuple(params)).fetchall()
             if len(rows) == 1:
-                cache[key] = (str(rows[0][0]), 0.9 if path else 0.7, "name_file")
+                if path:
+                    cache[key] = (str(rows[0][0]), 0.9, "name_file")
+                else:
+                    # B5: файл владельца неизвестен (Joern его не дал), поэтому
+                    # фильтр по файлу не добавлен и совпадение имени искалось
+                    # ПО ВСЕМУ КОРПУСУ. Называть это `name_file` — неправда:
+                    # файла в привязке нет. Способ назван честно (`name_only`),
+                    # а достоверность снижена до уровня «один кандидат по имени
+                    # во всём корпусе» — ровно так помечено то же решение
+                    # в разрешении внешних имён выше (0.6 при единственном
+                    # кандидате, 0.4 при нескольких). Ключ статистики меняется
+                    # вместе со способом: `by_{how}` в `cpg.merge_calls`, поэтому
+                    # отчёт ниже читает оба ключа.
+                    cache[key] = (str(rows[0][0]), 0.6, "name_only")
             else:
                 cache[key] = (None, 0.0, "unresolved")
             return cache[key]
@@ -1026,6 +1442,11 @@ class Indexer:
         from . import joern_export
 
         runner = cpg_mod.JoernRunner(self.cfg)
+        # Ссылка сохраняется СРАЗУ, а не только при успехе серверного пути:
+        # сервер Joern мог быть поднят и остаться после отказа. Замер 16.10.2026:
+        # три JVM-сироты держали порты 9500–9502, потому что при неудаче
+        # серверного пути ссылка не сохранялась и close() их не останавливал.
+        self._cpg_runner = runner
         status = runner.status()
         if not status.available:
             return {
@@ -1042,9 +1463,7 @@ class Indexer:
         if self.cfg.index.joern_server:
             server_result = self._build_cpg_via_server(runner, rev_id)
             if server_result is not None:
-                # Ссылка сохраняется, чтобы close() остановил сервер:
-                # иначе он останется висеть после индексации.
-                self._cpg_runner = runner
+                # Ссылка сохранена выше: close() остановит сервер в любом исходе.
                 return server_result
 
         build = runner.build(rev_id)
@@ -1060,7 +1479,7 @@ class Indexer:
         if not exported.ok or exported.path is None:
             # ОБХОДНОЙ ПУТЬ для графов, которые не выгружаются.
             #
-            # Причина, установленная замером (проект внешний проект, Python):
+            # Причина, установленная замером (проект sagaai, Python):
             # `joern-export` падает с
             #   SchemaViolationException: OUT edge with label REF to an
             #   adjacent METHOD is mandatory, but not defined for this
@@ -1106,7 +1525,8 @@ class Indexer:
                 f"CPG: {build.note}; {ratio}; вызовов после фильтрации {len(calls)} "
                 f"из {len(raw_calls)}, подтверждено в графе {stats['added']} "
                 f"(по полному имени {stats.get('by_fullname', 0)}, "
-                f"по имени и файлу {stats.get('by_name_file', 0)}), "
+                f"по имени и файлу {stats.get('by_name_file', 0)}, "
+                f"по имени без файла {stats.get('by_name_only', 0)}), "
                 f"встроенных PHP {stats.get('builtin_skipped', 0)}, "
                 f"не разрешено {stats['unresolved']}, уже было {stats['duplicate']}"
             ),
@@ -1127,7 +1547,7 @@ class Indexer:
         Когда нужен этот путь. `joern-export` не выгружает некоторые графы:
         на Python-графе он падает с `SchemaViolationException` при расчёте
         оверлея потока данных (у узлов METHOD_REF нет обязательного ребра
-        REF). Сам граф при этом пригоден — замер на проекте внешний проект показал
+        REF). Сам граф при этом пригоден — замер на проекте sagaai показал
         72 566 вызовов через обычный запрос.
 
         Почему не через сервер. Оба серверных пути для Python недоступны,
@@ -1290,7 +1710,8 @@ class Indexer:
                 f"{len(calls)} после фильтрации из {len(raw_calls)}, "
                 f"подтверждено в графе {stats['added']} "
                 f"(по полному имени {stats.get('by_fullname', 0)}, "
-                f"по имени и файлу {stats.get('by_name_file', 0)}), "
+                f"по имени и файлу {stats.get('by_name_file', 0)}, "
+                f"по имени без файла {stats.get('by_name_only', 0)}), "
                 f"не разрешено {stats['unresolved']}, "
                 f"уже было {stats['duplicate']}"
             ),
@@ -1337,7 +1758,7 @@ class Indexer:
         всего непонятного подставлялся «sql». Теперь язык приходит аргументом
         из того же места, где определено расширение, — одна точка правды.
         """
-        text = data.decode("utf-8", errors="replace")
+        text = textdec.decode(data, path)[0]
         lines = text.splitlines()
         if not lines:
             return []

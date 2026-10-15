@@ -40,7 +40,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, field
+from dataclasses import dataclass, field
 
 from .php_ast import (
     ChunkRec,
@@ -51,8 +51,15 @@ from .php_ast import (
     _collapse,
     _collapse_signature,
     EXT_PREFIX,
+    SQL_RE,
+    SQL_TABLE_RE,
+    TABLE_PREFIX,
+    _sql_access,
+    file_ref_edges,
+    route_edges,
+    routes_from_text,
 )
-from .. import util
+from .. import textdec, util
 
 
 @dataclass
@@ -273,11 +280,18 @@ class GenericExtractor:
         return self._parser
 
     def extract(self, path: str, data: bytes) -> FileExtraction:
+        # Кодировка определяется до разбора и до подсчёта строк: для CP1251
+        # (Perl-скрипты BWO) текст раньше терялся целиком, для UTF-16 ломался
+        # ещё и подсчёт строк (байт 0x0A разделён нулём). sha256 — по исходным
+        # байтам: он сверяется со сканом корпуса, и подменять его нельзя.
+        raw = data
+        text, enc, data = textdec.prepare(raw, path)
         res = FileExtraction(
             path=util.to_posix(path),
-            sha256=util.sha256_bytes(data),
-            lines=data.count(b"\n") + 1,
+            sha256=util.sha256_bytes(raw),
+            lines=textdec.line_count(raw, text, enc),
             lang=self.profile.name,
+            encoding=enc,
         )
         file_id = util.stable_id("file", res.path, res.path)
         res.symbols.append(
@@ -306,11 +320,29 @@ class GenericExtractor:
         self._declared = {}
         self._pending = []
         self._containers = []
+        # Perl: какие имена объявлены в этом файле и с каким знаком (`$`, `@`, `%`).
+        # Нужен до обхода, потому что приведение знака делается в момент
+        # использования, а объявление может стоять ниже по файлу.
+        self._perl_declared = (
+            self._collect_perl_declarations(tree.root_node)
+            if self.profile.name == "perl" else {}
+        )
         self._visit(tree.root_node, parent=None, container=file_id)
 
         # Отложенные вызовы привязываются после обхода: цель может быть
         # объявлена позже места вызова.
         self._resolve_pending()
+
+        # P1-3: точки входа из скриптов. У JavaScript нет ни shebang, ни
+        # `action=`, но адрес запроса лежит в `fetch('...')` и `$.get('...')`,
+        # и без этого разбора файл-обработчик не считался точкой входа.
+        if self.profile.name in ("javascript", "typescript"):
+            text = data.decode("utf-8", errors="replace")
+            res.routes = routes_from_text(res.path, text)
+            route_edges(res, file_id)
+            # Ссылки на файлы строковыми литералами (P1-2): в JS рабочий файл
+            # часто назван просто строкой (`var ENDPOINT = 'php/Files7.php'`).
+            file_ref_edges(res, file_id, text)
 
         # Ребро defines для символов верхнего уровня.
         for sym in res.symbols:
@@ -457,7 +489,176 @@ class GenericExtractor:
             self._visit_children(node, parent=parent, container=container)
             return
 
+        # --- P1-3: полиглот ---
+        # Perl: пакетные переменные (`our %hFORMAT`, `my $FORMAT`) и SQL в
+        # строках и heredoc. До этой ветки `%hFORMAT` в индексе не было вовсе:
+        # профиль языка описывал подпрограммы и вызовы, а переменные — нет,
+        # и вопрос «где задаётся формат импорта» упирался в чтение файла.
+        if self.profile.name == "perl":
+            if node.type == "variable_declaration":
+                self._perl_variable(node, container)
+                return
+            if node.type in ("scalar", "hash", "array", "container_variable"):
+                self._perl_variable_use(node, container)
+                self._visit_children(node, parent=parent, container=container)
+                return
+            if node.type in ("heredoc_content", "string_literal",
+                             "interpolated_string_literal"):
+                self._sql_from_text(node, container)
+                self._visit_children(node, parent=parent, container=container)
+                return
+
         self._visit_children(node, parent=parent, container=container)
+
+    # ---- P1-3: Perl и SQL вне PHP ----
+
+    def _collect_perl_declarations(self, root) -> dict[str, set[str]]:
+        """Собрать объявленные в файле имена Perl и их знаки (`$`, `@`, `%`).
+
+        Нужен ДО обхода: в обращении к элементу хэша грамматика пишет
+        `$hFORMAT{...}` даже тогда, когда переменная объявлена как `%hFORMAT`.
+        Опираться на порядок объявлений нельзя — они бывают и ниже места
+        использования, поэтому собирается заранее.
+        """
+        found: dict[str, set[str]] = {}
+
+        def walk(node) -> None:
+            if node.type == "variable_declaration":
+                for ch in node.children:
+                    if ch.type in ("scalar", "hash", "array"):
+                        raw = self._text(ch).strip()
+                        if len(raw) > 1 and raw[0] in "$@%":
+                            found.setdefault(raw[1:], set()).add(raw[0])
+            for ch in node.children:
+                walk(ch)
+
+        walk(root)
+        return found
+
+    def _perl_variable(self, node, container: str) -> None:
+        """Объявление пакетной переменной Perl: `our %hFORMAT`, `my $FORMAT`.
+
+        Объявление — ФАКТ со своим адресом, поэтому узел отдельный и
+        принадлежит файлу. Использования идут в общий узел по имени (см.
+        `_perl_variable_use`): так «где объявлено» и «где используется»
+        отвечают на разные вопросы, и оба — со ссылками.
+        """
+        scope = next((c.type for c in node.children
+                      if c.type in ("our", "my", "local", "state")), "")
+        name_node = next((c for c in node.children
+                          if c.type in ("scalar", "hash", "array")), None)
+        if name_node is None:
+            return
+        name = self._text(name_node).strip()
+        if not name:
+            return
+        line = node.start_point[0] + 1
+        node_id = util.stable_id("perlvar_decl", self._res.path, name, line)
+        self._res.symbols.append(
+            SymbolRec(
+                node_id=node_id, kind="variable", name=name,
+                fqn=f"{self._res.path}::{name}", start_line=line, end_line=line,
+                start_byte=node.start_byte, end_byte=node.end_byte,
+                signature=_collapse(f"{scope} {name}".strip(), 120),
+                parent_fqn=None,
+                props={"lang": "perl", "sigil": name[:1], "scope": scope or "my"},
+            )
+        )
+        self._res.edges.append(
+            EdgeRec(container, node_id, "declares", "stated", line, 1.0)
+        )
+
+    def _perl_variable_use(self, node, container: str) -> None:
+        """Использование переменной Perl: общий узел по имени + ребро чтения.
+
+        Особый случай — `container_variable`: в обращении к элементу хэша
+        грамматика пишет `$hFORMAT{...}`, хотя переменная объявлена как
+        `%hFORMAT` (проверено вызовом грамматики: `hash_element_expression`
+        → `container_variable` со знаком `$`). Без приведения знака
+        использование пакетной переменной не связывалось с её объявлением:
+        в индексе появлялся `$hFORMAT`, которого в файле нет.
+
+        Знак приводится по ОБЪЯВЛЕНИЯМ этого же файла: `%hFORMAT` — если
+        объявлен хэш, `@a` — если массив. Если соответствующего объявления
+        нет (например, это ссылка на хэш `$self->{...}`), знак остаётся `$`:
+        выдумывать имя `%self` нельзя.
+        """
+        if node.type == "container_variable":
+            raw = self._text(node).strip()
+            base = raw[1:] if raw[:1] in "$@%" else raw
+            parent = getattr(node, "parent", None)
+            ptype = getattr(parent, "type", "")
+            want = "%" if ptype == "hash_element_expression" else (
+                "@" if ptype == "array_element_expression" else "$")
+            declared = self._perl_declared.get(base, set())
+            sigil = want if want in declared else ("$" if "$" in declared else want)
+            name = f"{sigil}{base}"
+        else:
+            name = self._text(node).strip()
+        if not name or name in ("$_", "@_", "$0", "$1", "$@"):
+            # Служебные переменные Perl: общего узла на них не заводим,
+            # иначе граф наполняется связями «все файлы читают $_».
+            return
+        line = node.start_point[0] + 1
+        node_id = util.stable_id("perlvar", name)
+        self._res.symbols.append(
+            SymbolRec(
+                node_id=node_id, kind="variable", name=name, fqn=f"perl:{name}",
+                start_line=line, end_line=line, start_byte=0, end_byte=0,
+                signature=None, parent_fqn=None,
+                props={"lang": "perl", "shared": True, "sigil": name[:1]},
+            )
+        )
+        self._res.edges.append(
+            EdgeRec(container, node_id, "reads_var", "stated", line, 1.0)
+        )
+
+    def _sql_from_text(self, node, container: str) -> None:
+        """SQL из строкового литерала или heredoc любого языка с профилем.
+
+        Нужно для Perl: `$dbh->do("UPDATE orders SET x=1")` и
+        `<<'SQL' ... INSERT INTO ... SQL` — обычная для BWO запись в базу.
+        Разбор общий с PHP (образцы и вид доступа берутся из `php_ast`),
+        чтобы «кто пишет в таблицу» отвечал одинаково на обоих языках.
+        """
+        raw = self._text(node)
+        if len(raw) < 8 or not SQL_RE.search(raw):
+            return
+        tables = sorted({m.group(1) for m in SQL_TABLE_RE.finditer(raw)})
+        access = _sql_access(raw)
+        line = node.start_point[0] + 1
+        # Как запрос попал в СУБД: `$dbh->do(...)` — прямой вызов,
+        # `$dbh->prepare(...)` — подготовленное выражение. Поле нужно, чтобы
+        # «кто пишет» не смешивал подготовку и выполнение (P1-4).
+        via = "literal"
+        p = getattr(node, "parent", None)
+        depth = 0
+        while p is not None and depth < 4:
+            if p.type == "method_call_expression":
+                nm = next((self._text(c).strip() for c in p.children
+                           if c.type == "method"), "")
+                low = nm.lower()
+                if low == "prepare":
+                    via = "prepared"
+                    break
+                if low in ("do", "selectall", "selectrow", "selectcol"):
+                    via = f"direct:{low}"
+                    break
+            p = getattr(p, "parent", None)
+            depth += 1
+        self._res.sql_literals.append({
+            "line": line, "owner": container,
+            "sql": _collapse(raw.strip("'\""), 400),
+            "tables": tables, "write": access != "select", "access": access,
+            "via": via,
+        })
+        for tbl in tables:
+            self._res.edges.append(
+                EdgeRec(container, f"{TABLE_PREFIX}{tbl.lower()}", "queries", "stated",
+                        line, 0.8, props={"write": access != "select", "access": access,
+                                          "sql": _collapse(raw.strip("'\""), 200),
+                                          "via": via})
+            )
 
     def _base_names(self, node) -> list[tuple[str, int]]:
         """Имена БАЗОВЫХ классов из объявления класса.
@@ -619,12 +820,19 @@ def chunks_for_language(
     необходимость резать файл без учёта символов — это будет видно по этому
     аргументу, а не спрятано.
     """
-    text = data.decode("utf-8", errors="replace")
+    text = textdec.decode(data, res.path)[0]
     lines = text.splitlines()
     out: list[ChunkRec] = []
 
     targets = [s for s in res.symbols
-               if s.kind not in ("file", "external", "namespace")]
+               if s.kind not in ("file", "external", "namespace",
+                                 # P1-3: узлы-«якоря» (маршрут, ключ перевода,
+                                 # пакетная переменная) НЕ являются телами кода.
+                                 # Без этого исключения из них делались чанки,
+                                 # и на BWO индекс вырос с 102 до 277 тысяч
+                                 # чанков при том же коде: поиск замедлялся, а
+                                 # находил служебные строки вместо кода.
+                                 "route_node", "placeholder", "variable")]
     targets.sort(key=lambda s: s.start_line)
 
     for sym in targets:

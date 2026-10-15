@@ -76,7 +76,7 @@
 | Сериализация ответов | **MCP** (Model Context Protocol, JSON-RPC) | Штатный способ отдать инструменты агенту |
 | CLI | **PowerShell 7.6** | Среда Run; сложные блоки выносятся в файлы |
 | Телеметрия | **SQLite** (таблица `usage_call`) | Журнал обращений — источник всех чисел этой статьи |
-| Целевые проекты | **PHP 8.3/8.5** без фреймворка, **MySQL 9.7.2** | Реальные корпуса: `второй PHP-корпус` (392 файла) и `пилотный PHP-портал` (123 файла) |
+| Целевые проекты | **PHP 8.3/8.5** без фреймворка, **MySQL 9.7.2** | Реальные корпуса: `revoap.com` (392 файла) и `z.batteryservice.ru` (123 файла) |
 
 Общее число зависимостей Python — семь. Это сознательно: каждая зависимость в цепочке индексации — потенциальная причина, по которой индекс не соберётся на чужой машине.
 
@@ -114,7 +114,7 @@ flowchart TB
         REINDEX["автоматическая<br/>реиндексация"]
     end
 
-    subgraph FACADE["Фасад: 22 операции"]
+    subgraph FACADE["Фасад: 38 операций"]
         OPS["search, symbol, schema,<br/>write_check, impact, ..."]
         ENV["Конверт ответа:<br/>index_rev, freshness,<br/>limits, stale_warnings"]
     end
@@ -249,7 +249,7 @@ sequenceDiagram
   "op": "symbol",
   "index_rev": "rev-0016",
   "freshness": {
-    "category": "пилотный PHP-портал",
+    "category": "z.batteryservice.ru",
     "changed_since_index": false,
     "index_present": true,
     "corpus_hash_now": "64dd7ef128df6d6254ed520e5a48643e45ccf5e671d54ca9ee40512d152ddef6",
@@ -291,16 +291,16 @@ sequenceDiagram
 {
   "version": 1,
   "entries": {
-    "второй PHP-корпус": {
-      "root": "<рабочий каталог>/второй PHP-корпус",
+    "revoap.com": {
+      "root": "C:/AutoClaw/revoap.com",
       "rev_id": "rev-0025",
       "corpus_hash": "d6edc0172b055acd4b5d44d76caa5b8788919000ce9d2ca711263f8f63ac0a64",
       "file_count": 392,
       "indexed_at": "2026-10-05T05:04:11+03:00",
       "runs": [ { "trigger": "register", "seconds": 0.0 } ]
     },
-    "пилотный PHP-портал": {
-      "root": "<рабочий каталог>/пилотный PHP-портал",
+    "z.batteryservice.ru": {
+      "root": "C:/AutoClaw/z.batteryservice.ru",
       "rev_id": "rev-0016",
       "corpus_hash": "64dd7ef128df6d6254ed520e5a48643e45ccf5e671d54ca9ee40512d152ddef6",
       "file_count": 123,
@@ -316,13 +316,13 @@ sequenceDiagram
 ```
 разработок в реестре: 2
 
-  второй PHP-корпус  (второй PHP-корпус)
+  revoap.com  (revoap.com)
     ревизия:  rev-0025
     сумма:    d6edc0172b055acd4b5d44d76caa5b8788919000ce9d2ca711263f8f63ac0a64
     размер:   файлов 392, узлов 0, рёбер 0
     состояние: индекс актуален (сумма совпадает)
 
-  пилотный PHP-портал  (пилотный PHP-портал)
+  z.batteryservice.ru  (z.batteryservice.ru)
     ревизия:  rev-0016
     сумма:    64dd7ef128df6d6254ed520e5a48643e45ccf5e671d54ca9ee40512d152ddef6
     размер:   файлов 123, узлов 0, рёбер 0
@@ -341,7 +341,7 @@ sequenceDiagram
 
 ### 8.1 Объём корпусов
 
-| Показатель | `второй PHP-корпус` (пилот) | `пилотный PHP-портал` (полигон) |
+| Показатель | `revoap.com` (пилот) | `z.batteryservice.ru` (полигон) |
 |---|---|---|
 | Файлов | 392 | 123 |
 | Строк кода | 126 386 | ~34 000 |
@@ -993,7 +993,7 @@ cos = max(-1.0, min(1.0, cos))
 
 #### U3: почему обрезка сигнатуры — не мелочь
 
-На пилоте `второй PHP-корпус` обрезка задевала **33 конструктора** с продвигаемыми
+На пилоте `revoap.com` обрезка задевала **33 конструктора** с продвигаемыми
 свойствами. Вот реальный случай из `src/Api/ApiKey.php:40`:
 
 ```

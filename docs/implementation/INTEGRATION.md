@@ -27,7 +27,7 @@ MCP client configuration:
 
 > *Note:* `config/` is machine-local and git-ignored. Create your corpus config with `ragraf init <project-dir>` (it prints the path), or start from `examples/ragraf.example.yaml`.
 
-The server declares **23 tools** with the `ragraf_` prefix (verified against `src/ragraf/mcp_server.py`): `index_status`, `drift_report`, `search`, `symbol`, `references`, `callers`, `callees`, `impact`, `slice`, `code`, `repo_map`, `schema`, `table_usage`, `routes`, `live_read`, `drift_ack`, `policy_trace`, `class_usage`, `write_check`, `usage`, `freshness`, `catalog`, `ensure`.
+The server declares **40 tools** with the `ragraf_` prefix (verified against `src/ragraf/mcp_server.py` on 2026-10-16): `callees`, `callers`, `catalog`, `class_usage`, `code`, `context`, `db_cross`, `db_drift`, `db_relations`, `db_sample`, `db_schema`, `db_table`, `dead_code`, `diff`, `drift_ack`, `drift_report`, `duplicates`, `ensure`, `entrypoints`, `freshness`, `impact`, `index_status`, `live_read`, `note`, `notes`, `policy_trace`, `references`, `repo_map`, `routes`, `schema`, `search`, `search_multi`, `slice`, `symbol`, `table_usage`, `task`, `task_stats`, `usage`, `use_project`, `write_check`.
 
 There is **no, and will be no,** free-form graph query tool (FT-15): an attempt to pass `MATCH ... RETURN` is rejected with code `-32602`.
 

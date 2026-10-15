@@ -34,6 +34,10 @@ class CorpusFile:
     sha256: str
     bytes: int
     lines: int
+    # Время правки (наносекунды) заполняется ТОЛЬКО в режиме без хэширования
+    # (`scan(digest=False)`) и служит дешёвому отпечатку входа: «менялся ли
+    # корпус» по пути, размеру и времени, без чтения файлов.
+    mtime_ns: int = 0
 
 
 @dataclass
@@ -119,8 +123,22 @@ def _count_lines_fast(path: Path, size: int) -> int:
     return total if tail_nl else total + 1
 
 
-def scan(cfg: ProjectConfig) -> CorpusScan:
+def scan(cfg: ProjectConfig, *, digest: bool = True) -> CorpusScan:
     """Полный скан корпуса. Ничего не пишет — только читает.
+
+    Параметр `digest` управляет ЦЕНОЙ скана, а не его смыслом:
+
+      * `digest=True` (по умолчанию) — как было: sha256 каждого файла и подсчёт
+        строк. Из этого считается `corpus_hash`, это же нужно индексатору;
+      * `digest=False` — тот же обход и те же правила отбора (исключения,
+        секреты, языки, размер), но БЕЗ чтения содержимого: у файла берётся
+        только `stat`. Это нужно сторожу свежести, чтобы проверять «менялся ли
+        вход» на КАЖДОМ вызове операции, не перечитывая корпус целиком.
+
+    В режиме `digest=False` поле `sha256` пустое, `lines` равно нулю,
+    заполнено `mtime_ns`, а схлопывание дублей не выполняется (ему нужны хэши).
+    Это осознанно: отпечаток обязан быть дешёвым, и его задача — ЗАМЕТИТЬ
+    изменение, а не доказать неизменность файла при совпавших размере и времени.
 
     ВАЖНО про пути (дефект, найденный на тестовом корпусе).
     Корень корпуса может быть задан КОРОТКИМ 8.3-путём: на этой машине так
@@ -200,30 +218,43 @@ def scan(cfg: ProjectConfig) -> CorpusScan:
                 continue
 
             try:
-                size = abs_path.stat().st_size
+                st = abs_path.stat()
+                size = st.st_size
             except OSError:
                 result.skipped_binary += 1
                 continue
             if size == 0:
                 continue
-            if util.is_binary(abs_path):
-                result.skipped_binary += 1
-                continue
 
-            try:
-                digest = util.sha256_file(abs_path)
-                lines = _count_lines_fast(abs_path, size)
-            except OSError:
-                result.skipped_binary += 1
-                continue
+            digest_hex = ""
+            lines = 0
+            mtime_ns = 0
+            if digest:
+                if util.is_binary(abs_path):
+                    result.skipped_binary += 1
+                    continue
+
+                try:
+                    digest_hex = util.sha256_file(abs_path)
+                    lines = _count_lines_fast(abs_path, size)
+                except OSError:
+                    result.skipped_binary += 1
+                    continue
+            else:
+                # Режим отпечатка: содержимое НЕ читается. Проверка «бинарный
+                # или нет» тоже читает файл, поэтому пропускается. Отпечаток
+                # нужен, чтобы заметить изменение, а не чтобы описать корпус;
+                # размер и время правки в него входят.
+                mtime_ns = int(st.st_mtime_ns)
 
             cf = CorpusFile(
                 path=rel,
                 abs_path=abs_path,
                 lang=lang,
-                sha256=digest,
+                sha256=digest_hex,
                 bytes=size,
                 lines=lines,
+                mtime_ns=mtime_ns,
             )
             result.files.append(cf)
             result.total_bytes += size
@@ -246,7 +277,11 @@ def scan(cfg: ProjectConfig) -> CorpusScan:
     #      (`indexer.py`), и сторож (`watch.py`). Схлопывание в любом другом
     #      месте привело бы к тому, что эти два места видели разный корпус.
     result.files_found = len(result.files)
-    if bool(getattr(cfg.index, "dedupe_enabled", False)):
+    # Схлопывание дублей требует хэшей: в режиме отпечатка их нет, поэтому шаг
+    # пропускается. Для сторожа это безопасно и консервативно: лишняя копия в
+    # отпечатке даёт вывод «вход изменился» и полную сверку, а не ложное
+    # «всё свежо».
+    if digest and bool(getattr(cfg.index, "dedupe_enabled", False)):
         from . import dedupe as _dedupe
 
         decision = _dedupe.dedupe(result, cfg)
@@ -270,6 +305,27 @@ def scan(cfg: ProjectConfig) -> CorpusScan:
                 g.as_dict() for g in decision.groups[:50]
             ]
     return result
+
+
+def stat_fingerprint(cfg: ProjectConfig) -> tuple[str, int, int]:
+    """Дешёвый отпечаток входа: путь, размер и время правки каждого файла.
+
+    Возвращает (отпечаток, число файлов, общий размер). Содержимое файлов НЕ
+    читается — берётся только метаинформация.
+
+    Зачем отдельно от `corpus_hash`. Полная сверка корпуса читает ВСЕ файлы
+    (sha256 каждого), и делать её перед каждым вызовом операции — значит платить
+    за неё на каждом шаге агента. Отпечаток отвечает на тот же вопрос «вход
+    менялся?» ценой обхода дерева, а к полной сверке сторож переходит только
+    тогда, когда отпечаток разошёлся.
+
+    Сортировка по пути обязательна: обход каталогов порядка не гарантирует, а
+    дрожащий отпечаток заставлял бы переиндексировать бесконечно — ровно тот
+    класс дефектов, ради которого детерминизм объявлен инвариантом проекта.
+    """
+    scanned = scan(cfg, digest=False)
+    payload = "\n".join(f"{f.path}\t{f.bytes}\t{f.mtime_ns}" for f in scanned.files)
+    return util.sha256_text(payload), len(scanned.files), scanned.total_bytes
 
 
 def resolve(cfg: ProjectConfig, rel_or_abs: str) -> Path | None:

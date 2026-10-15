@@ -16,30 +16,34 @@
     "ragraf": {
       "command": "python",
       "args": [
-        "<репозиторий>/tools/ragraf-mcp.py",
+        "C:/AutoClaw/RAGRAF/tools/ragraf-mcp.py",
         "--project",
-        "<репозиторий>/config/myproject.yaml"
+        "C:/AutoClaw/RAGRAF/config/revoap.yaml"
       ]
     }
   }
 }
 ```
 
-Сервер объявляет **23 инструмента** с префиксом `ragraf_` (проверено по коду `src/ragraf/mcp_server.py`): `index_status`, `drift_report`, `search`, `symbol`, `references`, `callers`, `callees`, `impact`, `slice`, `code`, `repo_map`, `schema`, `table_usage`, `routes`, `live_read`, `drift_ack`, `policy_trace`, `class_usage`, `write_check`, `usage`, `freshness`, `catalog`, `ensure`.
+Сервер объявляет **40 инструментов** с префиксом `ragraf_` (проверено по коду `src/ragraf/mcp_server.py`): `index_status`, `context`, `drift_report`, `search`, `search_multi`, `duplicates`, `entrypoints`, `dead_code`, `symbol`, `references`, `callers`, `callees`, `impact`, `slice`, `code`, `repo_map`, `schema`, `table_usage`, `routes`, `live_read`, `drift_ack`, `policy_trace`, `class_usage`, `write_check`, `usage`, `freshness`, `catalog`, `use_project`, `ensure`, `diff`, `note`, `notes`, `task`, `task_stats` (§3.4: отчёт по задаче — обращения, факты, решения гейта) — и шесть инструментов живых баз данных: `db_schema`, `db_table`, `db_relations`, `db_sample`, `db_drift`, `db_cross`.
+
+Гейт использования индекса (§3.2) отдельным инструментом не выставляется намеренно: он вызывается хуком клиента (`PreToolUse`), а ручная проверка идёт через CLI — `query gate --payload -`. Подключение: `harness/README.md`.
+
+`context` отвечает на вопрос «о каком проекте мне сейчас отвечают»: имя разработки, корень, ревизия, свежесть и на каком основании корпус определён (аргумент запуска, рабочий каталог процесса, реестр или `use_project`). Он работает и без выбранного корпуса — в отличие от остальных операций.
 
 Инструмента свободных запросов к графу **нет и не будет** (ФТ-15): попытка передать `MATCH ... RETURN` отвергается с кодом `-32602`.
 
 ### 1.2 CLI (отладка и ручные операции)
 
 ```powershell
-python tools/ragraf.py --project config/myproject.yaml status
-python tools/ragraf.py --project config/myproject.yaml query impact --target "Core\Config::get" --depth 3
+python tools/ragraf.py --project config/revoap.yaml status
+python tools/ragraf.py --project config/revoap.yaml query impact --target "Core\Config::get" --depth 3
 ```
 
 ### 1.3 Предварительная индексация
 
 ```powershell
-python tools/ragraf.py --project config/myproject.yaml index
+python tools/ragraf.py --project config/revoap.yaml index
 ```
 
 Первая индексация скачивает модель эмбеддингов (0,22 ГБ, один раз в `<домашний каталог>/.ragraf/models`). Дальше — только из кэша.
@@ -113,7 +117,7 @@ python tools/ragraf.py --project config/myproject.yaml index
 После правок:
 
 ```powershell
-python tools/ragraf.py --project config/myproject.yaml drift --scan
+python tools/ragraf.py --project config/revoap.yaml drift --scan
 ```
 
 Это сравнит индекс с рабочим деревом и допишет различия в журнал. **Индекс при этом не меняется** — это принципиально.
@@ -123,7 +127,7 @@ python tools/ragraf.py --project config/myproject.yaml drift --scan
 ### 2.5 После завершения доработки
 
 ```powershell
-python tools/ragraf.py --project config/myproject.yaml reindex
+python tools/ragraf.py --project config/revoap.yaml reindex
 ```
 
 Что произойдёт: построится новый снимок индекса, журнал расхождений будет архивирован в `drift/archive/<из>_to_<в>.md` с тремя обязательными разделами — «что изменилось в корпусе», «что в знаниях перепроверено», «изменённые границы срезов». Предыдущие записи и история ревизий **не удаляются**.
@@ -174,7 +178,7 @@ python tools/ragraf.py --project config/myproject.yaml reindex
 | Шаг | Состояние |
 |---|---|
 | MCP-сервер написан и проверен тестом | ✅ `tests/test_mcp.py` — все проверки пройдены |
-| Конфигурация корпуса | ✅ `config/myproject.yaml` |
+| Конфигурация корпуса | ✅ `config/revoap.yaml` |
 | Индекс построен | ✅ ревизия `rev-0012`, 392 файла |
 | `AGENTS.md` в проекте-пилоте | ⏳ **не изменялся**: файл в чужом проекте, вставка текста из §3 требует согласия владельца |
 | Регистрация MCP-сервера в клиенте | ⏳ требует правки конфигурации клиента пользователем |

@@ -33,6 +33,7 @@
 
 from __future__ import annotations
 
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -63,6 +64,10 @@ class Freshness:
     expected_config_hash: str
     rev_id: str
     files_now: int
+    # Результат проверки структуры баз: отдельное поле, потому что
+    # это НЕ часть сверки корпуса. Пусто — сбор баз выключен или
+    # проверка не выполнялась.
+    db_check: dict | None = None
     changed_files: int = 0
     added_files: int = 0
     removed_files: int = 0
@@ -72,6 +77,10 @@ class Freshness:
     stale: bool = False
     note: str = ""
     from_cache: bool = False
+    # Чем доказана свежесть: "fingerprint" — дешёвой сверкой по путям, размерам
+    # и времени правки; пусто — полной сверкой контрольных сумм. Разница
+    # существенна: отпечаток НЕ читает содержимое файлов.
+    verified_by: str = ""
     # --- накопление правок за сессию ---
     # Считается по журналу расхождений в окне от последней индексации.
     # Нужно, чтобы отличить «одна мелкая правка» от «двадцать правок за час».
@@ -95,6 +104,7 @@ class Freshness:
             "changed_since_index": self.changed,
             "index_present": self.indexed,
             "rev_id": self.rev_id,
+            "db_check": self.db_check,
             "corpus_hash_now": self.corpus_hash,
             "corpus_hash_indexed": self.expected_hash,
             "config_changed": bool(
@@ -126,11 +136,17 @@ class Freshness:
             }
         if self.threshold_reached:
             out["threshold_reached"] = self.threshold_reached
+        # `stale` отдаётся ВСЕГДА, а не только когда он true. Раньше поля не
+        # было в свежем ответе, и отличить «свежо» от «поля нет по другой
+        # причине» можно было только по отсутствию ключа — машиной это не
+        # проверяется, а проверка свежести обязана проверяться (приёмка §5 п.5).
+        out["stale"] = bool(self.stale)
         if self.stale:
-            out["stale"] = True
             out["warning"] = self.note or "индекс устарел: факты могут не соответствовать коду"
         if self.from_cache:
             out["from_cache"] = True
+        if self.verified_by:
+            out["verified_by"] = self.verified_by
         return out
 
 
@@ -332,6 +348,7 @@ def check(
     auto_reindex: bool = True,
     force: bool = False,
     use_cache: bool = True,
+    budget_seconds: float | None = None,
 ) -> Freshness:
     """Сверить индекс с кодом и при необходимости переиндексировать.
 
@@ -373,6 +390,25 @@ def check(
     else:
         index_changed = expected_config and config_hash != expected_config
         if corpus_hash == expected_hash and not index_changed:
+            # Код не менялся. Проверяем структуру баз — но ТОЛЬКО если сбор
+            # включён: при выключенном сборе это лишний запуск клиента СУБД на
+            # каждой проверке, а при недоступной базе корпус кода не устаревает.
+            try:
+                from . import db_index as db_index_mod
+
+                verdict = db_index_mod.db_structure_changed(cfg)
+                fresh.db_check = verdict
+                if verdict.get("checked") and verdict.get("changed"):
+                    fresh.changed = True
+                    fresh.stale = True
+                    fresh.note = ("структура баз изменилась: " +
+                                  str(verdict.get("reason") or ""))
+                elif verdict.get("error"):
+                    # Это НЕ устаревание: корпус кода в порядке, недоступна база.
+                    fresh.db_check = {**verdict, "harmless": True}
+            except Exception as exc:
+                fresh.db_check = {"checked": False, "changed": False,
+                                  "reason": f"{type(exc).__name__}: {exc}"}
             _CACHE[cat] = (now, fresh)
             return fresh
 
@@ -404,6 +440,26 @@ def check(
         _CACHE[cat] = (now, fresh)
         return fresh
 
+    # Индексация может быть запрещена владельцем (галочка в панели). Проверка
+    # стоит здесь, ПЕРЕД выбором глубины и запуском индексатора: иначе запрет
+    # ничего не значил бы — сторож пересобирал бы разработку при каждом
+    # обращении, и выключенная галочка не давала бы никакого эффекта.
+    try:
+        from . import catalog as catalog_mod
+
+        _entry = catalog_mod.Catalog().get(cat)
+        if _entry is not None and not bool(_entry.index_enabled):
+            fresh.changed = True
+            fresh.stale = True
+            fresh.note = ("индексация этой разработки запрещена в панели: "
+                          "разрешите её, чтобы обновлять индекс")
+            _fill_accumulation(cfg, rev_id, fresh, changed=True)
+            _CACHE[cat] = (now, fresh)
+            return fresh
+    except Exception:
+        # Реестр недоступен — это не причина отказывать в проверке свежести.
+        pass
+
     # Выбор глубины: быстрая или полная. Замерено: 5,6 с против 20,8 с.
     mode, mode_info = choose_mode(cfg, rev_id, changed=True)
     if mode == "none":
@@ -417,7 +473,8 @@ def check(
         _CACHE[cat] = (now, fresh)
         return fresh
 
-    ok, rev, seconds, note = run_reindex(cfg, cat, trigger="guard", mode=mode)
+    ok, rev, seconds, note = run_reindex(cfg, cat, trigger="guard", mode=mode,
+                                     budget_seconds=budget_seconds)
     fresh.reindexed = ok
     fresh.reindex_rev = rev
     fresh.reindex_seconds = seconds
@@ -489,7 +546,8 @@ def index_changed_reason(fresh: Freshness) -> str:
 
 
 def run_reindex(
-    cfg: ProjectConfig, category: str, *, trigger: str = "guard", mode: str = "full"
+    cfg: ProjectConfig, category: str, *, trigger: str = "guard", mode: str = "full",
+    budget_seconds: float | None = None,
 ) -> tuple[bool, str, float, str]:
     """Выполнить индексацию и записать результат в реестр.
 
@@ -521,7 +579,13 @@ def run_reindex(
 
         indexer = Indexer(cfg)
         try:
-            report = indexer.run()
+            # Бюджет: явный из ensure, иначе из конфига корпуса (run_reindex
+            # вызывается и сторожем, где явного бюджета нет).
+            effective_budget = (
+                budget_seconds if budget_seconds is not None
+                else getattr(cfg.index, "budget_seconds", None)
+            )
+            report = indexer.run(budget_seconds=effective_budget)
         finally:
             indexer.close()
         seconds = time.time() - started
@@ -563,6 +627,21 @@ def run_reindex(
             capability=capability,
             trigger=f"{trigger}:{mode}",
         )
+        # Отпечаток входа обновляется И ЗДЕСЬ. Это важнее, чем кажется: путь
+        # сторожа (`run_reindex`) пишет реестр сам, минуя `record_index_run`, и
+        # без этой строки отпечаток после переиндексации по расхождению остался
+        # бы от ПРЕЖНЕЙ ревизии. Тогда дешёвая сверка никогда не подтверждала бы
+        # свежесть, и каждый ответ снова читал бы весь корпус — то есть гарантия
+        # «проверка перед каждым вызовом» превратилась бы в полную сверку на
+        # каждом вызове. Измерено на живом корпусе 13.10.2026.
+        try:
+            write_fingerprint(cfg, rev_id)
+        except Exception as exc:  # noqa: BLE001 — отпечаток вспомогательный
+            sys.stderr.write(
+                f"[ragraf-watch] отпечаток не записан (guard): {type(exc).__name__}: {exc}\n"
+            )
+        # Кэш проверки относился к прежней ревизии.
+        invalidate_cache(category)
         return True, rev_id, seconds, note
     except Exception as exc:
         return False, "", time.time() - started, f"{type(exc).__name__}: {exc}"
@@ -593,6 +672,106 @@ def invalidate_cache(category: str | None = None) -> None:
         _CACHE.clear()
     else:
         _CACHE.pop(category, None)
+
+
+# Имя файла отпечатка входа. Лежит рядом с rev.json в каталоге индекса:
+# отпечаток относится к РЕВИЗИИ (что именно было проиндексировано), а не к
+# конфигу корпуса, и переживает перезапуск процесса.
+FINGERPRINT_NAME = "watch_fingerprint.json"
+
+
+def fingerprint_file(cfg: ProjectConfig) -> Path:
+    """Путь файла отпечатка входа для этого корпуса."""
+    return cfg.index_dir / FINGERPRINT_NAME
+
+
+def write_fingerprint(cfg: ProjectConfig, rev_id: str) -> str:
+    """Запомнить отпечаток входа, соответствующий проиндексированной ревизии.
+
+    Вызывается из ЕДИНСТВЕННОЙ точки записи прогона (`record_index_run`),
+    поэтому покрывает все пути индексации — ensure, CLI и сторожа. Без этого
+    дешёвая проверка не могла бы отличить «вход не менялся» от «сравнивать не
+    с чем», и сторож был бы вынужден перечитывать корпус на каждом вызове.
+
+    Ошибка записи не роняет операцию: следующий вызов просто пойдёт полной
+    сверкой — это дороже, но не неправильно.
+    """
+    fingerprint, files, total_bytes = corpus.stat_fingerprint(cfg)
+    payload = {
+        "rev_id": rev_id,
+        "fingerprint": fingerprint,
+        "files": files,
+        "bytes": total_bytes,
+        "written_at": time.time(),
+    }
+    try:
+        util.write_json(fingerprint_file(cfg), payload)
+    except OSError as exc:
+        sys.stderr.write(f"[ragraf-watch] отпечаток входа не записан: {exc}\n")
+    return fingerprint
+
+
+def read_fingerprint(cfg: ProjectConfig) -> dict | None:
+    """Прочитать отпечаток входа. None — сравнивать не с чем."""
+    try:
+        data = util.read_json(fingerprint_file(cfg), default=None)
+    except OSError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def quick_check(cfg: ProjectConfig, category: str | None = None) -> Freshness | None:
+    """Дешёвая сверка «вход не менялся» — по отпечатку, без чтения файлов.
+
+    Возвращает `Freshness` ТОЛЬКО когда удалось доказать, что вход не менялся с
+    последней индексации. `None` означает «доказать не удалось» (отпечатка нет
+    или он разошёлся) — тогда вызывающий обязан сделать полную сверку `check()`.
+
+    Чего эта функция НЕ делает и не должна: она никогда не отвечает «свежо» по
+    догадке. Отпечаток — это пути, размеры и время правки; файл, изменённый с
+    сохранением размера и времени, различит только полная сверка. Ошибаться в
+    эту сторону безопасно (лишняя полная сверка), в обратную — запрещено:
+    это была бы молчаливая выдача фактов о прошлом состоянии кода (ФТ-28).
+    """
+    saved = read_fingerprint(cfg)
+    if not saved or not saved.get("fingerprint"):
+        return None
+    try:
+        fingerprint, files, _ = corpus.stat_fingerprint(cfg)
+    except Exception as exc:  # noqa: BLE001 — дешёвый путь не имеет права падать
+        sys.stderr.write(f"[ragraf-watch] отпечаток не посчитан: {type(exc).__name__}\n")
+        return None
+    if fingerprint != saved.get("fingerprint"):
+        return None
+
+    cat = category or category_for(cfg)
+    expected_hash, expected_config, rev_id = indexed_hashes(cat, cfg)
+    if not expected_hash:
+        # Индекса нет: отпечаток не делает его существующим.
+        return None
+    if expected_config and cfg.config_hash != expected_config:
+        # Конфиг корпуса правили — прежняя ревизия несопоставима с новой, и
+        # объяснить это обязан полный путь (он же назовёт причину в ответе).
+        return None
+
+    fresh = Freshness(
+        category=cat,
+        checked=True,
+        changed=False,
+        indexed=True,
+        # Суммы НЕ считались: поле остаётся пустым, а не подставляется из
+        # ревизии. Подставить сюда indexed-хэш значило бы утверждать, что
+        # текущий корпус даёт именно этот хэш, — этого мы не проверяли.
+        corpus_hash="",
+        expected_hash=expected_hash,
+        config_hash=cfg.config_hash,
+        expected_config_hash=expected_config,
+        rev_id=rev_id or str(saved.get("rev_id") or ""),
+        files_now=files,
+    )
+    fresh.verified_by = "fingerprint"
+    fresh.note = "вход не менялся (пути, размеры и время правки совпали с индексацией)"
+    return fresh
 
 
 def record_index_run(cfg: ProjectConfig, report, *, trigger: str = "manual") -> None:
@@ -637,6 +816,16 @@ def record_index_run(cfg: ProjectConfig, report, *, trigger: str = "manual") -> 
         capability=str(getattr(report, "capability", "") or ""),
         trigger=trigger,
     )
+    # Отпечаток входа пишется ЗДЕСЬ, потому что это единственная точка, через
+    # которую проходят ВСЕ пути индексации. Иначе дешёвая проверка свежести
+    # сравнивала бы текущее состояние не с чем и всегда уходила бы в полную
+    # сверку — то есть выигрыша не было бы вовсе.
+    try:
+        write_fingerprint(cfg, rev_id)
+    except Exception as exc:  # noqa: BLE001 — отпечаток вспомогательный
+        sys.stderr.write(f"[ragraf-watch] отпечаток не записан: {type(exc).__name__}: {exc}\n")
+    # Кэш проверки относится к прежней ревизии: после прогона он неверен.
+    invalidate_cache(category)
 
 
 def register_project(

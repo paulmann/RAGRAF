@@ -2,7 +2,7 @@
 
 Назначение
     Заполняет таблицы `db_table`, `db_column` графа схемой базы. Замер на
-    полигоне пилотный PHP-портал показал, что слой был ЗАЯВЛЕН в конфигурации
+    полигоне z.batteryservice.ru показал, что слой был ЗАЯВЛЕН в конфигурации
     (`db.schema_sources`), но НЕ реализован: `schema()` возвращал 0 таблиц,
     а `table_usage` не находил таблицы подсистемы. Это делало часть операций
     фасада бесполезными.
@@ -31,7 +31,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import util
+from . import db_marks, util
 
 # CREATE TABLE [IF NOT EXISTS] `name` ( ... )
 CREATE_RE = re.compile(
@@ -40,17 +40,44 @@ CREATE_RE = re.compile(
 )
 
 # ALTER TABLE `name` ADD [COLUMN] `col` type
-ALTER_ADD_RE = re.compile(
-    r"ALTER\s+TABLE\s+[`\"]?(?P<table>[A-Za-z_][A-Za-z0-9_]*)[`\"]?\s+ADD\s+(?:COLUMN\s+)?"
-    r"[`\"]?(?P<col>[A-Za-z_][A-Za-z0-9_]*)[`\"]?\s+(?P<type>[A-Za-z][A-Za-z0-9_() ,]*)",
-    re.IGNORECASE,
-)
+
+# Имя колонки в кавычках или без. Кавычки обязательны к поддержке: в живых
+# базах встречаются имена с пробелами и дефисами (`String Nominal Voltage`,
+# `Watt-hours` — замер на BWO), и прежний образец без кавычек разбирал такое
+# имя как «колонка String типа Nominal», а колонку с дефисом терял целиком.
+_COL_NAME = r"(?:`(?P<quoted>[^`]+)`|\"(?P<quoted2>[^\"]+)\"|(?P<plain>[A-Za-z_][A-Za-z0-9_]*))"
 
 # Строка колонки внутри CREATE TABLE: `col` TYPE ...
 COLUMN_LINE_RE = re.compile(
-    r"^\s*[`\"]?(?P<col>[A-Za-z_][A-Za-z0-9_]*)[`\"]?\s+"
+    r"^\s*" + _COL_NAME + r"\s+"
     r"(?P<type>[A-Za-z][A-Za-z0-9_]*(?:\s*\([^)]*\))?(?:\s+unsigned)?(?:\s+zerofill)?)",
     re.IGNORECASE,
+)
+
+# ALTER TABLE `name` ADD [COLUMN] `col` type
+ALTER_ADD_RE = re.compile(
+    r"ALTER\s+TABLE\s+[`\"]?(?P<table>[A-Za-z_][A-Za-z0-9_]*)[`\"]?\s+ADD\s+(?:COLUMN\s+)?"
+    + _COL_NAME
+    + r"\s+(?P<type>[A-Za-z][A-Za-z0-9_() ,]*)",
+    re.IGNORECASE,
+)
+
+
+def _col_name(match: re.Match) -> str:
+    """Имя колонки из совпадения: кавычки снимаются, пробелы сохраняются."""
+    for key in ("quoted", "quoted2", "plain"):
+        value = match.groupdict().get(key)
+        if value:
+            return value
+    return ""
+
+
+# Уникальные ключи, объявленные НЕ в строке колонки:
+#   UNIQUE KEY `u` (`a`, `b`)      UNIQUE (`a`)
+UNIQUE_KEY_RE = re.compile(
+    r"^\s*UNIQUE(?:\s+(?:KEY|INDEX))?\s*(?:[`\"]?[A-Za-z_][A-Za-z0-9_]*[`\"]?)?\s*"
+    r"\((?P<cols>[^)]*)\)",
+    re.IGNORECASE | re.MULTILINE,
 )
 
 # CONSTRAINT ... FOREIGN KEY (col) REFERENCES tbl (col)
@@ -68,6 +95,24 @@ NON_COLUMN_WORDS = {
     "partition", "using", "auto_increment",
 }
 
+# Уникальные ключи, объявленные НЕ в строке колонки:
+#   UNIQUE KEY `u` (`a`, `b`)      UNIQUE (`a`)
+# Составной первичный ключ: PRIMARY KEY (`a`, `b`)
+PRIMARY_KEY_RE = re.compile(
+    r"^\s*PRIMARY\s+KEY\s*\((?P<cols>[^)]*)\)", re.IGNORECASE | re.MULTILINE
+)
+
+
+def _column_names(raw: str) -> list[str]:
+    """Имена колонок из списка внутри ключа (`a`, `b`) — в порядке написания."""
+    out = []
+    for part in raw.split(","):
+        name = part.strip().strip("`\"")
+        name = name.split("(")[0].strip()  # длина префикса индекса: `a`(10)
+        if name:
+            out.append(name)
+    return out
+
 
 @dataclass
 class ColumnDef:
@@ -76,6 +121,13 @@ class ColumnDef:
     is_nullable: int = 1
     column_key: str = ""
     ordinal: int = 0
+    # --- P1-4: признаки, без которых ответ о схеме неполон ---
+    is_unique: bool = False
+    auto_increment: bool = False
+    #: `virtual` | `stored` | пусто. Именно эти две формы делают колонку
+    #: незаписываемой; `DEFAULT_GENERATED` — не генерируемая колонка (см. db_marks).
+    generated_kind: str = ""
+    has_default: bool = False
 
 
 @dataclass
@@ -85,6 +137,14 @@ class TableDef:
     source: str = "migration"
     fks: list[tuple[str, str, str]] = field(default_factory=list)  # (from_col, to_table, to_col)
     comment: str = ""
+
+    @property
+    def primary_key(self) -> list[str]:
+        return [c.name for c in self.columns if c.column_key.upper() == "PRI"]
+
+    @property
+    def unique_columns(self) -> list[str]:
+        return [c.name for c in self.columns if c.is_unique]
 
 
 def _strip_comments(sql: str) -> str:
@@ -118,6 +178,22 @@ def _extract_balanced(sql: str, start: int) -> tuple[str, int]:
                 return sql[body_start:i], i
         i += 1
     return sql[body_start:], len(sql)
+
+
+def _col_marks(text: str) -> dict:
+    """Признаки колонки из её строки в SQL. Единый разбор для CREATE и ALTER.
+
+    Разбор идёт по правилам `db_marks`: генерируемая — только
+    `GENERATED ALWAYS AS (...) VIRTUAL|STORED`, а `DEFAULT_GENERATED` (подсказка
+    СУБД о выражении по умолчанию) генерируемой колонкой НЕ является.
+    """
+    kind = db_marks.generated_kind_ddl(text)
+    return {
+        "is_unique": bool(re.search(r"\bUNIQUE\b", text, re.IGNORECASE)),
+        "auto_increment": db_marks.is_auto_increment(text),
+        "generated_kind": kind,
+        "has_default": bool(re.search(r"\bDEFAULT\b", text, re.IGNORECASE)),
+    }
 
 
 def parse_migrations(paths: list[Path]) -> dict[str, TableDef]:
@@ -158,13 +234,14 @@ def parse_migrations(paths: list[Path]) -> dict[str, TableDef]:
                 cm2 = COLUMN_LINE_RE.match(stripped)
                 if not cm2:
                     continue
-                col = cm2.group("col")
-                if col.lower() in NON_COLUMN_WORDS:
+                col = _col_name(cm2)
+                if not col or col.lower() in NON_COLUMN_WORDS:
                     continue
                 ordinal += 1
                 exists = next((c for c in table.columns if c.name == col), None)
                 if exists is not None:
                     continue
+                marks = _col_marks(stripped)
                 table.columns.append(
                     ColumnDef(
                         name=col,
@@ -172,12 +249,32 @@ def parse_migrations(paths: list[Path]) -> dict[str, TableDef]:
                         is_nullable=0 if re.search(r"NOT\s+NULL", stripped, re.IGNORECASE) else 1,
                         column_key="PRI" if re.match(r"^\s*[`\"]?" + re.escape(col) + r"[`\"]?\s+.*PRIMARY\s+KEY", stripped, re.IGNORECASE | re.DOTALL) else "",
                         ordinal=ordinal,
+                        **marks,
                     )
                 )
                 if re.search(r"PRIMARY\s+KEY", stripped, re.IGNORECASE) and not re.search(
                     r"^\s*(PRIMARY|UNIQUE|KEY|INDEX|CONSTRAINT)", stripped, re.IGNORECASE
                 ):
                     table.columns[-1].column_key = "PRI"
+
+            # --- ключи, объявленные ОТДЕЛЬНОЙ строкой внутри тела ---
+            # Замер: до этого разбора `PRIMARY KEY (ID)` и `UNIQUE KEY (Email)`
+            # не давали признаков вовсе — в ответе о схеме их не было, и по
+            # ней нельзя было понять, что колонка уникальна (P1-4).
+            by_name = {c.name: c for c in table.columns}
+            for key_re, kind in ((PRIMARY_KEY_RE, "PRI"), (UNIQUE_KEY_RE, "UNI")):
+                for km in key_re.finditer(body):
+                    for col_name in _column_names(km.group("cols")):
+                        target = by_name.get(col_name)
+                        if target is None:
+                            continue
+                        if kind == "PRI":
+                            target.column_key = "PRI"
+                        else:
+                            # Уникальность составного ключа отмечается у каждой
+                            # колонки: иначе вопрос «можно ли вставить дубль»
+                            # получает неверный ответ по половине ключа.
+                            target.is_unique = True
 
             # --- Внешние ключи внутри CREATE TABLE ---
             for fk in FK_RE.finditer(body):
@@ -188,15 +285,24 @@ def parse_migrations(paths: list[Path]) -> dict[str, TableDef]:
         # --- ALTER TABLE ... ADD COLUMN ---
         for m in ALTER_ADD_RE.finditer(sql):
             table = tables.setdefault(m.group("table"), TableDef(name=m.group("table")))
-            col = m.group("col")
-            if any(c.name == col for c in table.columns):
+            col = _col_name(m)
+            if not col or any(c.name == col for c in table.columns):
                 continue
+            # Строка ALTER целиком: признаки (NOT NULL, UNIQUE, AUTO_INCREMENT,
+            # GENERATED) стоят после имени колонки, и в группе `type` их нет.
+            line_end = sql.find("\n", m.start())
+            line = sql[m.start(): line_end if line_end > 0 else len(sql)]
+            marks = _col_marks(line)
             table.columns.append(
                 ColumnDef(
                     name=col,
                     data_type=" ".join(m.group("type").split()),
-                    is_nullable=1,
+                    is_nullable=0 if re.search(r"NOT\s+NULL", line, re.IGNORECASE) else 1,
                     ordinal=len(table.columns) + 1,
+                    has_default=marks["has_default"],
+                    is_unique=marks["is_unique"],
+                    auto_increment=marks["auto_increment"],
+                    generated_kind=marks["generated_kind"],
                 )
             )
 
@@ -244,6 +350,12 @@ def write_schema(cfg, rev_id: str, writer) -> dict:
                 (
                     rev_id, table_id, col.name, col.data_type,
                     col.is_nullable, col.column_key or None, col.ordinal,
+                    # P1-4: признаки колонки. Без них ответ о схеме не отвечал
+                    # на вопросы «можно ли писать» и «это ключ или нет».
+                    1 if col.is_unique else 0,
+                    1 if col.auto_increment else 0,
+                    col.generated_kind or "",
+                    1 if col.has_default else 0,
                 )
             )
         for from_col, to_table, to_col in table.fks:
@@ -261,7 +373,8 @@ def write_schema(cfg, rev_id: str, writer) -> dict:
     store.executemany_chunked(
         conn,
         "INSERT OR REPLACE INTO db_column(rev_id, table_id, column_name, data_type,"
-        " is_nullable, column_key, ordinal) VALUES(?,?,?,?,?,?,?)",
+        " is_nullable, column_key, ordinal, is_unique, auto_increment, generated_kind,"
+        " has_default) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
         column_rows, batch=cfg.index.batch_size,
     )
     store.executemany_chunked(

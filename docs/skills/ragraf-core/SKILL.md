@@ -74,7 +74,7 @@ What an operation does not replace: full-text reading where details matter.
 1. **A fact without a `file:line` reference is a guess.** Back every meaningful
    conclusion with a code reference.
 2. **Verify a number from a document against the code.** The project has already
-   diverged from its own documentation: the code declares 23 tools and 22 facade
+   diverged from its own documentation: the code declares 40 tools and 38 facade
    operations, while documents name 18, 16 and 21.
 3. **Do not read secret-bearing files** (the list is in `AGENTS.md` §6, *not
    shipped*): only the name, the size and the rule. There is no git history in the

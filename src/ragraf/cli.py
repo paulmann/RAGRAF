@@ -21,7 +21,7 @@ EXIT_OK = 0
 EXIT_ERROR = 1
 EXIT_USAGE = 2
 # Код 3 означает ОТКАЗ СЛОЯ, а не «ничего не найдено». Различие важно
-# вызывающему: функция RAGRAF в внешний проект считает любой ненулевой код поломкой
+# вызывающему: функция RAGRAF в SagaAI считает любой ненулевой код поломкой
 # инструмента, поэтому «в индексе этого нет» отдаётся кодом 0 с found=false,
 # а кодом 3 — только случай, когда операция не может быть выполнена вообще
 # (например slice при недостроенном CPG). Иначе обычный пустой результат
@@ -33,10 +33,19 @@ EXIT_UNAVAILABLE = 3
 EXIT_NOT_FOUND = EXIT_UNAVAILABLE
 
 OPS = [
-    "search", "symbol", "references", "callers", "callees", "impact", "slice",
+    "search", "search_multi", "symbol", "references", "callers", "callees",
+    "impact", "slice",
     "code", "repo_map", "schema", "table_usage", "routes", "index_status",
     "drift_report", "drift_ack", "live_read", "calibrate", "write_check", "usage",
     "freshness", "catalog", "policy_trace", "class_usage",
+    # Структура корпуса: копии, точки входа, мёртвый код (P1-2).
+    "duplicates", "entrypoints", "dead_code",
+    # Слой живых баз данных: структура, связи, примеры, сверки.
+    "db_schema", "db_table", "db_relations", "db_sample", "db_drift", "db_cross",
+    # P2: сравнение ревизий и память о решениях.
+    "diff", "note", "notes",
+    # P3 (§3.2/§3.4): гейт использования индекса и отчёт по задаче.
+    "gate", "task_stats", "task_set",
 ]
 
 # Операции, которые в релизе 1 требуют слоя, добавляемого в M2/M3.
@@ -120,6 +129,19 @@ def _print_human(data: dict) -> None:
 
     res = data.get("result")
     if res is None:
+        return
+    # Режим `answer=true` (P2-2): результат — готовый текст ответа и ссылки, а не
+    # список структурных полей. Печатается как есть — это и есть ответ человеку.
+    # Без этой ветви `res[:20]` падал с `KeyError: slice(None, 20, None)`, потому
+    # что словарь срезом не режется (измерено 14.10.2026 на `search --answer`).
+    if isinstance(res, dict) and "answer" in res:
+        print()
+        print(res["answer"])
+        return
+    # Отчёт по задаче — тоже готовый текст, а не структурный результат.
+    if isinstance(res, dict) and res.get("markdown") and op == "task_stats":
+        print()
+        print(res["markdown"])
         return
     if op == "index_status":
         r = res.get("rev") or {}
@@ -279,6 +301,20 @@ def cmd_reindex(args: argparse.Namespace, cfg: ProjectConfig) -> int:
         report.notes.append(
             f"архивировано записей журнала: {result['entries']} → {result['report_path']}"
         )
+        # Ручная переиндексация — такой же путь, запускающий индексатор, как
+        # `index`, и реестр обязан получить результат прогона тем же способом.
+        # Измеренный дефект (13.10.2026): `reindex` этой записи НЕ делал, и
+        # реестр расходился с индексом — замерено на собственном корпусе:
+        # в индексе rev-0046, в реестре rev-0045 и старая сумма, и тогда
+        # проверка свежести честно реиндексировала корпус заново, а панель и
+        # `catalog` показывали прошедшее состояние. Тот же путь есть у
+        # `cmd_index`, поэтому вызов общий — `record_index_run`.
+        try:
+            _record_index_run(cfg, report)
+        except Exception as exc:
+            # Неудача учёта не отменяет выполненную индексацию: о ней
+            # сообщается отдельной строкой, код возврата остаётся успешным.
+            report.notes.append(f"реестр не обновлён: {type(exc).__name__}: {exc}")
     data = report.to_dict()
     if args.json:
         _print(data, True)
@@ -347,7 +383,7 @@ def _exit_code(op: str, data: dict) -> int:
     поломка. Ненулевой код остаётся только у настоящего отказа слоя.
 
     Почему так. Раньше любой ответ `found=false` с пояснением отдавался
-    кодом 3. Функция RAGRAF в внешний проект на ненулевой код возвращает
+    кодом 3. Функция RAGRAF в SagaAI на ненулевой код возвращает
     `ok:false`, то есть «инструмент сломан», — и агент, получив честное
     «в индексе этого нет», начинал чинить несуществующую поломку.
     """
@@ -366,7 +402,7 @@ def _task_from_env() -> str:
     """Метка задачи, к которой относится вызов.
 
     Читается из переменной окружения `RAGRAF_TASK`. Нужна команде `/RAGRAF`
-    в внешний проект: там каждый вызов инструмента запускает ОТДЕЛЬНЫЙ процесс,
+    в SagaAI: там каждый вызов инструмента запускает ОТДЕЛЬНЫЙ процесс,
     поэтому «сессия RAGRAF» (один запуск) с задачей пользователя
     не совпадает. Одна метка на всю задачу собирает все вызовы вместе.
 
@@ -416,24 +452,38 @@ def _looks_like_graph_query(text: str) -> bool:
 
 def dispatch_op(fc, args: argparse.Namespace) -> dict:
     op = args.op
+    # P2-2: `--answer` доступен всем операциям, которые отвечают на вопрос
+    # словами. Берётся один раз, чтобы ветви не расходились.
+    answer = bool(getattr(args, "answer", False))
     if op == "search":
         return fc.op_search(args.text or "", limit=args.limit,
                             with_text=bool(getattr(args, "with_text", False)),
-                            text_width=int(getattr(args, "text_width", 160)))
+                            text_width=int(getattr(args, "text_width", 160)),
+                            answer=answer)
+    if op == "search_multi":
+        # Несколько запросов одним вызовом: разделитель `|`, чтобы не
+        # добавлять в CLI формат, зависящий от оболочки (кавычки, запятые).
+        raw = getattr(args, "queries", None) or args.text or ""
+        queries = [q.strip() for q in str(raw).split("|") if q.strip()]
+        return fc.op_search_multi(
+            queries, limit=args.limit, scope=args.scope,
+            regex=bool(getattr(args, "regex", False)), answer=answer,
+        )
     if op == "symbol":
-        return fc.op_symbol(args.name or args.text or "", path=args.path, limit=args.limit)
+        return fc.op_symbol(args.name or args.text or "", path=args.path,
+                            limit=args.limit, answer=answer)
     if op == "references":
         return fc.op_references(args.fqn or args.name or args.text or "", limit=args.limit)
     if op == "callers":
         return fc.op_callers(args.fqn or args.name or args.text or "", depth=args.depth,
-                             hard_only=args.hard, limit=args.limit)
+                             hard_only=args.hard, limit=args.limit, answer=answer)
     if op == "callees":
         return fc.op_callees(args.fqn or args.name or args.text or "", depth=args.depth,
                              hard_only=args.hard, limit=args.limit)
     if op == "impact":
         return fc.op_impact(args.target or args.name or args.text or "",
                             mode=resolve_mode(op, args.mode),
-                            depth=args.depth, limit=args.limit)
+                            depth=args.depth, limit=args.limit, answer=answer)
     if op == "slice":
         return fc.op_slice(args.fqn or args.name or args.text or "", direction=args.direction,
                            limit=args.limit)
@@ -454,6 +504,43 @@ def dispatch_op(fc, args: argparse.Namespace) -> dict:
                                   mode=resolve_mode(op, args.mode))
     if op == "routes":
         return fc.op_routes(path=args.path, limit=args.limit)
+    # --- структура корпуса (P1-2) ---
+    if op == "duplicates":
+        return fc.op_duplicates(scope=args.scope or args.path, limit=args.limit)
+    if op == "entrypoints":
+        return fc.op_entrypoints(path=args.path, scope=args.scope, limit=args.limit)
+    if op == "dead_code":
+        return fc.op_dead_code(scope=args.scope or args.path, limit=args.limit)
+    # --- P2: ревизии и заметки ---
+    if op == "diff":
+        return fc.op_diff(since=getattr(args, "since_rev", None), limit=args.limit)
+    if op == "note":
+        return fc.op_note(
+            args.text or args.name or "",
+            task=getattr(args, "task", "") or "",
+            tags=[t.strip() for t in (getattr(args, "tags", "") or "").split(",") if t.strip()],
+            path=getattr(args, "path", "") or "",
+        )
+    if op == "notes":
+        return fc.op_notes(task=getattr(args, "task", None),
+                           query=args.text or args.name,
+                           limit=args.limit)
+    # --- P3 (§3.2/§3.4): гейт и отчёт по задаче ---
+    if op == "gate":
+        raw = getattr(args, "payload", None)
+        if raw == "-":
+            raw = sys.stdin.read()
+        elif raw and Path(raw).exists():
+            raw = Path(raw).read_text(encoding="utf-8")
+        return fc.op_gate(raw, mode=getattr(args, "gate_mode", None))
+    if op == "task_stats":
+        return fc.op_task_stats(task=getattr(args, "task", None),
+                                fmt=getattr(args, "report_format", "markdown"),
+                                limit=args.limit)
+    if op == "task_set":
+        # Назвать текущую задачу: так работает RAGRAF_TASK без клиента.
+        return fc.op_task_set(args.name or args.text or "",
+                              clear=bool(getattr(args, "clear", False)))
     if op == "write_check":
         # Сверка плана записи со схемой (U1): закрывает дефект вроде 42S22
         # до выполнения запроса. Колонки передаются строкой через запятую.
@@ -464,6 +551,7 @@ def dispatch_op(fc, args: argparse.Namespace) -> dict:
             args.table or args.name or args.text or "",
             cols,
             operation=(args.operation or "insert"),
+            values=(int(args.values) if getattr(args, "values", None) else None),
         )
     if op == "usage":
         # Статистика обращений (для сводного отчёта об эффекте внедрения).
@@ -495,10 +583,124 @@ def dispatch_op(fc, args: argparse.Namespace) -> dict:
         return fc.op_policy_trace(args.name or args.text or "",
                                   action=args.action, depth=args.depth,
                                   limit=args.limit)
+    # ---------------- слой живых баз данных ----------------
+    if op == "db_schema":
+        return fc.op_db_schema(table=args.table, limit=args.limit)
+    if op == "db_table":
+        return fc.op_db_table(args.table or args.name or args.text or "")
+    if op == "db_relations":
+        return fc.op_db_relations(args.table or args.name or args.text or "")
+    if op == "db_sample":
+        return fc.op_db_sample(args.table or args.name or args.text or "")
+    if op == "db_drift":
+        return fc.op_db_drift(previous_rev=getattr(args, "previous_rev", None))
+    if op == "db_cross":
+        return fc.op_db_cross()
     if op == "class_usage":
         return fc.op_class_usage(name=args.name, limit=args.limit,
                                  mode=resolve_mode(op, args.mode))
     raise SystemExit(EXIT_USAGE)
+
+
+def cmd_db(args: argparse.Namespace, cfg: ProjectConfig) -> int:
+    """Сбор структуры живых баз и примеров строк (ФТ слоя баз).
+
+    Отдельная команда: база меняется независимо от кода, и индексировать её при
+    каждом прогоне корпуса значило бы платить временем за неизменное. Настройки —
+    в `catalog/db_access.json`, который исключён из корпуса (значение доступа не
+    попадает в индекс).
+    """
+    from . import db_access as access_mod
+    from . import db_collect as collect_mod
+    from .embeddings import Embedder
+    from .lexvec import LexVecStore
+    from .revisions import GraphWriter
+
+    access = access_mod.DbAccessStore().load()
+    if args.dialect:
+        access.dialect = args.dialect
+    if args.enabled is not None:
+        access.enabled = args.enabled
+    if args.samples is not None:
+        access.samples_enabled = args.samples
+
+    if args.probe_only:
+        result = collect_mod.probe(access)
+        # Вывод пробы печатается отдельно, а не через `_print`: тот рассчитан на
+        # конверт операции (ревизия, режим, происхождение), а проба возвращает
+        # простой ответ сервера. Первая редакция передавала его в `_print` и
+        # печатала строку «[None] rev=None capability=None» — измерено.
+        if args.json:
+            _print(result, True)
+        else:
+            if result.get("ok"):
+                print(f"подключение работает: {result.get('dialect')}, "
+                      f"сервер {result.get('server')}")
+                print(f"  баз видно: {result.get('databases')}; "
+                      f"источник доступа: {result.get('source')}; "
+                      f"клиент: {result.get('client')}")
+            else:
+                print(f"подключение не работает: {result.get('reason')}")
+                if result.get("action"):
+                    print(f"  что сделать: {result.get('action')}")
+        return EXIT_OK if result.get("ok") else EXIT_ERROR
+
+    if not access.enabled and args.enabled is None:
+        print("сбор баз выключен: включите его в панели (раздел «Базы данных») "
+              "или флагом --enabled")
+        return EXIT_USAGE
+
+    collected = collect_mod.collect(access, with_samples=args.samples)
+    if collected.get("result") is None:
+        # Сбор не состоялся: причина печатается словами, а не конвертом.
+        if args.json:
+            _print(collected, True)
+        else:
+            print(f"сбор не выполнен: {collected.get('reason')}")
+            if collected.get("action"):
+                print(f"  что сделать: {collected.get('action')}")
+        return EXIT_ERROR
+
+    result = collected["result"]
+    if args.json:
+        _print(result.to_dict(), True)
+    else:
+        data = result.to_dict()
+        print(f"сбор структуры: баз {data['databases']}, таблиц {data['tables']}, "
+              f"колонок {data['columns']}, представлений {data['views']}, "
+              f"связей {data['relations']}")
+        print(f"отпечаток структуры: {collected['fingerprint'][:16]}…")
+        print(f"примеров собрано: {len(collected.get('samples') or {})}"
+              + ("" if collected.get("samples_wanted") else " (сбор примеров выключен)"))
+        for note in (collected.get("notes") or [])[:5]:
+            print(f"  · {note}")
+        for problem in (collected.get("errors") or [])[:5]:
+            print(f"  ! {problem}")
+
+    # Запись идёт в АКТИВНУЮ ревизию: слой баз — часть того же индекса, а не
+    # отдельное хранилище. Иначе операции не увидели бы структуру.
+    from .facade import Facade
+
+    facade = Facade(cfg, tool="cli", telemetry=False, watch=False)
+    try:
+        rev = facade.current_rev()
+    finally:
+        facade.close()
+    if not rev:
+        print("в корпусе нет ревизии: сначала выполните index")
+        return EXIT_ERROR
+
+    graph = GraphWriter(cfg)
+    lex = LexVecStore(cfg)
+    embedder = Embedder(cfg, allow_download=False)
+    stats = collect_mod.write(access, rev, collected, graph, lex, embedder)
+    print(f"записано в индекс под ревизию {rev}: таблиц {stats['graph']['tables']}, "
+          f"связей {stats['graph']['relations']}, закрытых колонок "
+          f"{stats['graph']['sensitive_columns']}, чанков {stats['lexvec']['chunks']}")
+    if not args.json:
+        print("подсказка: структура смотрится операциями db_schema, db_table, "
+              "db_relations, db_sample, db_drift, db_cross")
+    return EXIT_OK
 
 
 def cmd_usage(args: argparse.Namespace, cfg: ProjectConfig) -> int:
@@ -550,6 +752,14 @@ def cmd_usage(args: argparse.Namespace, cfg: ProjectConfig) -> int:
               f"(~{summary['est_tokens_total']} токенов, ОЦЕНКА)")
         print(f"  из них заменяют чтение файлов: {summary['result_chars_replacing_reading']} символов "
               f"(~{summary['est_tokens_replacing_reading']} токенов, ~{summary['est_lines_not_read']} строк кода)")
+        # Метрики эффекта (P2-4). Печатаются отдельной строкой, потому что по
+        # ним принимают решение «индекс окупается»: доля вызовов с фактами,
+        # честные «не найдено» и ответы с пометкой устаревания.
+        print(f"эффект: попаданий {summary.get('hit_rate', 0):.1%} "
+              f"({summary.get('calls_with_facts', 0)} из {summary['calls_total']} вызовов), "
+              f"среднее время {summary.get('avg_ms', 0)} мс, "
+              f"«не найдено» {summary.get('misses', 0)}, "
+              f"устаревших ответов {summary.get('stale_served', 0)}")
 
         # --- разбивка по агентам ---
         # Ответ на вопрос «какой агент использовал RAGRAF»: без этой
@@ -567,6 +777,26 @@ def cmd_usage(args: argparse.Namespace, cfg: ProjectConfig) -> int:
                       f"{row['sessions']:>7} {row['calls']:>8} "
                       f"{row['facts']:>7} {row['chars']:>9} "
                       f"{row['errors']:>7}")
+        # ACCESS-VIEW-PATCH
+        # Разрез по выданному доступу: владелец спрашивает не только «какой
+        # агент», но и «по какому праву доступа работали». Записи без доступа —
+        # отдельная строка: это не потеря данных, а вызовы без выданного доступа
+        # (CLI, прежние журналы, тесты).
+        by_access = summary.get("by_access") or []
+        if by_access:
+            print()
+            print("по выданному доступу:")
+            print("  доступ                    вызовов"
+                  "  успешных    с ошибкой   фактов")
+            for row in by_access[:12]:
+                label = str(row.get('label') or '(без доступа)')
+                calls = row.get('calls', 0)
+                good = row.get('ok', 0)
+                bad = row.get('failed', 0)
+                facts = row.get('facts', 0)
+                print("  %-24s %7d %10d %11d %8d"
+                      % (label[:24], calls, good, bad, facts))
+
         by_kind = summary.get("by_agent_kind") or []
         if by_kind:
             print()
@@ -578,7 +808,7 @@ def cmd_usage(args: argparse.Namespace, cfg: ProjectConfig) -> int:
 
         # --- разбивка по задачам ---
         # Это ответ на вопрос «сколько RAGRAF сделал для этой задачи»:
-        # в внешний проект один вызов инструмента = отдельный процесс, поэтому
+        # в SagaAI один вызов инструмента = отдельный процесс, поэтому
         # по сессиям задачу не собрать — нужна общая метка.
         by_task = summary.get("by_task") or []
         if by_task:
@@ -619,7 +849,7 @@ def cmd_init(args: argparse.Namespace) -> int:
 
     Зачем эта команда. До неё подключить новый проект было НЕЛЬЗЯ:
     `register` требует готовый конфиг (аргумент `--project`), а создать конфиг
-    было нечем. На этом споткнулся агент небольшой PHP-корпус: ему сказано
+    было нечем. На этом споткнулся агент MD.Viewer: ему сказано
     «зарегистрировать разработку», а выполнить это нечем.
 
     Команда работает БЕЗ загруженного конфига: она его и создаёт.
@@ -752,6 +982,13 @@ def cmd_catalog(args: argparse.Namespace, cfg: ProjectConfig | None = None) -> i
         print(f"\n  {row['category']}  ({row['project']})")
         print(f"    корень:   {row['root']}")
         print(f"    конфиг:   {row['config']}")
+        # Состояние называет РАЗНИЦУ между «заведена» и «проиндексирована».
+        # Без этого строка «файлов 54 235, узлов 0» читается как сломанный
+        # индекс, хотя означает «индекс ещё не строился».
+        state = row.get("state") or ("indexed" if row["rev_id"] else "registered")
+        label = {"indexed": "проиндексирована",
+                 "registered": "заведена, индекс не строился"}.get(state, state)
+        print(f"    состояние реестра: {label}")
         print(f"    ревизия:  {row['rev_id'] or '(нет)'}  capability={row['capability'] or '—'}")
         print(f"    индексация: {row['indexed_at'] or '(не выполнялась)'}")
         print(f"    сумма:    {row['corpus_hash'] or '(нет)'}")
@@ -932,7 +1169,7 @@ def build_parser() -> argparse.ArgumentParser:
     # --project необязателен: команда init работает без конфига.
     # Для остальных команд он требуется, и это проверяется в main().
     p.add_argument("--project", "-p", required=False, default=None,
-                   help="путь к конфигурации корпуса (config/myproject.yaml)")
+                   help="путь к конфигурации корпуса (config/revoap.yaml)")
     p.add_argument("--json", action="store_true", help="машиночитаемый вывод")
     p.add_argument("--version", action="version", version=f"ragraf {__version__}")
 
@@ -979,6 +1216,15 @@ def build_parser() -> argparse.ArgumentParser:
     pq.add_argument("--budget", type=int, default=2000, help="бюджет токенов для repo_map")
     pq.add_argument("--limit", type=int, default=50)
     pq.add_argument("--since", type=int, default=None)
+    pq.add_argument("--since-rev", default=None,
+                    help="diff: ревизия, с которой сравнивать (по умолчанию предыдущая)")
+    pq.add_argument("--tags", default="", help="note: метки через запятую")
+    pq.add_argument("--task", default=None, help="note/notes: метка задачи")
+    # P2-2: готовый ответ вместо структурного результата. Оболочка (op, ревизия,
+    # capability, found) остаётся — это контракт, по которому клиент понимает,
+    # на какую ревизию опирается ответ.
+    pq.add_argument("--answer", action="store_true",
+                    help="вернуть сформулированный ответ со ссылками (P2-2)")
     pq.add_argument("--entry-ids", default=None)
     pq.add_argument("--start", type=int, default=None)
     pq.add_argument("--end", type=int, default=None)
@@ -988,6 +1234,10 @@ def build_parser() -> argparse.ArgumentParser:
     # без него за 20 хитов приходилось читать 20 файлов вторым шагом.
     pq.add_argument("--with-text", action="store_true",
                     help="добавить к каждому хиту поиска фрагмент текста из индекса")
+    pq.add_argument("--queries", default=None,
+                    help="search_multi: несколько запросов через `|`")
+    pq.add_argument("--regex", action="store_true",
+                    help="search_multi: считать запрос регулярным выражением")
     pq.add_argument("--text-width", type=int, default=160,
                     help="длина фрагмента в символах (с --with-text)")
     # `code --source`: по умолчанию текст берётся из индекса, `disk` — прежнее
@@ -997,10 +1247,24 @@ def build_parser() -> argparse.ArgumentParser:
                     help="вернуть вложенные спаны (класс-контейнер отдаётся шапкой)")
     pq.add_argument("--columns", default=None,
                     help="write_check: список колонок через запятую")
+    pq.add_argument("--values", default=None, help="write_check: сколько значений в запросе")
     pq.add_argument("--operation", default="insert", choices=["insert", "update", "delete"],
                     help="write_check: вид записи")
     pq.add_argument("--force", dest="force_check", action="store_true",
                     help="freshness: проверить минуя кэш")
+    # P3 (§3.2/§3.4): гейт и отчёт по задаче.
+    pq.add_argument("--payload", default=None,
+                    help="gate: JSON вызова (файл, '-' для stdin или строка)")
+    pq.add_argument("--gate-mode", dest="gate_mode", default=None,
+                    choices=["warn", "ask", "deny", "off"],
+                    help="gate: режим решения (по умолчанию из RAGRAF_GATE_MODE или ask)")
+    pq.add_argument("--hook", action="store_true",
+                    help="gate: ответ в формате хука DSH (stdout JSON, отказ — код 2)")
+    pq.add_argument("--format", dest="report_format", default="markdown",
+                    choices=["markdown", "json"],
+                    help="task_stats: вид отчёта")
+    pq.add_argument("--clear", action="store_true",
+                    help="task_set: снять метку задачи")
     pq.set_defaults(func=cmd_query)
 
     ps = sub.add_parser("status", help="состояние индекса")
@@ -1027,6 +1291,22 @@ def build_parser() -> argparse.ArgumentParser:
     pu.add_argument("--task", default=None,
                     help="только эта задача (метка RAGRAF_TASK)")
     pu.set_defaults(func=cmd_usage)
+
+    pdb = sub.add_parser("db", help="сбор структуры живых баз и примеров строк")
+    pdb.add_argument("--probe-only", action="store_true",
+                     help="только проверить подключение, ничего не собирать")
+    pdb.add_argument("--dialect", choices=["mysql", "postgresql"],
+                     help="перекрыть диалект из настроек")
+    pdb.add_argument("--enabled", dest="enabled", action="store_true", default=None,
+                     help="включить сбор на этот запуск")
+    pdb.add_argument("--no-enabled", dest="enabled", action="store_false",
+                     help="выключить сбор на этот запуск")
+    pdb.add_argument("--samples", dest="samples", action="store_true", default=None,
+                     help="собрать примеры строк (по умолчанию — как в настройках)")
+    pdb.add_argument("--no-samples", dest="samples", action="store_false",
+                     help="не собирать примеры строк")
+    pdb.add_argument("--json", action="store_true")
+    pdb.set_defaults(func=cmd_db, needs_config=True)
 
     preg = sub.add_parser("register", help="зарегистрировать разработку в реестре")
     preg.add_argument("--category", default=None, help="имя разработки (по умолчанию имя проекта)")
@@ -1136,9 +1416,9 @@ def _force_utf8_output() -> None:
 def _remember_interpreter() -> None:
     """Запомнить интерпретатор, на котором RAGRAF УСПЕШНО выполнился.
 
-    Зачем. Внешние инструменты (например функция RAGRAF в внешний проект) должны
+    Зачем. Внешние инструменты (например функция RAGRAF в SagaAI) должны
     запускать дочерний процесс тем же интерпретатором, иначе не найдут
-    зависимости RAGRAF. В проекте внешний проект это давало ошибку
+    зависимости RAGRAF. В проекте SagaAI это давало ошибку
     «не установлен PyYAML»: там свой `.venv` без нужных пакетов.
 
     Путь записывается в файл `.interpreter` рядом с конфигом, а не

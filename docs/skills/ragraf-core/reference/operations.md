@@ -5,11 +5,13 @@ reading files — and to know what an operation does not show.
 
 ## 1. The full set
 
-The facade declares 22 operations of the form `op_*` (`src/ragraf/facade.py`). The
-agent tool surface is 23 tools with the `ragraf_` prefix (`src/ragraf/mcp_server.py`).
-The difference is not an error: there is one more tool because bringing the corpus to
-a current state is additionally exposed (`ensure`), and one facade operation
-(`calibrate`) is not exposed outward.
+The facade declares 38 operations of the form `op_*` (`src/ragraf/facade.py`). The
+agent tool surface is 40 tools with the `ragraf_` prefix (`src/ragraf/mcp_server.py`).
+The difference is not an error, and it is not one-to-one. Five tools have no facade
+operation of their own — `context`, `ensure`, `task`, `usage`, `use_project`: they
+manage the corpus and the session rather than operate on a repository. Three facade
+operations are not exposed as tools: `calibrate`, `gate`, `task_set`.
+(Counts measured against the sources on 2026-10-16.)
 
 ## 2. By question type
 

@@ -13,7 +13,7 @@ sys.path[0], и после `pip install -e .` импорт `ragraf` начина
 обязан быть только src/.
 
 Использование:
-    python tools/ragraf.py --project config/myproject.yaml selftest
+    python tools/ragraf.py --project config/revoap.yaml selftest
 """
 
 from __future__ import annotations

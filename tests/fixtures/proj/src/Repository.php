@@ -16,13 +16,13 @@ class Repository
     public function handle(array $jobs): array
     {
         $result = $this->engine->run($jobs);
-        $table = $this->config->get('table', 'myproject_jobs');
+        $table = $this->config->get('table', 'revoap_jobs');
         return ['table' => $table, 'result' => $result];
     }
 
     public function find(int $id): array
     {
-        $sql = "SELECT id, name, status FROM myproject_jobs WHERE id = :id";
+        $sql = "SELECT id, name, status FROM revoap_jobs WHERE id = :id";
         return ['sql' => $sql, 'id' => $id];
     }
 }

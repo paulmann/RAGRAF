@@ -39,8 +39,21 @@ from __future__ import annotations
 
 import re
 
-from .php_ast import ChunkRec, EdgeRec, FileExtraction, SymbolRec, TextRec
-from .. import util
+from .php_ast import (
+    FILE_PREFIX,
+    INCLUDE_ATTR_RE,
+    SSI_INCLUDE_RE,
+    ChunkRec,
+    EdgeRec,
+    FileExtraction,
+    SymbolRec,
+    TextRec,
+    file_ref_edges,
+    placeholder_facts,
+    route_edges,
+    routes_from_text,
+)
+from .. import textdec, util
 
 # Виды узлов.
 CLASS_KIND = "css_class"
@@ -84,12 +97,13 @@ class CssExtractor:
     """Разбор CSS-файла: классы, переменные оформления, контекст правил."""
 
     def extract(self, path: str, data: bytes) -> FileExtraction:
-        text = data.decode("utf-8", errors="replace")
+        text, enc = textdec.decode(data, path)
         res = FileExtraction(
             path=path,
-            lines=len(text.splitlines()) or 1,
+            lines=textdec.line_count(data, text, enc),
             sha256=util.sha256_bytes(data),
             lang="css",
+            encoding=enc,
             parse_status="ok",
         )
         file_id = util.stable_id("file", path, path)
@@ -190,7 +204,7 @@ class CssExtractor:
         Разрезанное пополам, оно даёт обрывок селектора и обрывок значений —
         такой чанк не совпадает ни с одним осмысленным запросом.
         """
-        text = data.decode("utf-8", errors="replace")
+        text = textdec.decode(data, res.path)[0]
         lines = text.splitlines()
         clean = CSS_COMMENT_RE.sub(" ", text)
         out: list[ChunkRec] = []
@@ -228,12 +242,13 @@ class HtmlExtractor:
     """Разбор разметки: какой класс и где используется."""
 
     def extract(self, path: str, data: bytes) -> FileExtraction:
-        text = data.decode("utf-8", errors="replace")
+        text, enc = textdec.decode(data, path)
         res = FileExtraction(
             path=path,
-            lines=len(text.splitlines()) or 1,
+            lines=textdec.line_count(data, text, enc),
             sha256=util.sha256_bytes(data),
             lang="html",
+            encoding=enc,
             parse_status="ok",
         )
         file_id = util.stable_id("file", path, path)
@@ -287,6 +302,29 @@ class HtmlExtractor:
                     raw="dynamic_classes:" + ",".join(sorted(dynamic)),
                 )
             )
+
+        # --- P1-3: точки входа, подключения и ключи переводов ---
+        # Разметка — единственное место, где видно, КАКОЙ файл подключён:
+        # `src="lib/x.js"`, `<script src>`, `action="upload.php"`,
+        # `<!--#include virtual="..."-->`, `fetch('...')`. В графе рёбер для
+        # этого нет — есть строки, и до этой правки они не разбирались.
+        res.routes = routes_from_text(res.path, text)
+        route_edges(res, file_id)
+        placeholder_facts(res, text, file_id, res.path)
+        file_ref_edges(res, file_id, text)
+        for rx, kind in ((INCLUDE_ATTR_RE, "include"), (SSI_INCLUDE_RE, "include")):
+            for m in rx.finditer(text):
+                target = m.group(1).strip()
+                if not target:
+                    continue
+                line = text.count("\n", 0, m.start()) + 1
+                res.edges.append(
+                    EdgeRec(src=file_id, dst=f"{FILE_PREFIX}{target}", kind="imports",
+                            provenance="derived", evidence_line=line, confidence=0.9,
+                            props={"kind": kind, "in": path})
+                )
+                res.includes.append({"path": target, "line": line, "kind": kind,
+                                     "literal": True})
         return res
 
     def chunks(self, res: FileExtraction, data: bytes, **kwargs) -> list[ChunkRec]:
@@ -297,7 +335,7 @@ class HtmlExtractor:
         разметки может содержать целую таблицу. Лимит только по строкам не
         ограничивает объём, поэтому второе условие — по символам.
         """
-        text = data.decode("utf-8", errors="replace")
+        text = textdec.decode(data, res.path)[0]
         lines = text.splitlines()
         max_lines = int(kwargs.get("max_lines") or 120)
         # 8000 токенов ≈ 33 600 символов; берётся запас 24 000.
@@ -418,11 +456,13 @@ class MultiExtractor:
             return extractor.extract(path, data)
         # Язык без профиля: файл не разбирается деревом. Возвращается пустое
         # извлечение — индексатор построит по нему текстовые чанки.
+        text, enc = textdec.decode(data, path)
         return FileExtraction(
             path=util.to_posix(path),
             sha256=util.sha256_bytes(data),
-            lines=data.count(b"\n") + 1,
+            lines=textdec.line_count(data, text, enc),
             lang=lang or "text",
+            encoding=enc,
             parse_status="text_only",
             parse_note=f"разбор деревом для языка «{lang or 'неизвестно'}» не предусмотрен",
         )
@@ -431,6 +471,11 @@ class MultiExtractor:
 
     def chunks(self, res: FileExtraction, data: bytes, **kwargs) -> list[ChunkRec]:
         low = res.path.lower()
+        # Байтовые смещения в извлечении относятся к UTF-8-буферу (см.
+        # `extract`: перекодирование делается до разбора). Поэтому нарезка
+        # чанков получает тот же буфер, а не исходные байты: иначе у файла
+        # в CP1251 границы символов сдвинулись бы и чанк взял чужой код.
+        data = textdec.transcode(data, res.path)[0]
         if low.endswith(".css"):
             return self.css.chunks(res, data, **kwargs)
         if low.endswith((".htm", ".html")):

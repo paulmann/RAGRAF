@@ -116,7 +116,7 @@ flowchart TB
         REINDEX["automatic<br/>reindexing"]
     end
 
-    subgraph FACADE["Facade: 22 operations"]
+    subgraph FACADE["Facade: 38 operations"]
         OPS["search, symbol, schema,<br/>write_check, impact, ..."]
         ENV["Answer envelope:<br/>index_rev, freshness,<br/>limits, stale_warnings"]
     end
@@ -175,7 +175,7 @@ In the LLMxCPG work (USENIX Security '25) base models generated a **correct** co
 
 The fine-tuned model hits 100% because that is exactly what it was trained for. But we have no task of training a model: the agent is arbitrary. So the honest choice is **not to give a query language at all**.
 
-What instead: **21 fixed operations** *(the shipped product now has 22 facade operations / 23 MCP tools — see README)*. The agent chooses not «how to ask» but «what to ask»:
+What instead: **21 fixed operations** *(the shipped product now has 38 facade operations / 40 MCP tools — see README)*. The agent chooses not «how to ask» but «what to ask»:
 
 | Agent's question | Operation | What it answers |
 |---|---|---|
