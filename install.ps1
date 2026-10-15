@@ -168,11 +168,21 @@ function Write-Note {
     Write-Host "  $Text" -ForegroundColor Gray
 }
 
+function Remove-WorkDir {
+    if (Test-Path -LiteralPath $script:WorkDir) {
+        Remove-Item -LiteralPath $script:WorkDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Fail-Install {
     param([string]$Reason, [int]$Code = 1)
     Add-Result -Step 'Установка' -State 'FAIL' -Detail $Reason
     Write-Summary
     Stop-Journal
+    # Рабочий каталог убирается и при отказе: в нём лежат скачанный архив и
+    # отчёты шагов. Замерено 16.10.2026: без этого после каждого отказа в
+    # каталоге временных файлов оставался мусор.
+    Remove-WorkDir
     exit $Code
 }
 
@@ -951,9 +961,6 @@ Write-NextSteps -Dir $InstallDir -Venv $VenvDir `
 Write-Summary
 Stop-Journal
 
-if (Test-Path -LiteralPath $script:WorkDir) {
-    Remove-Item -LiteralPath $script:WorkDir -Recurse -Force -ErrorAction SilentlyContinue
-}
-
-if ($script:Failed -gt 0) { exit $script:ExitError }
+if ($script:Failed -gt 0) { Remove-WorkDir; exit $script:ExitError }
+Remove-WorkDir
 exit $script:ExitOk
