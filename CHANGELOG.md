@@ -5,6 +5,24 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: [S
 
 ## [Unreleased]
 
+### Added (repository presentation, 2026-10-16)
+- `CITATION.cff` — machine-readable citation metadata (GitHub's «Cite this repository»), with the SPDX identifier `PolyForm-Noncommercial-1.0.0` verified against the SPDX licence list on 2026-10-16.
+- `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1, enforcement contact shared with `SECURITY.md`).
+- `.github/PULL_REQUEST_TEMPLATE.md` — the PR template that `CONTRIBUTING.md` and the previous changelog entry already promised while the tree did not carry it.
+- `.github/ISSUE_TEMPLATE/config.yml` — the issue chooser: free-form reports are off, questions go to Discussions, benchmarks to the website, vulnerabilities to a private advisory.
+- `.github/workflows/pages.yml` — builds `docs/` with MkDocs Material (pinned 1.6.1 / 9.7.7) and deploys it to GitHub Pages through the `github-pages` environment; `docs/index.md` is that site's landing page. Verified locally with the same command CI runs (`mkdocs build --strict`): 20 pages, no warnings, `sitemap.xml`, `404.html` and the search index present.
+- `.github/workflows/codeql.yml` — CodeQL `security-and-quality` analysis of the Python sources, published to the code-scanning tab. Mechanical counterpart to the threat model already published in `SECURITY.md`.
+- `.github/dependabot.yml`, `.github/release.yml` — pip and Actions updates as reviewable pull requests; release notes mapped onto the labels this repository uses.
+- `.editorconfig`, `.gitattributes` — LF and UTF-8-without-BOM declared at repository level, and language statistics that describe the product (Python) rather than the prose around it.
+- `assets/social-preview.png` (1280×640), `assets/og-image.png` (1200×630) — social preview and Open Graph artwork in the site's dark graphite/aurora palette.
+
+### Changed (repository presentation, 2026-10-16)
+- `README.md`, `README.ru.md`: the licence badge and the licence section said **MIT** while `LICENSE` and `pyproject.toml` had been PolyForm Noncommercial 1.0.0 since 2026-10-15 — corrected, with an explicit note that GitHub's licence badge reads «Other» because PolyForm is not in the catalogue GitHub detects. CI, release, docs-site and star badges added; navigation to the website, wiki and docs site; a «Use cases» table; the offline promise stated in the abstract.
+- `README.ru.md` additionally: the abstract was still the English paragraph, and the documentation table pointed at `docs/02_architecture/…` and `AGENTS.md` — paths that do not exist in the published tree. Now it links `docs/ru/…` and `docs/DEFECTS.md`, and carries a table of contents like the English README.
+- `pyproject.toml`: `Homepage` now points at the website; `Documentation`, `Wiki` and `Changelog` URLs added; keywords expanded from 6 to 18; classifiers include Python 3.14 and Windows.
+- `CONTRIBUTING.md`: licence reference corrected to PolyForm; Discussions, the Code of Conduct and the security channel linked from the quick-links table.
+- `mkdocs.yml`: `slugify_unicode` for the table of contents. With the default ASCII slugify every Cyrillic anchor is dropped and the Russian pages' own tables of contents break — measured: `mkdocs build --strict` aborted with 14 broken anchors in `ru/05_article`.
+
 ### Added (publication pass, 2026-10-16)
 - Root `install.ps1` — deployment installer: fetches the package from `github.com/paulmann/RAGRAF` (or deploys from a local copy with `-SourceDir`), asks for the target directory (default `C:\RAGRAF`), delegates the virtual environment and dependencies to `scripts/install.ps1`, offers to locate AutoClaw and DeepSeek Harness and to configure the connection, and finishes with admin-panel instructions and an access warning. An existing installation is never overwritten silently, `-SkipDeps` runs a rehearsal, exit codes follow the documented 0/1/2/3 contract, and a transcript is written to `~/.ragraf/logs/`.
 - `install.ps1` shows AutoClaw values obtained from the product itself (`client_setup.state()`) instead of hardcoding them, and says plainly why it does not write them: AutoClaw accepts MCP servers only through its own interface, and its store belongs to the product. The Harness profile block is written for real — with a backup and a parse check.

@@ -1,0 +1,46 @@
+# Release-notes configuration for GitHub's "Generate release notes" button.
+#
+# The project already keeps a hand-written changelog (CHANGELOG.md, Keep a
+# Changelog format); this maps pull-request labels onto the same headings so a
+# generated draft and the changelog read alike.
+
+changelog:
+  exclude:
+    labels:
+      - skip-changelog
+    authors:
+      - dependabot
+      - dependabot[bot]
+      - github-actions
+      - github-actions[bot]
+
+  categories:
+    - title: Breaking changes
+      labels:
+        - breaking
+
+    - title: Added
+      labels:
+        - enhancement
+        - feature
+
+    - title: Fixed
+      labels:
+        - bug
+        - fix
+
+    - title: Documentation
+      labels:
+        - documentation
+
+    - title: Dependencies
+      labels:
+        - dependencies
+
+    - title: Infrastructure
+      labels:
+        - ci
+
+    - title: Other changes
+      labels:
+        - "*"

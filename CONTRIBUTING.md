@@ -13,6 +13,7 @@ Full version with the development setup, conventions and test map: **[the wiki](
 |---|---|
 | Report a defect | Use the **Defect report** issue template — it enforces command → expected → actual → environment → `index_status` |
 | Report a doc↔code divergence | Use the **Doc divergence** template (doc path + code `file:line`) — these are among the most valued reports |
+| Ask a question, share a measurement on your corpus | Open a thread in [Discussions](https://github.com/paulmann/RAGRAF/discussions) — questions are welcome, they do not need a defect behind them |
 | Report a security problem | **Not** a public issue → see [SECURITY.md](SECURITY.md) |
 | Propose a feature/architecture change | Open a discussion issue **before** writing the patch; include the measured problem, not just the solution |
 | Send a patch | Fork → branch → follow the conventions below → make CI green → reference the defect/measurement that motivated the change |
@@ -69,4 +70,4 @@ Accepted defect reports are recorded with the reporter's handle in [CHANGELOG.md
 
 ## License
 
-By contributing, you agree your contributions are licensed under the project's [MIT License](LICENSE).
+By contributing, you agree your contributions are licensed under the project's [PolyForm Noncommercial License 1.0.0](LICENSE) — the same terms the project ships under. Participation in issues, discussions and pull requests is covered by the [Code of Conduct](CODE_OF_CONDUCT.md).

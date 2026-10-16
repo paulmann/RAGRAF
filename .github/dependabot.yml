@@ -1,0 +1,38 @@
+# Dependabot configuration.
+#
+# The project pins dependency bounds on purpose (NFR-7): upgrades are deliberate
+# acts, not drift. This file turns those upgrades into reviewable pull requests
+# instead of letting them happen silently — the same rule the product applies to
+# its own index ("no silent change").
+#
+# Security updates do not wait for the schedule below; they open as soon as an
+# advisory lands.
+
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+    commit-message:
+      prefix: "deps"
+    groups:
+      python-runtime:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - ci
+    commit-message:
+      prefix: "ci"
+    groups:
+      actions:
+        patterns: ["*"]

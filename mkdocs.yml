@@ -1,0 +1,128 @@
+# MkDocs configuration for the RAGRAF documentation site.
+#
+# Published to GitHub Pages by .github/workflows/pages.yml (environment
+# `github-pages`). The source is the repository's own `docs/` tree — the site is
+# a render of the shipped documentation, not a second copy of it, so a page
+# cannot drift from the file a reader finds in the repository.
+#
+# Local preview:
+#   pip install "mkdocs==1.6.1" "mkdocs-material==9.7.7"
+#   mkdocs serve
+
+site_name: RAGRAF
+site_description: >-
+  A graph-and-vector knowledge base of code for LLM agents: 38 fixed operations,
+  40 MCP tools, verifiable file:line facts, SQLite + FTS5 + vectors, fully offline.
+site_url: https://paulmann.github.io/RAGRAF/
+site_author: Mikhail Deynekin
+
+repo_url: https://github.com/paulmann/RAGRAF
+repo_name: paulmann/RAGRAF
+edit_uri: edit/main/docs/
+
+docs_dir: docs
+site_dir: site
+
+copyright: >-
+  RAGRAF — <a href="https://github.com/paulmann/RAGRAF/blob/main/LICENSE">PolyForm
+  Noncommercial License 1.0.0</a> · <a href="https://ragraf.ru">ragraf.ru</a>
+
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.tracking
+    - toc.follow
+    - content.code.copy
+    - search.suggest
+    - search.highlight
+  palette:
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+
+extra:
+  social:
+    - icon: material/web
+      link: https://ragraf.ru
+      name: Public website
+    - icon: fontawesome/brands/github
+      link: https://github.com/paulmann/RAGRAF
+      name: Repository on GitHub
+
+plugins:
+  - search:
+      lang: [en, ru]
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      toc_depth: 3
+      # Non-ASCII slugs must survive intact: the Russian pages carry their own
+      # tables of contents whose anchors are written GitHub-style
+      # (`#1-проблема-…`). With the default ASCII slugify the Cyrillic part is
+      # dropped and every one of those links breaks — measured by
+      # `mkdocs build --strict`: 14 broken anchors in ru/05_article.
+      slugify: !!python/name:markdown.extensions.toc.slugify_unicode
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+
+# The documentation tree mixes English and Russian originals, and some pages
+# reference paths that live outside `docs/` (the code itself, `bench/results/`).
+# Those are notes for a reader, not site links, so they must not fail the build;
+# genuine missing pages stay a warning.
+validation:
+  links:
+    absolute_links: info
+    unrecognized_links: info
+    anchors: warn
+  nav:
+    omitted_files: info
+    not_found: warn
+    absolute_links: info
+
+nav:
+  - Home: index.md
+  - Architecture:
+      - Principles and components: architecture/ARCHITECTURE.md
+      - Specification (requirements): architecture/SPECIFICATION.md
+      - Acceptance and measurements: architecture/ACCEPTANCE.md
+  - Integration:
+      - Attaching to an agent (MCP): implementation/INTEGRATION.md
+      - Code property graph (Joern): implementation/CPG_INTEGRATION.md
+  - Skill (the index as an agent uses it):
+      - Skill overview: skills/ragraf-core/SKILL.md
+      - Operations reference: skills/ragraf-core/reference/operations.md
+      - Repair and recovery: skills/ragraf-core/reference/repair.md
+  - Article: article/RAGRAF_ARTICLE.md
+  - Defect register: DEFECTS.md
+  - Русская документация:
+      - Архитектура: ru/02_architecture/ARCHITECTURE.md
+      - Требования (ТЗ): ru/02_architecture/TZ.md
+      - Критерии приёмки: ru/02_architecture/ACCEPTANCE.md
+      - Подключение к агенту: ru/03_implementation/INTEGRATION.md
+      - Граф свойств кода (Joern): ru/03_implementation/CPG_INTEGRATION.md
+      - Навык работы с индексом: ru/skills/ragraf-core/SKILL.md
+      - Справочник операций: ru/skills/ragraf-core/reference/operations.md
+      - Восстановление: ru/skills/ragraf-core/reference/repair.md
+      - Обзорная статья: ru/05_article/RAGRAF_ARTICLE.md

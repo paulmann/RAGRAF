@@ -13,12 +13,33 @@ license-files = ["LICENSE"]
 authors = [
     { name = "Mikhail Deynekin", email = "mid1977@gmail.com" },
 ]
-keywords = ["code-analysis", "knowledge-graph", "vector-search", "llm-agents", "mcp", "sqlite"]
+keywords = [
+    "code-analysis",
+    "code-search",
+    "code-knowledge-base",
+    "knowledge-graph",
+    "code-property-graph",
+    "static-analysis",
+    "tree-sitter",
+    "vector-search",
+    "embeddings",
+    "rag",
+    "retrieval-augmented-generation",
+    "llm-agents",
+    "ai-agents",
+    "mcp",
+    "mcp-server",
+    "sqlite",
+    "local-first",
+    "developer-tools",
+]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
     "Intended Audience :: Developers",
+    "Operating System :: Microsoft :: Windows",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Documentation",
     "Topic :: Software Development :: Quality Assurance",
 ]
@@ -48,8 +69,11 @@ dependencies = [
 tls = ["truststore>=0.10"]
 
 [project.urls]
-Homepage = "https://github.com/paulmann/RAGRAF"
+Homepage = "https://ragraf.ru"
+Documentation = "https://paulmann.github.io/RAGRAF/"
+Wiki = "https://github.com/paulmann/RAGRAF/wiki"
 Repository = "https://github.com/paulmann/RAGRAF"
+Changelog = "https://github.com/paulmann/RAGRAF/blob/main/CHANGELOG.md"
 Issues = "https://github.com/paulmann/RAGRAF/issues"
 
 [project.scripts]

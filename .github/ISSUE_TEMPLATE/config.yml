@@ -1,0 +1,25 @@
+# Issue chooser. Both shipped templates are structured on purpose: the two most
+# valuable reports in this project are a reproducible defect and a doc↔code
+# divergence, and both need a command, an output and a `file:line`.
+#
+# A free-form issue box invites "it does not work" reports, which the doctrine
+# cannot act on. Questions and ideas go to Discussions instead.
+
+blank_issues_enabled: false
+
+contact_links:
+  - name: Documentation and wiki
+    url: https://github.com/paulmann/RAGRAF/wiki
+    about: "15 pages — getting started, operations reference, CLI, MCP, CPG, troubleshooting, FAQ."
+
+  - name: Questions, ideas, show-and-tell
+    url: https://github.com/paulmann/RAGRAF/discussions
+    about: "Ask how to attach RAGRAF to your agent, or share measurements on your corpus."
+
+  - name: Website — features, benchmarks, panel emulator
+    url: https://ragraf.ru
+    about: "The public site: what it does, how it is measured, the admin-panel emulator."
+
+  - name: Report a security problem
+    url: https://github.com/paulmann/RAGRAF/security/advisories/new
+    about: "Privately, never as a public issue — see SECURITY.md for the threat model."

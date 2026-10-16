@@ -2,13 +2,21 @@
 
 **A graph-and-vector knowledge base of code for LLM agents.**
 
+[**Website**](https://ragraf.ru) · [**Wiki**](https://github.com/paulmann/RAGRAF/wiki) · [**Docs site**](https://paulmann.github.io/RAGRAF/) · [**Releases**](https://github.com/paulmann/RAGRAF/releases) · [**Discussions**](https://github.com/paulmann/RAGRAF/discussions) · [**Issues**](https://github.com/paulmann/RAGRAF/issues)
+
+![RAGRAF — a graph-and-vector knowledge base of code for LLM agents: 40 MCP tools, verifiable file:line facts, fully offline](assets/social-preview.png)
+
+[![CI](https://github.com/paulmann/RAGRAF/actions/workflows/ci.yml/badge.svg)](https://github.com/paulmann/RAGRAF/actions/workflows/ci.yml)
+[![Docs site](https://github.com/paulmann/RAGRAF/actions/workflows/pages.yml/badge.svg)](https://paulmann.github.io/RAGRAF/)
+[![Release](https://img.shields.io/github/v/release/paulmann/RAGRAF?label=release&sort=semver)](https://github.com/paulmann/RAGRAF/releases)
+[![License: PolyForm NC 1.0.0](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue.svg)](LICENSE)
 [![Python 3.13+](https://img.shields.io/badge/python-3.13%2B-blue?logo=python&logoColor=white)](https://www.python.org/downloads/)
 [![PowerShell 7.6+](https://img.shields.io/badge/PowerShell-7.6%2B-5391FE?logo=powershell&logoColor=white)](https://aka.ms/pwsh)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)](#installation)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-40%20tools-8A2BE2)](docs/implementation/INTEGRATION.md)
+[![Stars](https://img.shields.io/github/stars/paulmann/RAGRAF?style=social&label=Stars)](https://github.com/paulmann/RAGRAF/stargazers)
 
-An assistant that answers an agent's questions about a codebase — *where is it, who calls it, what breaks if I change it, how is it done elsewhere* — with verifiable facts (`file:line`) instead of blind `rg` and full-file reads. Python 3.13+, SQLite (graph + FTS5 + vectors in one place), tree-sitter, local embeddings without torch. An optional property-graph layer (Java + Joern) unlocks slicing; without it the product still works and says so honestly.
+An assistant that answers an agent's questions about a codebase — *where is it, who calls it, what breaks if I change it, how is it done elsewhere* — with verifiable facts (`file:line`) instead of blind `rg` and full-file reads. Python 3.13+, SQLite (graph + FTS5 + vectors in one place), tree-sitter, local embeddings without torch. **It runs entirely on the machine that owns the code**: no service to run, no cloud index, nothing sent anywhere — a local RAG index over your own repository. An optional property-graph layer (Java + Joern) unlocks slicing; without it the product still works and says so honestly.
 
 > **Documentation status.** This English tree is a translation of the `v0.1.0` snapshot, while the code has kept moving. Counted in the sources on 2026-10-16: `src/ragraf/facade.py` declares **38** `op_*` operations and `src/ragraf/mcp_server.py` declares **40** tools. The capability table below, `README.ru.md` and the Russian originals under `docs/ru/` follow the current code; the remaining English pages that still carry older counts are tracked as `R-DOC-1` in `ROADMAP.md`.
 
@@ -17,6 +25,7 @@ An assistant that answers an agent's questions about a codebase — *where is it
 ## Contents
 
 - [What this is and why](#what-this-is-and-why)
+- [Use cases](#use-cases)
 - [Capabilities](#capabilities)
 - [How it works](#how-it-works)
 - [Installation](#installation)
@@ -49,6 +58,22 @@ Measured on a real project (PHP portal, 14 navigation tasks, `bench/results/`):
 The call, hit-rate and verifiability numbers are **measurements** (run artifacts in `bench/results/`). «Realistically 43» is a modeled correction (the agent reviews up to 5 candidates instead of one), and it is recorded in the artifact itself.
 
 One caveat usually omitted: **the 2–3× win applies to localization tasks** («where is it defined», «who calls it»). In the edit loop «read → change → verify» there is almost no savings in call count — the win there is different: edits do not corrupt the index, and disputed SQL is checked before it runs.
+
+---
+
+## Use cases
+
+| You are doing | Ask RAGRAF for | What comes back |
+|---|---|---|
+| Onboarding an agent onto a 200k-line repository it has never seen | `repo_map`, then `search` / `symbol` | one fact per question, with `file:line`, instead of a wall of candidates |
+| Refactoring a function that is called from a dozen places | `callers`, `impact`, `slice` when the CPG is available | proven links separated from heuristics; a slice that says what it actually covers |
+| Renaming or dropping a database column | `write_check` **before** the SQL runs, then `table_usage` | missing columns with nearest-name suggestions; who reads and who writes the table |
+| Reviewing someone else's diff | `diff`, `drift_report`, `live_read` | symbols and edges that changed, regressions included, and the current file marked against the index |
+| Hunting copies (`Files.php` … `Files7.php`) | `duplicates` | which files are copies, and which copy is *proven* live |
+| «How is this done elsewhere in this codebase?» | `search` (BM25 + vectors, hybrid) | ranked fragments from the corpus, no model download needed for the answers |
+| Wiring the index into an agent | the **40 MCP tools** `ragraf_*`, or the CLI | the same operations over stdio — see [`docs/implementation/INTEGRATION.md`](docs/implementation/INTEGRATION.md) |
+
+The numbers above are the contract, not marketing: a localization win is measured at **2–3× fewer tool calls**, and the edit loop is measured honestly — see [What this is and why](#what-this-is-and-why).
 
 ---
 
@@ -291,6 +316,9 @@ On a home network the package is unnecessary. Measured: without it — `certific
 
 | Document | Contents |
 |---|---|
+| [ragraf.ru](https://ragraf.ru) | the public website: features, measured benchmarks, and an emulator of the admin panel |
+| [Wiki](https://github.com/paulmann/RAGRAF/wiki) | 15 pages — getting started, operations reference, CLI, MCP, CPG layer, troubleshooting, FAQ |
+| [Docs site](https://paulmann.github.io/RAGRAF/) | this documentation set rendered with search (built and deployed by `pages.yml`) |
 | [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md) | principles, components, store schemas, operation contracts |
 | [`docs/architecture/SPECIFICATION.md`](docs/architecture/SPECIFICATION.md) | functional and non-functional requirements, acceptance criteria |
 | [`docs/architecture/ACCEPTANCE.md`](docs/architecture/ACCEPTANCE.md) | measurement protocols M1–M7 and the test map |
@@ -298,6 +326,7 @@ On a home network the package is unnecessary. Measured: without it — `certific
 | [`docs/implementation/CPG_INTEGRATION.md`](docs/implementation/CPG_INTEGRATION.md) | the code property graph: Joern, JDK, degradation modes |
 | [`docs/skills/ragraf-core/SKILL.md`](docs/skills/ragraf-core/SKILL.md) | the skill of working with the index: choosing operations, recovery |
 | [`docs/article/RAGRAF_ARTICLE.md`](docs/article/RAGRAF_ARTICLE.md) | overview article: stack, architecture, measurements |
+| [`docs/DEFECTS.md`](docs/DEFECTS.md) | the defect register of the published revision — every finding carries `file:line` evidence |
 | [`ROADMAP.md`](ROADMAP.md) | planned improvements and development directions |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | how to report defects and propose changes |
 
@@ -344,12 +373,18 @@ Three checks require things the base installation does not include, and that is 
 
 ## Contributing
 
-Useful reports: a reproducible defect with the command and its output; a document diverging from the code; a case of degradation the product did not name. One thing is welcome above all: a fact with a file-and-line reference. See [CONTRIBUTING.md](CONTRIBUTING.md).
+Useful reports: a reproducible defect with the command and its output; a document diverging from the code; a case of degradation the product did not name. One thing is welcome above all: a fact with a file-and-line reference. See [CONTRIBUTING.md](CONTRIBUTING.md); questions, ideas and measurements on your own corpus go to [Discussions](https://github.com/paulmann/RAGRAF/discussions). Participation is covered by the [Code of Conduct](CODE_OF_CONDUCT.md).
 
-The project is developed for concrete tasks, so architecture proposals are discussed more readily than large patches without a prior conversation.
+The project is developed for concrete tasks, so architecture proposals are discussed more readily than large patches without a prior conversation. Security problems are reported privately, never as a public issue — see [SECURITY.md](SECURITY.md).
+
+If this saved you a context window, a star helps the next agent find it.
 
 ---
 
 ## License
 
-MIT — see [LICENSE](LICENSE). External dependencies keep their own licenses: `tree-sitter` (MIT), `sqlite-vec` (MIT/Apache-2.0), `fastembed` (Apache-2.0), `PyYAML` (MIT), `tiktoken` (MIT), `ijson` (BSD). Java and Joern, installed separately, are distributed under Apache-2.0 and are not part of the distribution.
+**[PolyForm Noncommercial License 1.0.0](LICENSE)** — free for any noncommercial purpose: personal projects, study, research, experiment and testing, and use by charitable, educational, public-research, public-safety, health and environmental organizations. Commercial use needs a separate license from the copyright holder, who keeps every right not expressly granted. [CHANGELOG.md](CHANGELOG.md) records the transition from MIT on 2026-10-15.
+
+> GitHub's licence badge for this repository reads «Other»: PolyForm is not in the catalogue GitHub detects, so the badge cannot be trusted here. `LICENSE` and `pyproject.toml` (`license = "PolyForm-Noncommercial-1.0.0"`) are the authoritative sources.
+
+External dependencies keep their own licenses: `tree-sitter` (MIT), `sqlite-vec` (MIT/Apache-2.0), `fastembed` (Apache-2.0), `PyYAML` (MIT), `tiktoken` (MIT), `ijson` (BSD). Java and Joern, installed separately, are distributed under Apache-2.0 and are not part of the distribution.
