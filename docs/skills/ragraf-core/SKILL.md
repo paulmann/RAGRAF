@@ -125,9 +125,11 @@ python tools/ragraf.py -p config/ragraf.yaml check
 pwsh -NoLogo -NoProfile -NonInteractive -File tools/Invoke-ProjectDoctrine.ps1
 ```
 
-6. The checker knows its baseline: **2 errors, 0 warnings** (11 checks); both
-   errors predate the project handover (`AGENTS.md` §10, *not shipped*). A third
-   error or a new warning is a finding.
+6. The checker ships **14 checks**. In the published tree 11 pass and 3 report files
+   that are deliberately absent from the public subset (the corpus config,
+   `tests/test_dedupe.py`, `tests/test_text_from_index.py`) — roadmap `R-REL-1`.
+   The author's full tree records its own baseline in `AGENTS.md` §10 (*not shipped*).
+   A new error or a new warning in the published tree is a finding either way.
 
 ## 7. Skill files
 

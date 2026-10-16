@@ -234,7 +234,7 @@ The standard set size is **≥ 20 tasks**, of which ≥ 8 are edits.
 | **M3-T1** | degradation without CPG (and memory) | FT-12, NFR-8 |
 | **M3-T2** | secrets not in graph/vector/logs | FT-39, FT-40 |
 | **M3-T3** | recovery after an interrupted build | NFR-11 |
-| **M4-T1** | all 17 operations: valid input and empty result | FT-14 |
+| **M4-T1** | all 17 operations of the release-1 scope (the shipped facade implements 38): valid input and empty result | FT-14 |
 | **M4-T2** | refusal on an attempt to pass a query language | FT-15 |
 | **M4-T3** | answer envelope completeness | FT-16 |
 | **M4-T4** | proven/heuristic separation in `impact` | FT-18 |

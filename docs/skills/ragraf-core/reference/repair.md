@@ -190,9 +190,10 @@ settings store writes without a backup — roadmap R-SEC-3). Live checks of the 
 ## 8. What to do in any of these states
 
 1. Write down the measurement: the command, the output, the revision, the checksum.
-2. Distinguish a pre-existing state from the consequence of your own edit: the
-   checker's baseline is recorded in `AGENTS.md` §10 (*not shipped*) — **2 errors,
-   0 warnings**.
+2. Distinguish a pre-existing state from the consequence of your own edit. In the
+   published tree the checker ships **14 checks**: 11 pass, while 3 report files
+   deliberately absent from the public subset (roadmap `R-REL-1`). The author's full
+   tree records its own baseline in `AGENTS.md` §10 (*not shipped*).
 3. Do not report a green result without inspecting the object: every check in the
    checker has a counter of inspected objects, and zero on success counts as a
    false PASS.

@@ -18,7 +18,7 @@
 
 An assistant that answers an agent's questions about a codebase — *where is it, who calls it, what breaks if I change it, how is it done elsewhere* — with verifiable facts (`file:line`) instead of blind `rg` and full-file reads. Python 3.13+, SQLite (graph + FTS5 + vectors in one place), tree-sitter, local embeddings without torch. **It runs entirely on the machine that owns the code**: no service to run, no cloud index, nothing sent anywhere — a local RAG index over your own repository. An optional property-graph layer (Java + Joern) unlocks slicing; without it the product still works and says so honestly.
 
-> **Documentation status.** This English tree is a translation of the `v0.1.0` snapshot, while the code has kept moving. Counted in the sources on 2026-10-16: `src/ragraf/facade.py` declares **38** `op_*` operations and `src/ragraf/mcp_server.py` declares **40** tools. The capability table below, `README.ru.md` and the Russian originals under `docs/ru/` follow the current code; the remaining English pages that still carry older counts are tracked as `R-DOC-1` in `ROADMAP.md`.
+> **Documentation status.** Every count in this tree, in `README.ru.md`, in the Russian originals under `docs/ru/` and in the wiki was **re-measured from the sources on 2026-10-16**; the summary is in [By the numbers](#by-the-numbers), and `Test-DocumentedNumbers` in the project checker compares those numbers with the code. Documents that describe the **release-1 scope** keep their own numbers on purpose — `docs/architecture/SPECIFICATION.md` still says 17 operations and states why — while the current surface is 38 operations / 40 MCP tools / 39 CLI query operations.
 
 ---
 
@@ -27,6 +27,7 @@ An assistant that answers an agent's questions about a codebase — *where is it
 - [What this is and why](#what-this-is-and-why)
 - [Use cases](#use-cases)
 - [Capabilities](#capabilities)
+- [By the numbers](#by-the-numbers)
 - [How it works](#how-it-works)
 - [Installation](#installation)
 - [First steps](#first-steps)
@@ -44,7 +45,7 @@ An agent working on a code change spends most of its context on **finding the pl
 
 RAGRAF replaces that path with an index. The agent asks a question through a fixed operation and gets a fact with a `file:line` reference — not ten candidates to review.
 
-Measured on a real project (PHP portal, 14 navigation tasks, `bench/results/`):
+Measured on a real project (PHP portal, 14 navigation tasks; the run was made on the author's machine — see *what the shipped artifacts measure* below):
 
 | Metric | Without the index | With the index |
 |---|---|---|
@@ -55,7 +56,9 @@ Measured on a real project (PHP portal, 14 navigation tasks, `bench/results/`):
 | Target-file hit on the first query | — | **92%** (12 of 13) |
 | Verifiability (facts with `file:line`) | — | **100%** |
 
-The call, hit-rate and verifiability numbers are **measurements** (run artifacts in `bench/results/`). «Realistically 43» is a modeled correction (the agent reviews up to 5 candidates instead of one), and it is recorded in the artifact itself.
+The call, hit-rate and verifiability numbers are **measurements** of that run; its raw artifacts are not part of the public tree (tracked as `R-REL-1` in [`ROADMAP.md`](ROADMAP.md)). What does ship is the artifact of the graph metric — [`bench/results/M2_rev-0012.json`](bench/results/M2_rev-0012.json) and [`M2_rev-0025.json`](bench/results/M2_rev-0025.json) measure **impact-analysis completeness** on the same portal: does the graph reach the files that were actually co-changed? Mean recall **0.771 → 0.917** over 20 and 8 commits at depth 3, median recall **1.0**, precision 0.072 → 0.020 — deliberately low, because the metric counts connectivity, not prediction — against a naive baseline of **0.0**.
+
+«Realistically 43» is a modeled correction (the agent reviews up to 5 candidates instead of one), and it is recorded in the artifact itself.
 
 One caveat usually omitted: **the 2–3× win applies to localization tasks** («where is it defined», «who calls it»). In the edit loop «read → change → verify» there is almost no savings in call count — the win there is different: edits do not corrupt the index, and disputed SQL is checked before it runs.
 
@@ -114,7 +117,33 @@ The numbers above are the contract, not marketing: a localization win is measure
 
 The same operations are available as **40 MCP tools** (`ragraf_*`) — to attach to an agent as a server — and through the CLI.
 
-**Sixteen languages** are parsed as trees (graph nodes and edges): PHP, Python, JavaScript, TypeScript, Java, C#, C, C++, Ruby, Lua, Go, Perl, bash, PowerShell, CSS, HTML. Ten more are attached as text — files are findable by search but yield no nodes: Markdown, SQL, YAML, JSON, TOML, INI, XML, RST, batch, plain text.
+**Sixteen languages** are parsed as trees (graph nodes and edges): PHP, Python, JavaScript, TypeScript, Java, C#, C, C++, Ruby, Lua, Go, Perl, bash, PowerShell, CSS, HTML — thirteen generic profiles plus dedicated PHP, CSS and HTML extractors. Eleven more are attached as text — files are findable by search but yield no nodes: Markdown, SQL, YAML, JSON, TOML, INI, XML, RST, Rust, batch, plain text. 55 file extensions are mapped in total.
+
+---
+
+## By the numbers
+
+Every count below was measured on the published tree on **2026-10-16** — not copied from earlier prose. The two that matter most are gated by `Test-DocumentedNumbers` in [`tools/Invoke-ProjectDoctrine.ps1`](tools/Invoke-ProjectDoctrine.ps1), which compares the documents with the code.
+
+| Surface | Count | Measured from |
+|---|---|---|
+| Facade operations | **38** | `def op_*` in `src/ragraf/facade.py` |
+| MCP tools | **40** — 6 of them the live-database layer | `ragraf_*` names in `src/ragraf/mcp_server.py` |
+| MCP resources / prompts | 3 + 1 URI template / 2 | `ragraf://status`, `ragraf://catalog`, `ragraf://corpus/{name}/map`; prompts `ragraf-check`, `ragraf-repair` |
+| CLI subcommands / `query` operations | 14 / **39** | `add_parser(…)` and `OPS` in `src/ragraf/cli.py` |
+| Languages parsed as trees | **16** | `TREE_LANGS` in `src/ragraf/config.py` |
+| Languages attached as text | **11** | every other language in `LANG_BY_EXT` |
+| File extensions mapped | 55 | `LANG_BY_EXT` |
+| Admin-panel API routes | 32 | `src/ragraf/admin_server.py` |
+| Runtime dependencies | 7 (+1 optional extra, `tls`) | `pyproject.toml` |
+| Python in `src/` | 50 files · 37 592 lines | the published tree |
+| PowerShell — installer, wrappers, checker | 5 files · 3 423 lines | the published tree |
+| Markdown | 28 files (20 under `docs/`, 9 of them Russian) + 15 wiki pages | the published tree and the wiki |
+| Portable test suites | 6 suites · **164 checks, 0 failures** | each suite run standalone |
+| Defect register | 60 findings | [`docs/DEFECTS.md`](docs/DEFECTS.md); the audited revision's summary counts 43 of them by severity |
+| Published tree | 136 files · 3.5 MB | the published tree |
+
+Dogfooding, for scale: RAGRAF indexes its own working tree (648 files, 140 741 lines — larger than this published subset) into 3 620 symbols, 46 296 edges and 3 417 chunks in **74 s**, 63 s of which is the optional Joern/CPG stage (`rev-0156`, measured 2026-10-16; `capability=full`, 0 failed files). Full breakdown: [wiki → Benchmarks and Limits](https://github.com/paulmann/RAGRAF/wiki/11-Benchmarks-and-Limits).
 
 ---
 
@@ -365,7 +394,11 @@ Three checks require things the base installation does not include, and that is 
 
 * `test_joern_server.py` — needs the external Java + Joern layer (`scripts/install-joern.ps1`);
 * `test_graph_algo.py` — needs `torch` (~2.5 GB), which is in neither `pyproject.toml` nor `requirements.txt`: GPU graph algorithms are an optional branch, and without `torch` it honestly degrades to CPU;
-* `test_cpg_call_names.py` — needs a corpus config (the `config/` directory is not published); you can run the test by copying `examples/ragraf.example.yaml` into `config/` and pointing it at your own root.
+* `test_cpg_call_names.py` — needs a corpus config (the `config/` directory is not published); you can run the test by copying `examples/ragraf.example.yaml` into `config/` and pointing it at your own root; without one it refuses to run rather than passing silently.
+
+A tenth file, `test_capability_consistency.py`, reports «not applicable» until a corpus config exists — it validates the declared `capability` against what the graph actually contains. `test_graph_algo.py` without `torch` still runs **7 checks** and names the **17 properties it could not check**, rather than printing a green line over untested code.
+
+The project checker is equally explicit about this published subset: of its **14 checks**, 11 pass here and 3 report files that are deliberately absent from the public tree (the corpus config, `tests/test_dedupe.py`, `tests/test_text_from_index.py`) — tracked as `R-REL-1` in [`ROADMAP.md`](ROADMAP.md).
 
 `selftest` is **not a gate**: it prints a report on 11 components and always returns exit code 0. A non-zero code is not provided for, so a «green selftest» proves nothing by itself.
 

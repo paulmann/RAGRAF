@@ -5,7 +5,7 @@
 **Product owner:** owner of the agent environment. **Executor:** the agent environment.
 **Owner decisions fixed on 2026-10-04:** JVM (JDK + Joern) allowed · pilot `second PHP corpus` · embeddings `paraphrase-multilingual-MiniLM-L12-v2` · release 1 — PHP only.
 
-> **Translation note.** Original Russian: «Техническое задание» (TZ). Requirement IDs are transliterated consistently: **ФТ-n → FT-n** (functional), **НФТ-n → NFR-n** (non-functional). Test IDs (`M1-T1` …) and metrics (`M1`…`M7`) are unchanged. The shipped product implements a superset of this release-1 spec (22 facade operations instead of 17, 16 tree-parsed languages instead of PHP-only); deltas are marked where relevant and summarized in [`ARCHITECTURE.md` §7](ARCHITECTURE.md#7-facade-operations-contracts).
+> **Translation note.** Original Russian: «Техническое задание» (TZ). Requirement IDs are transliterated consistently: **ФТ-n → FT-n** (functional), **НФТ-n → NFR-n** (non-functional). Test IDs (`M1-T1` …) and metrics (`M1`…`M7`) are unchanged. The shipped product implements a superset of this release-1 spec (**38** facade operations instead of 17, 16 tree-parsed languages instead of PHP-only, **39** CLI `query` operations); deltas are marked where relevant and summarized in [`ARCHITECTURE.md` §7](ARCHITECTURE.md#7-facade-operations-contracts).
 
 ---
 

@@ -1,7 +1,12 @@
 """MCP-сервер RAGRAF: операции фасада как инструменты агента (ФТ-22).
 
 Протокол: JSON-RPC 2.0 поверх stdio (MCP, версия 2024-11-05).
-Реализованы методы: initialize, notifications/initialized, tools/list, tools/call, ping.
+Реализованы методы: initialize, notifications/initialized, notifications/cancelled,
+notifications/progress, ping, tools/list, tools/call, resources/list, resources/read,
+resources/templates/list, prompts/list, prompts/get.
+Поверхность пересчитана 16.10.2026: 40 инструментов `ragraf_*`, 3 ресурса
+(`ragraf://status`, `ragraf://catalog`, `ragraf://corpus/{name}/map`) и 2 подсказки
+(`ragraf-check`, `ragraf-repair`).
 
 Принципиальные ограничения (архитектура §7, ФТ-15):
   * наружу выставляются ТОЛЬКО фиксированные операции фасада;

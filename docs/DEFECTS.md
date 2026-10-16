@@ -15,6 +15,8 @@
 
 **Totals: 4 CRIT · 11 HIGH · 19 MED · 9 LOW = 43 findings.**
 
+*Register updated 2026-10-16: the file has grown to **60 findings** in groups A–H — counted the same way the register is read, by its `### X-n` sections. The severity totals above describe the revision audited on 2026-10-12; later sections were appended, not back-filled, because the ledger is append-only by design.*
+
 ---
 
 ## A. Release-blocking: dead references (files promised but not shipped)
