@@ -15,7 +15,7 @@
 
 **Totals: 4 CRIT · 11 HIGH · 19 MED · 9 LOW = 43 findings.**
 
-*Register updated 2026-10-16: the file has grown to **60 findings** in groups A–H — counted the same way the register is read, by its `### X-n` sections. The severity totals above describe the revision audited on 2026-10-12; later sections were appended, not back-filled, because the ledger is append-only by design.*
+*Register updated 2026-10-16: the file has grown to **61 findings** in groups A–I — counted the same way the register is read, by its `### X-n` sections. The severity totals above describe the revision audited on 2026-10-12; later sections were appended, not back-filled, because the ledger is append-only by design.*
 
 ---
 
@@ -266,6 +266,15 @@
 ### E-09 🔵 LOW — `repo_map` budget counts JSON characters, not tokens
 - **Where:** `facade.py:_payload_weight` — «символов» (honest, documented); TZ ФТ-20 demands `budget_tokens` via tiktoken. `chars_used` field name is honest; docs elsewhere say «в заданном бюджете символов» (README) vs «budget_tokens = 2000» (ARCHITECTURE/TZ).
 - **Fix:** align naming: either count tokens with tiktoken (dependency already present) or rename the contract field to `budget_chars` everywhere.
+
+### E-10 🟡 MED — registry and revision report different symbol/edge totals for the same revision
+- **Where (hypothesis, not yet traced):** the counters written by the indexing run (`catalog.py`, `record_run`, `src/ragraf/catalog.py:235`) versus the counters stored with the revision and surfaced by `index_status` (`revisions.py` / the `rev` row).
+- **Evidence (measured 2026-10-16; `status --json` compared with the registry entry for the same `rev_id`):**
+  - corpus A, `rev-0004`: registry `node_count` **8 721** / `edge_count` **41 201** against the revision's **4 498** / **56 106**;
+  - corpus B, `rev-0156`: registry **13 800** / **45 361** against the revision's **3 620** / **46 296**;
+  - `file_count` agrees in both cases (297 and 648), so the divergence is in the graph counters, not in the file scan.
+- **Why it matters:** the registry is what `catalog`, the corpus list and any «by the numbers» table reads; the answer envelope reads the revision. Two totals for one revision means a number taken from the registry cannot be traced to the graph it describes — the project's own rule («a number must match its source») breaks before the number reaches a document.
+- **Fix:** one aggregation path — record the revision's own counters in `record_run`, or state each counter's definition in the registry entry and in `catalog`'s output. Until then, corpus-level symbol and edge counts read from the registry are provisional; the polygon numbers published in `README.md`, `README.ru.md` and the wiki are taken from the **revision record** for this reason.
 
 ---
 

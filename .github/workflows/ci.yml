@@ -68,7 +68,12 @@ jobs:
       - name: Project doctrine checker
         shell: pwsh
         run: pwsh -NoLogo -NoProfile -File tools/Invoke-ProjectDoctrine.ps1
-        continue-on-error: true   # baseline is "2 known pre-existing errors" — see CONTRIBUTING; flip to false once baseline is 0
+        # The checker prints its own verdict (checks / errors / warnings). Its
+        # baseline differs by tree: the published subset cannot satisfy three
+        # checks whose files are withheld (ROADMAP R-REL-1), while the private
+        # working tree runs them all. Any NEW error or warning is a finding in
+        # either tree, so this step reports instead of blocking.
+        continue-on-error: true
 
   powershell:
     name: PowerShell (parser + PSScriptAnalyzer)

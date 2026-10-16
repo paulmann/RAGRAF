@@ -140,10 +140,22 @@ Every count below was measured on the published tree on **2026-10-16** — not c
 | PowerShell — installer, wrappers, checker | 5 files · 3 423 lines | the published tree |
 | Markdown | 28 files (20 under `docs/`, 9 of them Russian) + 15 wiki pages | the published tree and the wiki |
 | Portable test suites | 6 suites · **164 checks, 0 failures** | each suite run standalone |
-| Defect register | 60 findings | [`docs/DEFECTS.md`](docs/DEFECTS.md); the audited revision's summary counts 43 of them by severity |
+| Defect register | 61 findings | [`docs/DEFECTS.md`](docs/DEFECTS.md); the audited revision's summary counts 43 of them by severity |
 | Published tree | 136 files · 3.5 MB | the published tree |
 
 Dogfooding, for scale: RAGRAF indexes its own working tree (648 files, 140 741 lines — larger than this published subset) into 3 620 symbols, 46 296 edges and 3 417 chunks in **74 s**, 63 s of which is the optional Joern/CPG stage (`rev-0156`, measured 2026-10-16; `capability=full`, 0 failed files). Full breakdown: [wiki → Benchmarks and Limits](https://github.com/paulmann/RAGRAF/wiki/11-Benchmarks-and-Limits).
+
+**Measured polygon, anonymised.** The registry knows **28 corpora, 25 of them indexed** — 10 with the CPG layer, 15 degraded. The 16 whose revision record was read on 2026-10-16 hold **7 527 files, 94 528 symbols, 791 871 edges and 86 790 chunks**. Project names, paths and domains are withheld on purpose; the labels are ordered by size, and only the author's private map resolves them.
+
+| Corpus | Kind | Files | Symbols | Edges | Mode |
+|---|---|---|---|---|---|
+| C-02 | PHP web application | 2 722 | 32 761 | 355 192 | degraded |
+| C-04 | C# service / desktop | 1 274 | 20 331 | 98 605 | degraded |
+| C-05 | PHP web application | 928 | 17 381 | 99 029 | full |
+| C-18 | PowerShell automation toolkit | 81 | 324 | 4 214 | degraded |
+| C-24 | Markdown + bash (smallest) | 18 | 184 | 1 515 | degraded |
+
+The full 16-row table, the anonymisation rules and a counting caveat are in the [wiki → Benchmarks and Limits](https://github.com/paulmann/RAGRAF/wiki/11-Benchmarks-and-Limits). That caveat matters when quoting numbers: the corpus registry and the revision record report **different** totals for the same revision (measured on one corpus: 8 721 vs 4 498 symbols, 41 201 vs 56 106 edges), so every count above is taken from the **revision record** — the one the answer envelope reports.
 
 ---
 
