@@ -60,6 +60,19 @@ The call, hit-rate and verifiability numbers are **measurements** of that run; i
 
 «Realistically 43» is a modeled correction (the agent reviews up to 5 candidates instead of one), and it is recorded in the artifact itself.
 
+**Re-measured 2026-10-21, with the artifact shipped in the tree.** The numbers above describe a run whose raw log is not public, so a new probe answers the same question in a way anyone can repeat: [`bench/nav_probe.py`](bench/nav_probe.py) takes a real corpus (an open-source PHP library, 186 files, `rev-0001`, `capability=full`), builds a **deterministic** sample of 14 names from the **source text** (`function` / `class` declarations — the index takes no part in deciding the right answer), then compares two ways of locating a definition: `rg -l` over the same tree, and one `symbol` call.
+
+| Measured 2026-10-21 | Value |
+|---|---|
+| Names located on the first returned fact | **13 of 14 (93%)** |
+| Names present anywhere in the single-call answer | **14 of 14** |
+| Candidate files: `rg -l` → index | 161 → 42 |
+| Context to read: `rg` candidates → answer | 15 178 062 B → **59 872 B (×253)** |
+| Median answer | 3 ms |
+| Reproduce | `python bench/nav_probe.py --project config/<corpus>.yaml --limit 14 --out bench/results/nav_probe_<date>.json` |
+
+Two honest notes. The single miss is `group`: four definitions carry that name (three `WpCache::$group` properties and one function), so the target sits at position 4 — the answer still carries the **kind**, which `rg` cannot, so the ambiguity is resolved inside the same call. And this corpus ships mirrored copies (`php83/html.php`, `php85/html.php`, `src-8.5/`), which is why file narrowing is only ×3.8 while byte narrowing is ×253: the same source file is legitimately declared in three places, and the index says so instead of hiding it.
+
 One caveat usually omitted: **the 2–3× win applies to localization tasks** («where is it defined», «who calls it»). In the edit loop «read → change → verify» there is almost no savings in call count — the win there is different: edits do not corrupt the index, and disputed SQL is checked before it runs.
 
 ---

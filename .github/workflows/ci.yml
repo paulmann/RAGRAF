@@ -48,7 +48,9 @@ jobs:
         shell: pwsh
         run: |
           $fail = 0
-          Get-ChildItem -Recurse -Include *.py -Path src, tools, tests | ForEach-Object {
+          # bench включён намеренно: измеритель и отчётный скрипт — такой же
+          # код проекта, и раньше он оставался без синтаксической защиты.
+          Get-ChildItem -Recurse -Include *.py -Path src, tools, tests, bench | ForEach-Object {
             python -m py_compile $_.FullName
             if ($LASTEXITCODE -ne 0) { Write-Error "SYNTAX FAIL: $($_.FullName)"; $fail++ }
           }

@@ -1,0 +1,287 @@
+{
+  "probe": "nav_probe",
+  "measured_on": "2026-10-21",
+  "corpus": {
+    "config": "C:/AutoClaw/RAGRAF/config/htmlphp-src.yaml",
+    "root": "C:/AutoClaw/RAGRAF.git/htmlphp-src",
+    "rev": "rev-0001",
+    "capability": "full",
+    "sealed_at": "2026-10-12T23:46:11+03:00",
+    "extensions": [
+      ".php"
+    ],
+    "definitions_found": 725
+  },
+  "method": {
+    "ground_truth": "регулярное выражение по тексту исходников (индекс не участвует)",
+    "baseline": "rg -l по тому же корпусу; байты — сумма размеров найденных файлов",
+    "index": "одна операция facade.op_symbol(name, limit=20) на вопрос",
+    "hit_at_1": "первый же факт ответа указывает на файл с определением",
+    "caveats": [
+      "rg -l — верхняя граница для агента, а не измерение конкретного агента",
+      "корпус содержит зеркала (php83/php85/src-8.5): сужение по файлам меньше, чем по байтам",
+      "динамика во время выполнения не покрыта (статический индекс)"
+    ]
+  },
+  "summary": {
+    "questions": 14,
+    "sampling": "имена определений отсортированы, взяты с постоянным шагом (без случайности)",
+    "index_calls_total": 14,
+    "index_found": 14,
+    "hit_at_1": 13,
+    "hit_any_rank": 14,
+    "hit_at_1_rate": 0.9286,
+    "hit_any_rate": 1.0,
+    "baseline_files_total": 161,
+    "index_files_total": 42,
+    "files_narrowing": 3.83,
+    "baseline_bytes_total": 15178062,
+    "index_bytes_total": 59872,
+    "bytes_narrowing": 253.5,
+    "median_baseline_files": 7.0,
+    "median_index_files": 3.0,
+    "median_index_ms": 3.0,
+    "worst_case": [
+      "group",
+      32,
+      4
+    ]
+  },
+  "questions": [
+    {
+      "name": "AbstractLogger",
+      "kind": "symbol",
+      "ground_truth_files": [
+        "php83/html.php",
+        "php85/html.php",
+        "src/Log/AbstractLogger.php"
+      ],
+      "baseline_files": 9,
+      "baseline_bytes": 1071375,
+      "index_found": true,
+      "index_calls": 1,
+      "index_files": 3,
+      "index_bytes": 3390,
+      "first_hit_rank": 1,
+      "index_ms": 5
+    },
+    {
+      "name": "Options",
+      "kind": "symbol",
+      "ground_truth_files": [
+        "php83/html.php",
+        "php85/html.php",
+        "src/WordPress/Maintenance/Options.php"
+      ],
+      "baseline_files": 30,
+      "baseline_bytes": 1319369,
+      "index_found": true,
+      "index_calls": 1,
+      "index_files": 3,
+      "index_bytes": 2128,
+      "first_hit_rank": 1,
+      "index_ms": 3
+    },
+    {
+      "name": "active",
+      "kind": "symbol",
+      "ground_truth_files": [
+        "php83/html.php",
+        "php85/html.php",
+        "src/Ssi/Scanner.php"
+      ],
+      "baseline_files": 11,
+      "baseline_bytes": 1141346,
+      "index_found": true,
+      "index_calls": 1,
+      "index_files": 3,
+      "index_bytes": 2485,
+      "first_hit_rank": 1,
+      "index_ms": 3
+    },
+    {
+      "name": "cacheKey",
+      "kind": "symbol",
+      "ground_truth_files": [
+        "php83/html.php",
+        "php85/html.php",
+        "src-8.5/Template/Renderer.php",
+        "src/Template/Renderer.php"
+      ],
+      "baseline_files": 4,
+      "baseline_bytes": 1096383,
+      "index_found": true,
+      "index_calls": 1,
+      "index_files": 4,
+      "index_bytes": 7041,
+      "first_hit_rank": 1,
+      "index_ms": 3
+    },
+    {
+      "name": "describe",
+      "kind": "symbol",
+      "ground_truth_files": [
+        "php83/html.php",
+        "php85/html.php",
+        "src/Exception/HtmlPhpException.php"
+      ],
+      "baseline_files": 7,
+      "baseline_bytes": 1097034,
+      "index_found": true,
+      "index_calls": 1,
+      "index_files": 3,
+      "index_bytes": 3656,
+      "first_hit_rank": 1,
+      "index_ms": 2
+    },
+    {
+      "name": "fallback",
+      "kind": "symbol",
+      "ground_truth_files": [
+        "php83/html.php",
+        "php85/html.php",
+        "src/Cache/CacheFactory.php"
+      ],
+      "baseline_files": 31,
+      "baseline_bytes": 1359392,
+      "index_found": true,
+      "index_calls": 1,
+      "index_files": 3,
+      "index_bytes": 5759,
+      "first_hit_rank": 1,
+      "index_ms": 3
+    },
+    {
+      "name": "group",
+      "kind": "symbol",
+      "ground_truth_files": [
+        "tests/TestRunner.php"
+      ],
+      "baseline_files": 32,
+      "baseline_bytes": 1403771,
+      "index_found": true,
+      "index_calls": 1,
+      "index_files": 4,
+      "index_bytes": 4396,
+      "first_hit_rank": 4,
+      "index_ms": 3
+    },
+    {
+      "name": "issue",
+      "kind": "symbol",
+      "ground_truth_files": [
+        "php83/html.php",
+        "php85/html.php",
+        "src/WordPress/Maintenance/Health.php"
+      ],
+      "baseline_files": 15,
+      "baseline_bytes": 1203462,
+      "index_found": true,
+      "index_calls": 1,
+      "index_files": 3,
+      "index_bytes": 5497,
+      "first_hit_rank": 1,
+      "index_ms": 3
+    },
+    {
+      "name": "messageIssue",
+      "kind": "symbol",
+      "ground_truth_files": [
+        "php83/html.php",
+        "php85/html.php",
+        "src/Template/Linter.php"
+      ],
+      "baseline_files": 3,
+      "baseline_bytes": 1083889,
+      "index_found": true,
+      "index_calls": 1,
+      "index_files": 3,
+      "index_bytes": 6015,
+      "first_hit_rank": 1,
+      "index_ms": 3
+    },
+    {
+      "name": "parseOr",
+      "kind": "symbol",
+      "ground_truth_files": [
+        "php83/html.php",
+        "php85/html.php",
+        "src/I18n/PluralForms.php",
+        "src/Ssi/Expression.php"
+      ],
+      "baseline_files": 4,
+      "baseline_bytes": 1091442,
+      "index_found": true,
+      "index_calls": 1,
+      "index_files": 4,
+      "index_bytes": 5472,
+      "first_hit_rank": 1,
+      "index_ms": 3
+    },
+    {
+      "name": "register_rest_route",
+      "kind": "symbol",
+      "ground_truth_files": [
+        "tests/wp-stubs.php"
+      ],
+      "baseline_files": 4,
+      "baseline_bytes": 1079870,
+      "index_found": true,
+      "index_calls": 1,
+      "index_files": 1,
+      "index_bytes": 1883,
+      "first_hit_rank": 1,
+      "index_ms": 3
+    },
+    {
+      "name": "runOne",
+      "kind": "symbol",
+      "ground_truth_files": [
+        "tests/TestRunner.php"
+      ],
+      "baseline_files": 1,
+      "baseline_bytes": 21870,
+      "index_found": true,
+      "index_calls": 1,
+      "index_files": 1,
+      "index_bytes": 1667,
+      "first_hit_rank": 1,
+      "index_ms": 2
+    },
+    {
+      "name": "splitNamespace",
+      "kind": "symbol",
+      "ground_truth_files": [
+        "php83/html.php",
+        "php85/html.php",
+        "src/Template/TemplateLocator.php"
+      ],
+      "baseline_files": 3,
+      "baseline_bytes": 1066167,
+      "index_found": true,
+      "index_calls": 1,
+      "index_files": 3,
+      "index_bytes": 3645,
+      "first_hit_rank": 1,
+      "index_ms": 3
+    },
+    {
+      "name": "truthy",
+      "kind": "symbol",
+      "ground_truth_files": [
+        "php83/html.php",
+        "php85/html.php",
+        "src/Ssi/Expression.php",
+        "src/Template/Expression.php"
+      ],
+      "baseline_files": 7,
+      "baseline_bytes": 1142692,
+      "index_found": true,
+      "index_calls": 1,
+      "index_files": 4,
+      "index_bytes": 6838,
+      "first_hit_rank": 1,
+      "index_ms": 3
+    }
+  ]
+}
