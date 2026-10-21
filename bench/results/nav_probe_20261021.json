@@ -2,8 +2,9 @@
   "probe": "nav_probe",
   "measured_on": "2026-10-21",
   "corpus": {
-    "config": "C:/AutoClaw/RAGRAF/config/htmlphp-src.yaml",
-    "root": "C:/AutoClaw/RAGRAF.git/htmlphp-src",
+    "name": "htmlphp-src",
+    "root_name": "htmlphp-src",
+    "config_name": "htmlphp-src.yaml",
     "rev": "rev-0001",
     "capability": "full",
     "sealed_at": "2026-10-12T23:46:11+03:00",
@@ -132,7 +133,7 @@
       "index_files": 3,
       "index_bytes": 3656,
       "first_hit_rank": 1,
-      "index_ms": 2
+      "index_ms": 3
     },
     {
       "name": "fallback",
@@ -149,7 +150,7 @@
       "index_files": 3,
       "index_bytes": 5759,
       "first_hit_rank": 1,
-      "index_ms": 3
+      "index_ms": 2
     },
     {
       "name": "group",
@@ -181,7 +182,7 @@
       "index_files": 3,
       "index_bytes": 5497,
       "first_hit_rank": 1,
-      "index_ms": 3
+      "index_ms": 4
     },
     {
       "name": "messageIssue",
@@ -231,7 +232,7 @@
       "index_files": 1,
       "index_bytes": 1883,
       "first_hit_rank": 1,
-      "index_ms": 3
+      "index_ms": 2
     },
     {
       "name": "runOne",
@@ -246,7 +247,7 @@
       "index_files": 1,
       "index_bytes": 1667,
       "first_hit_rank": 1,
-      "index_ms": 2
+      "index_ms": 1
     },
     {
       "name": "splitNamespace",

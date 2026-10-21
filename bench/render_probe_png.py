@@ -87,8 +87,9 @@ def render(report: dict, out_path: Path) -> None:
 
     # ── шапка ────────────────────────────────────────────────────────────────
     draw.text((pad, 48), "RAGRAF · nav_probe", font=f_title, fill=INK)
+    shell = corpus.get("root_name") or Path(corpus.get("name", "corpus")).name
     draw.text((pad, 108),
-              f"corpus {corpus['root'].rstrip('/').split('/')[-1]}   "
+              f"corpus {shell}   "
               f"rev {corpus['rev']}   {corpus['capability']}   "
               f"{report['measured_on']}",
               font=f_sub, fill=DIM)

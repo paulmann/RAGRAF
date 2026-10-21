@@ -279,9 +279,14 @@ def measure(project: Path, limit: int, exts: set[str]) -> dict:
     return {
         "probe": "nav_probe",
         "measured_on": date.today().isoformat(),
+        # Только имена, без абсолютных путей: артефакт публикуется, и локальная
+        # раскладка машины автора к замеру отношения не имеет. Абсолютный путь
+        # делал бы артефакт похожим на машинно-зависимый и раскрывал структуру
+        # каталогов без пользы для проверяющего.
         "corpus": {
-            "config": str(project).replace("\\", "/"),
-            "root": root.as_posix(),
+            "name": Path(project).stem,
+            "root_name": root.name,
+            "config_name": Path(project).name,
             **_revision(cfg),
             "extensions": sorted(exts),
             "definitions_found": len(definitions),
@@ -348,7 +353,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[nav_probe] артефакт: {out_path.as_posix()}")
 
     summary = report["summary"]
-    print(f"[nav_probe] корпус: {report['corpus']['root']}  ревизия: {report['corpus']['rev']}"
+    print(f"[nav_probe] корпус: {report['corpus']['root_name']}  ревизия: {report['corpus']['rev']}"
           f"  режим: {report['corpus']['capability']}")
     print(f"[nav_probe] вопросов: {summary['questions']} (выборка детерминированная)")
     print()
