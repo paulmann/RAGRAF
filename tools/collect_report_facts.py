@@ -14,7 +14,7 @@ import pathlib
 import sqlite3
 import sys
 
-REPO = pathlib.Path(r"C:\AutoClaw\RAGRAF")
+REPO = pathlib.Path(__file__).resolve().parents[1]
 SAGA = pathlib.Path(r"C:\!.Tihon\sagaai_edit_github")
 
 print("=" * 78)
@@ -104,7 +104,7 @@ print()
 print("=" * 78)
 print("4. ФАЙЛЫ ОТЧЁТА")
 print("=" * 78)
-docs = pathlib.Path(r"C:\AutoClaw\docs")
+docs = pathlib.Path(__file__).resolve().parents[1].parent / "docs"
 print(f"  каталог отчётов: {docs}")
 print(f"  существует: {docs.exists()}")
 if docs.exists():

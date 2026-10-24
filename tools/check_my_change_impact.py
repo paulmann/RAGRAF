@@ -23,7 +23,7 @@ PY = SAGA / ".venv" / "Scripts" / "python.exe"
 TARGET = SAGA / "ui" / "pages" / "orchestrator.py"
 BACKUP = TARGET.with_suffix(".py.bak-slash")
 TEST = "tests/test_usability_fixes.py::test_orch_send_persists_raw_uploads_and_sets_notice"
-BASETEMP = r"C:\AutoClaw\RAGRAF\.staging\pytest_tmp"
+BASETEMP = str(pathlib.Path(__file__).resolve().parents[1] / ".staging/pytest_tmp")
 
 
 def run_test(label: str) -> tuple[int, str]:

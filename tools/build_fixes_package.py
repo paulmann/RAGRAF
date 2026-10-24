@@ -1,6 +1,6 @@
 """Сборка пакета исправлений для передачи разработчику.
 
-Формируется `C:\\AutoClaw\\docs\\SagaAI\\Fixes\\` со СТРУКТУРОЙ каталогов
+Формируется `docs\\SagaAI\\Fixes\\` со СТРУКТУРОЙ каталогов
 проекта: разработчик видит, куда какой файл положить.
 
 Для каждого файла:
@@ -22,7 +22,7 @@ import shutil
 from datetime import datetime
 
 SAGA = pathlib.Path(r"C:\!.Tihon\sagaai_edit_github")
-DOCS = pathlib.Path(r"C:\AutoClaw\docs\SagaAI")
+DOCS = pathlib.Path(__file__).resolve().parents[1].parent / "docs/SagaAI"
 OUT = DOCS / "Fixes"
 
 # --- Изменённые файлы и их обоснование ---

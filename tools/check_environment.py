@@ -14,8 +14,8 @@ import pathlib
 import subprocess
 import sys
 
-REPO = pathlib.Path(r"C:\AutoClaw\RAGRAF")
-PROMPT = pathlib.Path(r"C:\Users\mvd.AMD5700X3D\.pi\agent\AGENTS.md")
+REPO = pathlib.Path(__file__).resolve().parents[1]
+PROMPT = pathlib.Path.home() / ".pi/agent/AGENTS.md"
 
 PASS = 0
 FAIL = 0
@@ -153,10 +153,10 @@ print("=" * 78)
 # `.staging` самого RAGRAF не проверяется: это рабочий каталог проекта,
 # и файлы в нём — мои инструменты, а не мусор.
 SERVICES = {
-    "z.batteryservice.ru": pathlib.Path(r"C:\AutoClaw\z.batteryservice.ru\.ragraf"),
-    "revoap.com": pathlib.Path(r"C:\AutoClaw\revoap.com\.ragraf"),
-    "MD.Viewer": pathlib.Path(r"C:\AutoClaw\MD.Viewer\.ragraf"),
-    "RdpMON": pathlib.Path(r"C:\1st_RdpMON\Service\.ragraf"),
+    "z.batteryservice.ru": pathlib.Path(__file__).resolve().parents[1].parent / "z.batteryservice.ru/.ragraf",
+    "revoap.com": pathlib.Path(__file__).resolve().parents[1].parent / "revoap.com/.ragraf",
+    "MD.Viewer": pathlib.Path(__file__).resolve().parents[1].parent / "MD.Viewer/.ragraf",
+    "RdpMON": pathlib.Path(__file__).resolve().parents[1].parent.parent / "1st_RdpMON" / "Service/.ragraf",
 }
 for name, root in SERVICES.items():
     if not root.exists():

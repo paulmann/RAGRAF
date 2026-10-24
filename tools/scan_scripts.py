@@ -14,8 +14,8 @@ import pathlib
 from collections import defaultdict
 
 REPOS = [
-    pathlib.Path(r"C:\AutoClaw"),
-    pathlib.Path(r"C:\1st_RdpMON\Service"),
+    pathlib.Path(__file__).resolve().parents[1].parent,
+    pathlib.Path(__file__).resolve().parents[1].parent.parent / "1st_RdpMON" / "Service",
 ]
 
 SKIP_DIRS = {

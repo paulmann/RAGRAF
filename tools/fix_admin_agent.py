@@ -21,7 +21,7 @@ from __future__ import annotations
 import pathlib
 import sys
 
-REPO = pathlib.Path(r"C:\AutoClaw\RAGRAF")
+REPO = pathlib.Path(__file__).resolve().parents[1]
 TARGET = REPO / "src" / "ragraf" / "admin_server.py"
 text = TARGET.read_text(encoding="utf-8")
 

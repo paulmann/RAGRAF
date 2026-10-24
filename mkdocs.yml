@@ -11,8 +11,8 @@
 
 site_name: RAGRAF
 site_description: >-
-  A graph-and-vector knowledge base of code for LLM agents: 38 fixed operations,
-  40 MCP tools, verifiable file:line facts, SQLite + FTS5 + vectors, fully offline.
+  A graph-and-vector knowledge base of code for LLM agents: 40 fixed operations,
+  50 MCP tools, verifiable file:line facts, SQLite + FTS5 + vectors, fully offline.
 site_url: https://paulmann.github.io/RAGRAF/
 site_author: Mikhail Deynekin
 
@@ -29,7 +29,7 @@ copyright: >-
 
 theme:
   name: material
-  language: en
+  language: ru
   features:
     - navigation.sections
     - navigation.top
@@ -102,27 +102,78 @@ validation:
     absolute_links: info
 
 nav:
-  - Home: index.md
-  - Architecture:
-      - Principles and components: architecture/ARCHITECTURE.md
-      - Specification (requirements): architecture/SPECIFICATION.md
-      - Acceptance and measurements: architecture/ACCEPTANCE.md
-  - Integration:
-      - Attaching to an agent (MCP): implementation/INTEGRATION.md
-      - Code property graph (Joern): implementation/CPG_INTEGRATION.md
-  - Skill (the index as an agent uses it):
-      - Skill overview: skills/ragraf-core/SKILL.md
-      - Operations reference: skills/ragraf-core/reference/operations.md
-      - Repair and recovery: skills/ragraf-core/reference/repair.md
-  - Article: article/RAGRAF_ARTICLE.md
-  - Defect register: DEFECTS.md
-  - Русская документация:
-      - Архитектура: ru/02_architecture/ARCHITECTURE.md
-      - Требования (ТЗ): ru/02_architecture/TZ.md
-      - Критерии приёмки: ru/02_architecture/ACCEPTANCE.md
-      - Подключение к агенту: ru/03_implementation/INTEGRATION.md
-      - Граф свойств кода (Joern): ru/03_implementation/CPG_INTEGRATION.md
-      - Навык работы с индексом: ru/skills/ragraf-core/SKILL.md
-      - Справочник операций: ru/skills/ragraf-core/reference/operations.md
-      - Восстановление: ru/skills/ragraf-core/reference/repair.md
-      - Обзорная статья: ru/05_article/RAGRAF_ARTICLE.md
+  # Список составлен по ФАКТИЧЕСКОМУ составу docs/ в поставке, а не по прежней
+  # раскладке. Измерено 24.10.2026: прежний nav называл 20 страниц, 17 из них
+  # в поставке отсутствовали (docs/index.md, docs/DEFECTS.md, docs/architecture/**,
+  # docs/implementation/**, docs/article/**, docs/ru/**), из-за чего
+  # `mkdocs build --strict` падал 17 предупреждениями и сайт не обновлялся.
+  # Русские ветви исчезли не «молча»: каталога docs/ru/** в дереве нет с выпуска
+  # 0.2.0 — русские оригиналы и есть docs/02_architecture/**, docs/03_implementation/**
+  # и docs/05_article/**, они названы ниже напрямую.
+  - Главная: index.md
+  - Что это и как устроено:
+      - Архитектура: 02_architecture/ARCHITECTURE.md
+      - Техническое задание: 02_architecture/TZ.md
+      - Протоколы замеров и приёмки: 02_architecture/ACCEPTANCE.md
+      - "ADR: слой знаний агентов (L3)": 02_architecture/ADR-AGENT-KNOWLEDGE-L3.md
+  - Подключение к агентам:
+      - Регламент интеграции: 03_implementation/INTEGRATION.md
+      - RAGRAF и AutoClaw: 03_implementation/AUTOCLAW_INTEGRATION.md
+      - RAGRAF и DeepSeek Harness: 03_implementation/HARNESS_INTEGRATION.md
+      - Настройка и каталог возможностей: 03_implementation/AGENTS_SETUP_AND_CAPABILITIES.md
+      - Доступ и транспорт: 03_implementation/ACCESS_AND_TRANSPORT.md
+      - Контракт knowledge_search v1: 03_implementation/KNOWLEDGE_SEARCH_CONTRACT.md
+  - Возможности:
+      - Граф свойств кода (Joern): 03_implementation/CPG_INTEGRATION.md
+      - Живой слой баз данных: 03_implementation/DB_INDEX.md
+      - Хранилище секретов: 03_implementation/SECRETS-VAULT.md
+      - Лицензирование: 03_implementation/LICENSING.md
+  - Навык для агента:
+      - Обзор навыка: skills/ragraf-core/SKILL.md
+      - Справочник операций: skills/ragraf-core/reference/operations.md
+      - Восстановление и починка: skills/ragraf-core/reference/repair.md
+      - Навык «хранилище секретов»: skills/ragraf-secrets/SKILL.md
+  - Поставка:
+      - Конвейер поставки: 03_implementation/RELEASE-PIPELINE.md
+      - Источники поставки: 03_implementation/RELEASE-SOURCES.md
+  - Статья: 05_article/RAGRAF_ARTICLE.md
+  - Отчёты и замеры:
+      - Языки разработки и роль документа: RAGRAF-REPORT.md
+      - Эффект внедрения на /agreements/: 03_implementation/RAGRAF_EFFECT_REPORT.md
+      - Полигон z.batteryservice.ru: 03_implementation/POLYGON_REPORT.md
+      - Приёмка двухуровневого указателя (G0-G7): 03_implementation/ACCEPTANCE_REPORT.md
+      - Этапы 0-1: 03_implementation/ETAP_0_1_REPORT.md
+      - "M1-M2: каркас и граф PHP": 03_implementation/M1_M2_REPORT.md
+      - "P1: ускорение поиска": 03_implementation/P1_REPORT.md
+      - "P2: обязательное использование": 03_implementation/P2_REPORT.md
+      - "P3: гейт и приёмка": 03_implementation/P3_REPORT.md
+      - "Этап 3: доработка": 06_reports/ETAP_3_REPORT.md
+      - После обновления AutoClaw: 03_implementation/AUTOCLAW-2.1-UPDATE-REPORT-20261015.md
+      - "HARNESS: замеры и находки": 03_implementation/HARNESS_FINDINGS_2026-10-13.md
+      - "SagaAI: починка по журналу": 03_implementation/SAGAAI_RAGRAF_LOG_FIXES.md
+      - Проверка session-search в HARNESS: 04_research/HARNESS_SESSION_SEARCH_VERIFICATION.md
+  - Исследования:
+      - Итоговый отчёт исследования: 01_research/00_RESEARCH_REPORT.md
+      - Верификация статьи-источника: 01_research/01_ARTICLE_COVERAGE.md
+      - Литература: 01_research/02_LITERATURE.md
+      - Инструментальный ландшафт: 01_research/03_TOOLS.md
+      - Замеры корпусов: 01_research/04_CORPUS.md
+      - Вход в ТЗ: 01_research/SPEC_INPUT.md
+      - Чего не хватает для агента: 04_research/GAPS_FOR_LLM.md
+      - Дополнительные объекты индекса: 04_research/EXTRA_ENTITIES.md
+      - Видеокарта в RAGRAF: 04_research/GPU_ANALYSIS.md
+      - cuGraph и сервер Joern: 04_research/CUGRAPH_JOERN_SERVER_ANALYSIS.md
+      - Слои памяти HARNESS и RAGRAF: 04_research/MEMORY_LAYERS_HARNESS_RAGRAF.md
+      - Оформление панели управления: 04_research/ADMIN_UI_PIPELINE.md
+      - Стиль shadcn/ui для входа: 04_research/SHADCN_LOGIN_REFERENCE.md
+      - Аналоги процессов: 04_research/WORKFLOW_ANALOGS.md
+  - Планы и промты:
+      - Мастер-план: 00_plan/PLAN.md
+      - Указатель «Я это ты»: 00_plan/PLAN-IAM-YOU-GLOBAL-MAP.md
+      - RAGRAF как единственный инструмент (XERJ): 00_plan/PLAN-ONE-TOOL-XERJ-PARITY.md
+      - Технический гейт и приёмка 3.2/3.4: 03_implementation/PLAN_3_2_3_4.md
+      - Фаза 0 — промт запуска: plans/PHASE0-PROMPT-2026-10-23.md
+      - "ТЗ: поиск по коду из HARNESS": TZ-2026-10-14-harness-ragraf-usage.md
+      - "Промт: после обновления AutoClaw": PROMPT-AFTER-AUTOCLAW-UPDATE.md
+      - "Промт: доработка сайта": PROMPT-ragraf-site-update.md
+      - "Промт: реализация после обновления": 03_implementation/PROMPT-AFTER-AUTOCLAW-UPDATE.md

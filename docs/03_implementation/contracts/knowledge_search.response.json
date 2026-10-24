@@ -26,7 +26,7 @@
           "surface": "current",
           "snippet": "доступ к MySQL восстановлен, проверка прошла",
           "session": {
-            "cwd": "C:\\AutoClaw\\demo-project",
+            "cwd": "demo-project",
             "created_at": "2026-10-21T08:50:00+03:00",
             "agent_preset": "standard",
             "live": false,

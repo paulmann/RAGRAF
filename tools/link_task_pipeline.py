@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import pathlib
 
-REPO = pathlib.Path(r"C:\AutoClaw\RAGRAF")
+REPO = pathlib.Path(__file__).resolve().parents[1]
 
 # --- 1. CLI: чтение задачи из окружения ---
 print("=" * 78)

@@ -5,6 +5,38 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: [S
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-10-24
+
+### Fixed (documentation site and machine paths, 2026-10-24)
+- The documentation site navigation now names the pages that are actually shipped.
+  The previous `nav` still described the pre-0.2.0 layout: 20 entries, 17 of them
+  pointing at files the release does not contain (`docs/index.md`, `docs/DEFECTS.md`,
+  `docs/architecture/**`, `docs/implementation/**`, `docs/article/**`, `docs/ru/**`).
+  `mkdocs build --strict` failed with 17 navigation warnings, so GitHub Pages was
+  never published. The navigation is rebuilt from the measured `docs/` tree
+  (59 targets, all present), and `docs/index.md` was added as the site's home page.
+  The Russian `docs/ru/**` branch no longer exists — the Russian originals *are*
+  `docs/02_architecture/**`, `docs/03_implementation/**` and `docs/05_article/**`
+  since 0.2.0 — so the navigation names those files directly instead of dropping
+  the section silently.
+- Six documentation links pointed outside the documentation tree (the contribution
+  agreement at the repository root and two source modules) and two anchors used
+  GitHub-style slugs;
+  all eight are now absolute repository links or the anchors MkDocs actually
+  generates. With them the build is clean: `mkdocs build --strict` exits 0.
+- Machine paths of the author's workstation are gone from the shipped tree. The
+  measured state was 86 files — 25 with a path into a home directory, 70 with a path
+  into the private working tree (9 files counted in both). Documentation now uses
+  paths relative to the released tree, scripts derive their root from their own
+  location, and one-off historical scripts keep an explicit `<полигон>` stand-in
+  instead of someone else's absolute path.
+- The release checker gained a ninth rule, `paths`, and the gate a fifth corruption:
+  a home-directory path written into a shipped `.md` file has to fail the checker.
+  The rule repeats the wording already used by the community-wrapper check
+  (`tools/check_community_wrapper.py`): a violation is a path *into* a directory,
+  that is, one with a segment after the name. Stand-ins such as
+  `C:\Users\<пользователь>` are allowed by a closed list with a reason each.
+
 ## [0.2.0] — 2026-10-24
 
 ### Changed (version and delivery, 2026-10-24)

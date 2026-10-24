@@ -35,7 +35,7 @@ import subprocess
 
 SAGA = pathlib.Path(r"C:\!.Tihon\sagaai_edit_github")
 PY = SAGA / ".venv" / "Scripts" / "python.exe"
-SNAPSHOT = pathlib.Path(r"C:\AutoClaw\docs\SagaAI\Fixes") / "перед-обновлением-версии.json"
+SNAPSHOT = pathlib.Path(__file__).resolve().parents[1].parent / "docs/SagaAI/Fixes" / "перед-обновлением-версии.json"
 
 # Целевые версии: те, что pip предложил в режиме проверки.
 TARGETS = [

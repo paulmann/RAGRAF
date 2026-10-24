@@ -79,7 +79,7 @@ print("=" * 78)
 print("2. ПРИВАТНОСТЬ: ПУТЕЙ И ЗАПРОСОВ НЕТ")
 print("=" * 78)
 poison = [
-    "C:\\AutoClaw\\RAGRAF",
+    "RAGRAF",
     "/home/user/project",
     "SELECT * FROM users",
     "secret-token-value",

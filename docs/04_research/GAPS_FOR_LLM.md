@@ -1,6 +1,6 @@
 # Чего не хватает RAGRAF для качественной разработки кода LLM-агентом
 
-**Дата:** 5 октября 2026 г. · **Корпус:** `C:\AutoClaw\z.batteryservice.ru`, ревизия индекса `rev-0006`, `capability=full`
+**Дата:** 5 октября 2026 г. · **Корпус:** `z.batteryservice.ru`, ревизия индекса `rev-0006`, `capability=full`
 **Область:** 17 операций фасада (`src/ragraf/facade.py`), схемы таблиц графа, телеметрия `usage_call`.
 **Исходные данные:** `docs/03_implementation/POLYGON_REPORT.md` (10 дефектов), живой прогон операций.
 

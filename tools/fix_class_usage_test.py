@@ -31,7 +31,7 @@ from __future__ import annotations
 import pathlib
 import re
 
-TARGET = pathlib.Path(r"C:\AutoClaw\RAGRAF\tests\test_class_usage.py")
+TARGET = pathlib.Path(__file__).resolve().parents[1] / "tests/test_class_usage.py"
 text = TARGET.read_text(encoding="utf-8")
 
 # --- блок 2: класс, который раньше был без правил ---

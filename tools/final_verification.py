@@ -17,7 +17,7 @@ import re
 import subprocess
 import sys
 
-REPO = pathlib.Path(r"C:\AutoClaw\RAGRAF")
+REPO = pathlib.Path(__file__).resolve().parents[1]
 PY = sys.executable
 
 # Тесты сессии: (файл, что проверяет).

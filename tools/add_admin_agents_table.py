@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import pathlib
 
-REPO = pathlib.Path(r"C:\AutoClaw\RAGRAF")
+REPO = pathlib.Path(__file__).resolve().parents[1]
 TARGET = REPO / "admin" / "static" / "app.js"
 text = TARGET.read_text(encoding="utf-8")
 

@@ -16,7 +16,7 @@ from __future__ import annotations
 import pathlib
 import shutil
 
-REPO = pathlib.Path(r"C:\AutoClaw\RAGRAF")
+REPO = pathlib.Path(__file__).resolve().parents[1]
 TARGET = REPO / "config" / "revoap.yaml"
 BACKUP = REPO / ".staging" / "revoap.yaml.before-dedupe"
 

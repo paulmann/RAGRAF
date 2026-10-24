@@ -17,7 +17,7 @@ from __future__ import annotations
 import pathlib
 
 TARGET = pathlib.Path(
-    r"C:\AutoClaw\docs\SagaAI\SagaAI-отчёт-проблем-2026-10-06.md"
+    str(pathlib.Path(__file__).resolve().parents[1].parent / "docs/SagaAI/SagaAI-отчёт-проблем-2026-10-06.md")
 )
 text = TARGET.read_text(encoding="utf-8")
 print(f"  отчёт до правки: {len(text.splitlines())} строк")

@@ -29,7 +29,7 @@ def connect(path: str | Path, *, readonly: bool = False) -> sqlite3.Connection:
     Про режим WAL и чтение. На соединении `mode=ro` прагма `journal_mode=WAL`
     не выставляется: это запись, и там, где каталог базы недоступен для записи,
     она падает с `unable to open database file` (измерено 15.10.2026 на
-    `C:\\AutoClaw\\MD.Viewer\\.ragraf\\control.sqlite`: копия базы читается, а
+    `MD.Viewer\\.ragraf\\control.sqlite`: копия базы читается, а
     открыть её на месте нельзя). База уже в WAL — читать её можно, менять режим
     для чтения не нужно. Прежняя редакция выставляла WAL и на `readonly`,
     поэтому ЧТЕНИЕ требовало права записи, и панель не могла показать

@@ -23,7 +23,7 @@ import sys
 REPO = pathlib.Path(__file__).resolve().parents[1]
 STAGING = REPO / ".staging"
 
-LIVE = pathlib.Path(r"C:\AutoClaw\revoap.com\.ragraf\control.sqlite")
+LIVE = pathlib.Path(__file__).resolve().parents[1].parent / "revoap.com/.ragraf/control.sqlite"
 work_db = STAGING / "mcp_diag.sqlite"
 if work_db.exists():
     work_db.unlink()

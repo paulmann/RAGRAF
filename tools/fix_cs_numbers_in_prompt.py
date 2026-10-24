@@ -5,7 +5,7 @@
 получит неверную картину.
 
 Замер (выполнен здесь же):
-    всего .cs в C:\\1st_RdpMON\\Service:           1385
+    всего .cs в 1st_RdpMON\\Service:           1385
     из них в .zwork (служебный агента):             53
     из них в obj (сгенерированные сборкой):        168
     попадает в индекс:                            1164
@@ -22,17 +22,17 @@ from __future__ import annotations
 
 import pathlib
 
-PROMPT = pathlib.Path(r"C:\Users\mvd.AMD5700X3D\.pi\agent\AGENTS.md")
+PROMPT = pathlib.Path.home() / ".pi/agent/AGENTS.md"
 RAGRAF_PROMPT = pathlib.Path(
-    r"C:\AutoClaw\RAGRAF\.staging\AGENTS_updates"
+    str(pathlib.Path(__file__).resolve().parents[1] / ".staging/AGENTS_updates")
 )
 
-OLD = """**Самое дорогое следствие:** в `C:\\1st_RdpMON\\Service` 1217 файлов `.cs` —
+OLD = """**Самое дорогое следствие:** в `1st_RdpMON\\Service` 1217 файлов `.cs` —
 это основной язык проекта. RAGRAF не мог ответить ни на один вопрос о его
 коде: `symbol`, `callers`, `code` возвращали пусто. Инструмент был бесполезен
 ровно там, где нужен больше всего."""
 
-NEW = """**Самое дорогое следствие:** в `C:\\1st_RdpMON\\Service` 1385 файлов `.cs` —
+NEW = """**Самое дорогое следствие:** в `1st_RdpMON\\Service` 1385 файлов `.cs` —
 это основной язык проекта. RAGRAF не мог ответить ни на один вопрос о его
 коде: `symbol`, `callers`, `code` возвращали пусто. Инструмент был бесполезен
 ровно там, где нужен больше всего.

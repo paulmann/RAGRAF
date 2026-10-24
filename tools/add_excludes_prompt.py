@@ -20,8 +20,8 @@ import pathlib
 import shutil
 import sys
 
-REPO = pathlib.Path(r"C:\AutoClaw\RAGRAF")
-TARGET = pathlib.Path(r"C:\Users\mvd.AMD5700X3D\.pi\agent\AGENTS.md")
+REPO = pathlib.Path(__file__).resolve().parents[1]
+TARGET = pathlib.Path.home() / ".pi/agent/AGENTS.md"
 BACKUP = TARGET.with_suffix(".md.bak-excludes")
 sys.path.insert(0, str(REPO / "src"))
 
@@ -99,11 +99,11 @@ exclude = list(DEFAULT_EXCLUDES) + из_файла_конфига   # config.py
 
 ```powershell
 # 1. сколько файлов выпадет по каждому корпусу
-python C:\\AutoClaw\\RAGRAF\\tools\\measure_safe_excludes.py
+python tools\\measure_safe_excludes.py
 
 # 2. проверки после правки: число файлов не должно измениться
-python C:\\AutoClaw\\RAGRAF\\tests\\test_exclude_defaults.py
-python C:\\AutoClaw\\RAGRAF\\tests\\test_exclude_configs.py
+python tests\\test_exclude_defaults.py
+python tests\\test_exclude_configs.py
 ```
 
 Первая команда показывает, сколько файлов выпадет при внесении каждого

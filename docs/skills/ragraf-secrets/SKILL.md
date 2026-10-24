@@ -5,7 +5,7 @@ description: "Хранилище секретов RAGRAF: пароли, токе
 
 # RAGRAF: хранилище секретов
 
-Значения лежат **только** в `C:\AutoClaw\RAGRAF\catalog\` (вне корпуса),
+Значения лежат **только** в `catalog\` (вне корпуса),
 **только** шифротекстом и выдаются **только** по праву с записью в аудит.
 Правило «не индексировать» не менялось: значение не попадает ни в индекс, ни в
 поиск, ни в карты.
@@ -42,7 +42,7 @@ python tools/ragraf.py secrets policy
 ## Операции (CLI)
 
 ```powershell
-cd C:\AutoClaw\RAGRAF
+cd RAGRAF
 python tools/ragraf.py secrets init                         # создать мастер-ключ (один раз)
 python tools/ragraf.py secrets list                         # что сохранено: имя, тип, маска, режим, автор, время
 python tools/ragraf.py secrets list --query postgres --kind password
@@ -129,12 +129,12 @@ python tools/ragraf.py secrets audit --limit 50             # журнал: кт
 Страница секретов в админ-панели, scopes `secrets:read`/`secrets:write` для MCP
 по HTTP, автоматическое сохранение встреченного с детекторами, миграция
 plaintext из `catalog/db_access.json`, разбор срока сертификата из тела. Полный
-список — `C:\AutoClaw\AMD\08-ragraf\ПРОМТ-Хранилище-секретов.md` §5–§7.
+список — `AMD\08-ragraf\ПРОМТ-Хранилище-секретов.md` §5–§7.
 
 ## Проверки
 
 ```powershell
-cd C:\AutoClaw\RAGRAF
+cd RAGRAF
 python tests\test_vault.py                 # 60 свойств: крипто, права, аудит, ротация, снимок
 python tools\ragraf.py secrets check       # ok: true + отпечаток ключа
 ```

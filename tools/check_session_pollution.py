@@ -17,7 +17,7 @@ from __future__ import annotations
 import pathlib
 import sqlite3
 
-DB = pathlib.Path(r"C:\AutoClaw\z.batteryservice.ru\.ragraf\control.sqlite")
+DB = pathlib.Path(__file__).resolve().parents[1].parent / "z.batteryservice.ru/.ragraf/control.sqlite"
 
 conn = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
 conn.row_factory = sqlite3.Row

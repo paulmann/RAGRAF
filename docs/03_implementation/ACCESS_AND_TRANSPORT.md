@@ -111,7 +111,7 @@ cookie сессии (`HttpOnly`, `SameSite=Strict`, срок 8 часов).
 было с `agent`/`task`/`arg_hash`. Сводка теперь отдаёт разрез:
 
 ```powershell
-python C:\AutoClaw\RAGRAF\tools\ragraf.py -p C:\AutoClaw\RAGRAF\config\ragraf.yaml usage
+python tools\ragraf.py -p config\ragraf.yaml usage
 ```
 
 ```
@@ -141,9 +141,9 @@ python C:\AutoClaw\RAGRAF\tools\ragraf.py -p C:\AutoClaw\RAGRAF\config\ragraf.ya
 
 ```powershell
 # Запуск: слушает только loopback, корпус указан явно
-python C:\AutoClaw\RAGRAF\tools\ragraf-mcp-http.py `
+python tools\ragraf-mcp-http.py `
   --port=8765 `
-  --project=C:\AutoClaw\RAGRAF\config\ragraf.yaml `
+  --project=config\ragraf.yaml `
   --agent=AutoClaw --agent-kind=autoclaw
 ```
 
@@ -219,16 +219,16 @@ mcp_servers:
 
 ```powershell
 # Интерфейс: пароль, токены, журнал (поднимает настоящий сервер)
-python C:\AutoClaw\RAGRAF\tests\test_access_live.py        # 29 проверок
+python tests\test_access_live.py        # 29 проверок
 
 # MCP по HTTP: протокол, доступ, журнал (поднимает настоящий сервер)
-python C:\AutoClaw\RAGRAF\tests\test_mcp_http.py           # 19 проверок
+python tests\test_mcp_http.py           # 19 проверок
 
 # Согласованность с внешними клиентами (урезанное окружение, автоопределение корпуса)
-python C:\AutoClaw\RAGRAF\tests\test_mcp_compat.py         # 15 проверок
+python tests\test_mcp_compat.py         # 15 проверок
 
 # Чекер: правило защиты доступа (17 проверок, 0 ошибок, 0 предупреждений)
-pwsh -NoLogo -NoProfile -NonInteractive -File C:\AutoClaw\RAGRAF\tools\Invoke-ProjectDoctrine.ps1
+pwsh -NoLogo -NoProfile -NonInteractive -File tools\Invoke-ProjectDoctrine.ps1
 ```
 
 Признаки работающей защиты, которые видно сразу:
@@ -303,7 +303,7 @@ AutoClaw (таблица `governed_connected_sources`) — 0; HTTP-сервис 
 ### Что проверить после настройки
 
 ```powershell
-python C:\AutoClaw\RAGRAF\tests\test_ragraf_mode.py    # режим, пробы, автонастройка
+python tests\test_ragraf_mode.py    # режим, пробы, автонастройка
 ```
 
 Признаки, которые видно сразу: в разделе «Режим и клиенты» у выбранного канала
@@ -338,7 +338,7 @@ python C:\AutoClaw\RAGRAF\tests\test_ragraf_mode.py    # режим, пробы,
 
 ```powershell
 # 1. Снять пароль и удалить выданные токены: доступ вернётся к токену сессии.
-$home2 = 'C:\AutoClaw\RAGRAF'
+$home2 = 'RAGRAF'
 Remove-Item "$home2\catalog\admin_auth.json","$home2\catalog\access_tokens.json" -Force
 
 # 2. Остановить HTTP-сервис: отдельная точка входа, остальной RAGRAF не зависит.

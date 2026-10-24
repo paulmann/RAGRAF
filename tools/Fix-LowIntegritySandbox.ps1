@@ -67,8 +67,8 @@
 #>
 [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'High')]
 param(
-    [string[]]$Path = @('C:\AutoClaw\RAGRAF'),
-    [string]$JavaExe = 'C:\AutoClaw\RAGRAF\.tools\jdk\bin\java.exe',
+    [string[]]$Path = @((Split-Path -Parent $PSScriptRoot)),
+    [string]$JavaExe = (Join-Path (Split-Path -Parent $PSScriptRoot) '.tools\jdk\bin\java.exe'),
     [ValidateSet('M', 'H')][string]$TargetLabel = 'M',
     [switch]$Apply,
     [switch]$RemoveDenyDeleteAcl,

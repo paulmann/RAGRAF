@@ -1,8 +1,8 @@
 # Лицензирование RAGRAF
 
 Документ отвечает на вопросы «что можно», «что нельзя» и «почему так», не
-пересказывая текст лицензии. Текст — в [`LICENSE`](../../LICENSE), третьи
-стороны — в [`NOTICE`](../../NOTICE), условия вклада — в [`CLA.md`](../../CLA.md).
+пересказывая текст лицензии. Текст — в [`LICENSE`](https://github.com/paulmann/RAGRAF/blob/main/LICENSE), третьи
+стороны — в [`NOTICE`](https://github.com/paulmann/RAGRAF/blob/main/NOTICE), условия вклада — в [`CLA.md`](https://github.com/paulmann/RAGRAF/blob/main/CLA.md).
 
 > Тексты подготовлены инженерно, по фактам и замерам. Перед публикацией
 > коммерческого предложения желательна проверка юристом: этот документ
@@ -104,7 +104,7 @@ PolyForm-Noncommercial-1.0.0  -> PolyForm-Noncommercial-1.0.0
 
 ## 7. Третьи стороны
 
-Перечень с версиями и лицензиями — в [`NOTICE`](../../NOTICE). Коротко: Joern и
+Перечень с версиями и лицензиями — в [`NOTICE`](https://github.com/paulmann/RAGRAF/blob/main/NOTICE). Коротко: Joern и
 JDK (Apache-2.0), модель эмбеддингов и torch в поставку не входят и подчиняются
 своим лицензиям. Лицензия RAGRAF не меняет лицензии зависимостей и не даёт прав
 на них.

@@ -30,7 +30,7 @@ import hashlib
 import pathlib
 from collections import Counter, defaultdict
 
-ROOT = pathlib.Path(r"C:\AutoClaw")
+ROOT = pathlib.Path(__file__).resolve().parents[1].parent
 DOC_EXTS = {".md", ".markdown", ".rst", ".txt"}
 SKIP_TOP = {
     ".git", "node_modules", "vendor", ".zwork", ".ragraf", ".tools",

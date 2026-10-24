@@ -26,7 +26,7 @@ from __future__ import annotations
 import pathlib
 import shutil
 
-TARGET = pathlib.Path(r"C:\Users\mvd.AMD5700X3D\.pi\agent\AGENTS.md")
+TARGET = pathlib.Path.home() / ".pi/agent/AGENTS.md"
 BACKUP = TARGET.with_suffix(".md.bak-session5")
 
 if not TARGET.exists():
@@ -51,13 +51,13 @@ NEW_SECTIONS = """
 Проверка показала, что этого мало: в проектах, с которыми ведётся работа,
 есть код, о котором RAGRAF не знал вообще.
 
-Замер по двум каталогам (`C:\\AutoClaw` и `C:\\1st_RdpMON\\Service`) дал такие
+Замер по двум каталогам (`<полигон>` и `1st_RdpMON\\Service`) дал такие
 числа файлов: Perl 1235, Python 1337, C# 1217, shell 212, PowerShell 96,
 TypeScript 146, C/C++ 384. Все они не попадали в индекс, потому что их
 расширений не было в карте языков (`src/ragraf/config.py`, `LANG_BY_EXT`),
 а разбор деревом шёл только для трёх языков (`indexer.py`).
 
-**Самое дорогое следствие:** в `C:\\1st_RdpMON\\Service` 1217 файлов `.cs` —
+**Самое дорогое следствие:** в `1st_RdpMON\\Service` 1217 файлов `.cs` —
 это основной язык проекта. RAGRAF не мог ответить ни на один вопрос о его
 коде: `symbol`, `callers`, `code` возвращали пусто. Инструмент был бесполезен
 ровно там, где нужен больше всего.
@@ -89,7 +89,7 @@ bash, powershell, ruby, lua, go, java, c, cpp
 **Как проверить состав своего корпуса:**
 
 ```powershell
-python C:\\AutoClaw\\RAGRAF\\tools\\ragraf.py -p <конфиг> query repo_map
+python tools\\ragraf.py -p <конфиг> query repo_map
 ```
 
 В ответе — файлы с числом символов в каждом. Узлов нет у языка — значит он
@@ -100,7 +100,7 @@ python C:\\AutoClaw\\RAGRAF\\tools\\ragraf.py -p <конфиг> query repo_map
 корпусах сами — запись `languages` в конфиге осталась прежней. Порядок:
 
 ```powershell
-python C:\\AutoClaw\\RAGRAF\\tools\\update_corpus_configs.py
+python tools\\update_corpus_configs.py
 ```
 
 Скрипт смотрит, какие файлы новых типов есть в корпусе, и добавляет только
@@ -184,7 +184,7 @@ OLD_85 = """Если проекта нет в списке — его надо �
 if OLD_85 in text:
     pass  # эта строка в 8.2, не трогаем
 
-OLD_INIT_MARK = "python C:\\AutoClaw\\RAGRAF\\tools\\ragraf.py init"
+OLD_INIT_MARK = "python tools\\ragraf.py init"
 if OLD_INIT_MARK in text and "8.14" in text:
     # Добавляется короткая отсылка к 8.14 в конце раздела 8.5, если её ещё нет.
     marker = "### 8.6 Трассировка решений о правах (обязательная проверка)"

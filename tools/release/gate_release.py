@@ -9,12 +9,13 @@
 что оно снова признаётся годным: иначе «падение» могло быть следствием
 предыдущей порчи, а не текущей.
 
-Четыре обязательные порчи (по одной на класс дефекта):
+Пять обязательных порч (по одной на класс дефекта):
 
 1. `hash`     — байт подменён: файл есть, имя верное, содержимое чужое;
 2. `coverage` — лишний файл с «безобидным» расширением;
 3. `presence` — файл удалён;
-4. `secrets`  — в текстовый файл дописано секретоносное значение.
+4. `secrets`  — в текстовый файл дописано секретоносное значение;
+5. `paths`    — в текстовый файл дописан путь машины автора (домашний каталог).
 
 Дополнительно (защита в глубину, в счёт четырёх не входит): путь из списка
 исключений, положенный в сборку, — правило `excluded` обязано его поймать.
@@ -124,10 +125,10 @@ def main(argv: list[str] | None = None) -> int:
     code, output = verify(tree, "hash", manifest, source)
     if code == 1:
         caught += 1
-        print(f"[1/4] подмена байта в {victim}: ПОЙМАНО — {first_failure(output)}")
+        print(f"[1/5] подмена байта в {victim}: ПОЙМАНО — {first_failure(output)}")
     else:
         failures.append(f"подмена байта в {victim} не поймана (код {code})")
-        print(f"[1/4] подмена байта в {victim}: НЕ ПОЙМАНО")
+        print(f"[1/5] подмена байта в {victim}: НЕ ПОЙМАНО")
     (tree / victim).write_bytes(saved)
     code, output = verify(tree, "hash", manifest, source)
     if code != 0:
@@ -139,10 +140,10 @@ def main(argv: list[str] | None = None) -> int:
     code, output = verify(tree, "coverage", manifest, source)
     if code == 1:
         caught += 1
-        print(f"[2/4] лишний файл injected-report.txt: ПОЙМАНО — {first_failure(output)}")
+        print(f"[2/5] лишний файл injected-report.txt: ПОЙМАНО — {first_failure(output)}")
     else:
         failures.append(f"лишний файл не пойман (код {code})")
-        print("[2/4] лишний файл injected-report.txt: НЕ ПОЙМАНО")
+        print("[2/5] лишний файл injected-report.txt: НЕ ПОЙМАНО")
     intruder.unlink()
     code, output = verify(tree, "coverage", manifest, source)
     if code != 0:
@@ -155,10 +156,10 @@ def main(argv: list[str] | None = None) -> int:
     code, output = verify(tree, "presence", manifest, source)
     if code == 1:
         caught += 1
-        print(f"[3/4] удалённый файл {removed}: ПОЙМАНО — {first_failure(output)}")
+        print(f"[3/5] удалённый файл {removed}: ПОЙМАНО — {first_failure(output)}")
     else:
         failures.append(f"удаление {removed} не поймано (код {code})")
-        print(f"[3/4] удалённый файл {removed}: НЕ ПОЙМАНО")
+        print(f"[3/5] удалённый файл {removed}: НЕ ПОЙМАНО")
     (tree / removed).write_bytes(copy)
     code, output = verify(tree, "presence", manifest, source)
     if code != 0:
@@ -173,16 +174,39 @@ def main(argv: list[str] | None = None) -> int:
     code, output = verify(tree, "secrets", manifest, source)
     if code == 1:
         caught += 1
-        print(f"[4/4] секрет-строка в {polluted}: ПОЙМАНО — {first_failure(output)}")
+        print(f"[4/5] секрет-строка в {polluted}: ПОЙМАНО — {first_failure(output)}")
     else:
         failures.append(f"секретоносное значение в {polluted} не поймано (код {code})")
-        print(f"[4/4] секрет-строка в {polluted}: НЕ ПОЙМАНО")
+        print(f"[4/5] секрет-строка в {polluted}: НЕ ПОЙМАНО")
     (tree / polluted).write_bytes(baseline)
     code, output = verify(tree, "secrets", manifest, source)
     if code != 0:
         failures.append("после очистки правило secrets осталось красным")
 
-    # --- 5. Защита в глубину: исключённый путь ----------------------------
+    # --- 5. Путь машины автора --------------------------------------------
+    # Значение синтетическое: буква диска берётся у машины прогона, имя
+    # пользователя вымышленное. В самом файле гейта пути не видно — иначе
+    # правило 9 ловило бы эту проверку как нарушителя, и гейт пришлось бы
+    # выводить из-под собственного правила.
+    polluted = next((name for name in targets if name.endswith(".md")), targets[0])
+    baseline = (tree / polluted).read_bytes()
+    synthetic = (
+        "\nПуть автора: " + (Path.home().drive or "C:") + "\\Users\\operator\\AppData\\Local\\Temp\n"
+    )
+    (tree / polluted).write_bytes(baseline + synthetic.encode("utf-8"))
+    code, output = verify(tree, "paths", manifest, source)
+    if code == 1:
+        caught += 1
+        print(f"[5/5] путь машины в {polluted}: ПОЙМАНО — {first_failure(output)}")
+    else:
+        failures.append(f"путь машины автора в {polluted} не пойман (код {code})")
+        print(f"[5/5] путь машины в {polluted}: НЕ ПОЙМАНО")
+    (tree / polluted).write_bytes(baseline)
+    code, output = verify(tree, "paths", manifest, source)
+    if code != 0:
+        failures.append("после очистки правило paths осталось красным")
+
+    # --- Защита в глубину: исключённый путь -------------------------------
     excluded_probe = tree / "docs/AGENTS-context.md"
     excluded_probe.parent.mkdir(parents=True, exist_ok=True)
     excluded_probe.write_text("внутренний документ, попавший в сборку\n", encoding="utf-8")
@@ -220,14 +244,14 @@ def main(argv: list[str] | None = None) -> int:
         print(output)
 
     print()
-    print(f"порч поймано: {caught} из 4")
+    print(f"порч поймано: {caught} из 5")
     print(f"приманок отработано: 2 из 2")
     if failures:
         for problem in failures:
             print(f"FAIL: {problem}")
         return 1
-    if caught != 4:
-        print("FAIL: поймано не четыре порчи — гейт не доказан")
+    if caught != 5:
+        print("FAIL: поймано не пять порч — гейт не доказан")
         return 1
     if args.keep:
         print(f"песочница оставлена: {root}")

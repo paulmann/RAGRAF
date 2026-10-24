@@ -20,7 +20,7 @@ import subprocess
 import sys
 import time
 
-RAGRAF = pathlib.Path(r"C:\AutoClaw\RAGRAF")
+RAGRAF = pathlib.Path(__file__).resolve().parents[1]
 PY = str(RAGRAF / ".venv" / "Scripts" / "python.exe")
 if not pathlib.Path(PY).exists():
     PY = sys.executable
@@ -104,7 +104,7 @@ def main() -> int:
     ap.add_argument("--label", required=True)
     ap.add_argument("--n", type=int, default=20)
     ap.add_argument("--n-slow", type=int, default=6, help="пробы для catalog (дорогая операция)")
-    ap.add_argument("--second-root", default=r"C:\AutoClaw\BWO")
+    ap.add_argument("--second-root", default=str(pathlib.Path(__file__).resolve().parents[1].parent / "BWO"))
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
 

@@ -11,9 +11,9 @@ import pathlib
 import subprocess
 import sys
 
-REPO = pathlib.Path(r"C:\AutoClaw\RAGRAF")
+REPO = pathlib.Path(__file__).resolve().parents[1]
 BASH = r"C:\Program Files\Git\bin\bash.exe"
-TOOL = r"C:\AutoClaw\Clean_BOM_Senior\clean-bom-senior.sh"
+TOOL = str(pathlib.Path(__file__).resolve().parents[1].parent / "Clean_BOM_Senior/clean-bom-senior.sh")
 
 # Файлы, созданные после последнего прогона очистки.
 FILES = [

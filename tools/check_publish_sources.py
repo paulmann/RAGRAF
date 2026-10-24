@@ -14,7 +14,7 @@ from __future__ import annotations
 import hashlib
 import pathlib
 
-ROOT = pathlib.Path(r"C:\1st_RdpMON\Service")
+ROOT = pathlib.Path(__file__).resolve().parents[1].parent.parent / "1st_RdpMON" / "Service"
 TARGETS = [
     "rdpaudit-web.css",
     "rdpaudit-web.js",

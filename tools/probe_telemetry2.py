@@ -21,11 +21,11 @@ REPO = pathlib.Path(__file__).resolve().parents[1]
 # Управляющие базы всех корпусов.
 BASES = {
     "z.batteryservice.ru": pathlib.Path(
-        r"C:\AutoClaw\z.batteryservice.ru\.ragraf\control.sqlite"
+        str(pathlib.Path(__file__).resolve().parents[1].parent / "z.batteryservice.ru/.ragraf/control.sqlite")
     ),
-    "revoap.com": pathlib.Path(r"C:\AutoClaw\revoap.com\.ragraf\control.sqlite"),
-    "MD.Viewer": pathlib.Path(r"C:\AutoClaw\MD.Viewer\.ragraf\control.sqlite"),
-    "RdpMON": pathlib.Path(r"C:\1st_RdpMON\Service\.ragraf\control.sqlite"),
+    "revoap.com": pathlib.Path(__file__).resolve().parents[1].parent / "revoap.com/.ragraf/control.sqlite",
+    "MD.Viewer": pathlib.Path(__file__).resolve().parents[1].parent / "MD.Viewer/.ragraf/control.sqlite",
+    "RdpMON": pathlib.Path(__file__).resolve().parents[1].parent.parent / "1st_RdpMON" / "Service/.ragraf/control.sqlite",
 }
 
 for name, path in BASES.items():

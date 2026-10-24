@@ -585,7 +585,7 @@ Joern недоступен (JVM сломана, JDK обновлён, тайм-�
 
 ```yaml
 project: revoap.com
-root: C:/AutoClaw/revoap.com
+root: revoap.com
 languages: [php]                # релиз 1
 include: ["**/*.php", "**/*.md", "db/migrations/*.sql"]
 exclude:

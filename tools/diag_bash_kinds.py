@@ -14,7 +14,7 @@ import pathlib
 
 from tree_sitter_language_pack import get_parser  # type: ignore
 
-REPO = pathlib.Path(r"C:\AutoClaw\RAGRAF")
+REPO = pathlib.Path(__file__).resolve().parents[1]
 sys_path = REPO / "src"
 
 import sys  # noqa: E402

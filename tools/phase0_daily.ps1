@@ -23,8 +23,8 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$RepoRoot = 'C:\AutoClaw\RAGRAF',
-    [string]$SiteRepo = 'C:\AutoClaw\RAGRAF.git\ragraf-site',
+    [string]$RepoRoot = (Split-Path -Parent $PSScriptRoot),
+    [string]$SiteRepo = (Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'RAGRAF.git\ragraf-site'),
     [string]$JumpHost = 'root@192.168.31.31',
     [string]$ProdHost = 'root@176.99.5.35',
     [switch]$SkipDeploy

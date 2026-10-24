@@ -1,7 +1,7 @@
 # ТЗ: ускорение поиска по коду через RAGRAF и обязательное его использование из HARNESS
 
 Дата: 2026-10-14. Автор: HARNESS (агент), по итогам работы над проектом BWO
-(`C:\AutoClaw\BWO`, PHP/Perl/JS/HTML-сайт, ~1000 файлов кода).
+(`BWO`, PHP/Perl/JS/HTML-сайт, ~1000 файлов кода).
 Адресат: разработчик RAGRAF.
 
 ---
@@ -14,10 +14,10 @@
 | Последнее обращение | 2026-10-13 22:56:19 | там же |
 | Последний вопрос по коду («Allowed formats») | начался 2026-10-14 00:37:49 → обращений **0** | там же + таймстемп вопроса |
 | Атрибуция по задачам | `by_task = "(без задачи)"` — все 7 записей без задачи | `ragraf_usage` |
-| Корпус BWO | конфиг `C:\AutoClaw\RAGRAF\config\bwo.yaml` **есть** (root `C:/AutoClaw/BWO`) | файл конфига |
+| Корпус BWO | конфиг `config\bwo.yaml` **есть** (root `BWO`) | файл конфига |
 | BWO в реестре | **нет**: `catalog/catalog.json` содержит десятки проектов (rdpmon, revoap.com, z.batteryservice.ru, MD.Viewer, sagaai, ragraf…), BWO среди них отсутствует | `catalog.json`, `ragraf_use_project` → `found=False` |
-| Активный корпус сервера | `rdpmon` (`C:\1st_RdpMON\Service`) — сервер остался на нём | ответы `ensure`/`usage` |
-| `ensure(root="C:/AutoClaw/BWO")` | **дважды таймаут** (~11 минут), в том числе с `no_index=true` | мои вызовы |
+| Активный корпус сервера | `rdpmon` (`1st_RdpMON\Service`) — сервер остался на нём | ответы `ensure`/`usage` |
+| `ensure(root="BWO")` | **дважды таймаут** (~11 минут), в том числе с `no_index=true` | мои вызовы |
 | Размер дерева BWO | **38 675 файлов, 2 329,8 МБ** | замер дерева |
 | Что в дереве | `uploads` — 28 128 файлов / 1 077,9 МБ (`.FBO` 27 254 / 833,5 МБ, `.MOL` 580 / 219,8 МБ), `full` 2 880, `img` 1 703, `js` 721, `php.lib` 698, `cgi-bin` 697, четыре копии `Editor-PHP-*` | замер дерева |
 | Сколько реально нужно индексировать | PHP 1 036, Perl 286, HTML 1 704 (из них шаблоны), JS 1 599 (включая бандлы), CSS 505, SQL 50, MD 39 — по списку `bwo.yaml` | `bwo.yaml` |
@@ -76,8 +76,8 @@
    текущего каталога отличается от активного (сейчас это молчаливая подмена — источник ложных
    фактов).
 
-Приёмка: `ensure(root="C:/AutoClaw/BWO")` → `status=created|reindexed`, `project=BWO`;
-повторный вызов → `actual`; `use_project("C:/AutoClaw/BWO")` → `found=True`.
+Приёмка: `ensure(root="BWO")` → `status=created|reindexed`, `project=BWO`;
+повторный вызов → `actual`; `use_project("BWO")` → `found=True`.
 
 ### P0-2. `ensure` не должен висеть: исключения, лимиты, инкремент, прогресс
 
@@ -289,7 +289,7 @@ UTF-8/CP1251/UTF-16, группировка результатов по семе
 
 * `ensure(root)` сам нашёл конфиг `config/bwo.yaml`, **зарегистрировал** корпус и вернул
   `category: BWO`, `config`, `rev_id` — раньше `use_project` по этому пути отвечал `found=False`.
-  В `catalog/catalog.json` появилась запись: `category=BWO`, `root=C:/AutoClaw/BWO`,
+  В `catalog/catalog.json` появилась запись: `category=BWO`, `root=BWO`,
   `config=…/bwo.yaml`, `project=BWO`.
 * Замечание из прогона: у записи после `ensure` счётчики `file_count/node_count/edge_count`
   остались нулями, хотя прямой `index` построил 162 381 узел и 701 120 рёбер. То есть

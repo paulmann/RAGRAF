@@ -118,9 +118,9 @@ print("4. ЗАМЕРЫ ЭТОЙ СЕССИИ")
 print("=" * 78)
 print("""
   Сканирование стека (tools/scan_scripts.py):
-    C:\\AutoClaw:  Python 1337, Perl 1235, SQL 1058, C# 723, C/C++ 384,
+    <полигон>:  Python 1337, Perl 1235, SQL 1058, C# 723, C/C++ 384,
                   shell 212, TypeScript 181, PowerShell 88
-    C:\\1st_RdpMON\\Service: C# 1217, PowerShell 8, shell 1, Python 1
+    1st_RdpMON\\Service: C# 1217, PowerShell 8, shell 1, Python 1
 
   Грамматики (tools/check_grammars.py, check_parse_real.py):
     доступно языков в tree-sitter-language-pack: 26

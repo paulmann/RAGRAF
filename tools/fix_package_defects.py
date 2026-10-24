@@ -38,7 +38,7 @@ import pathlib
 import subprocess
 
 SAGA = pathlib.Path(r"C:\!.Tihon\sagaai_edit_github")
-DOCS = pathlib.Path(r"C:\AutoClaw\docs\SagaAI")
+DOCS = pathlib.Path(__file__).resolve().parents[1].parent / "docs/SagaAI"
 OUT = DOCS / "Fixes"
 
 print("=" * 78)

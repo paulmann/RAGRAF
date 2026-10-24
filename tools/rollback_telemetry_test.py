@@ -23,7 +23,7 @@ import sqlite3
 import sys
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
-DB = pathlib.Path(r"C:\AutoClaw\z.batteryservice.ru\.ragraf\control.sqlite")
+DB = pathlib.Path(__file__).resolve().parents[1].parent / "z.batteryservice.ru/.ragraf/control.sqlite"
 
 print("=" * 78)
 print("ОТКАТ ТЕСТОВЫХ ЗАПИСЕЙ")

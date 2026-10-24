@@ -53,13 +53,13 @@
 способом, которым потом будет меряться эффект. Каждый замер — не «один запуск»,
 а серия из `n ≥ 20` проб; в отчёт идут `p50/p90/max/n` и описание разброса.
 
-Точки замера (все — на корпусе `C:\AutoClaw\RAGRAF` и ещё на **одном крупном**
-корпусе, например `C:\AutoClaw\BWO` или `revoap.com`, чтобы поймать
+Точки замера (все — на корпусе `RAGRAF` и ещё на **одном крупном**
+корпусе, например `BWO` или `revoap.com`, чтобы поймать
 масштабно-зависимые эффекты):
 
 | # | Что меряется | Команда/инструмент | Фиксируемая величина |
 |---|---|---|---|
-| B1 | `ensure` на неизменном корпусе (тёплый и холодный) | `python tools/ragraf.py ensure C:\AutoClaw\RAGRAF --json` (засечь стену; `seconds` в ответе тоже записать) | p50/p90/max, n, `from_cache`, `verified_by` |
+| B1 | `ensure` на неизменном корпусе (тёплый и холодный) | `python tools/ragraf.py ensure RAGRAF --json` (засечь стену; `seconds` в ответе тоже записать) | p50/p90/max, n, `from_cache`, `verified_by` |
 | B2 | `ensure` сразу после «инвалидации» (`force`) | `python tools/ragraf.py ensure <корень> --force` | то же + `reindex_mode` |
 | B3 | `index_status` | `python tools/ragraf.py -p config/ragraf.yaml status` | то же |
 | B4 | `catalog` | `python tools/ragraf.py catalog` | то же (ожидаемо ~47 c) |

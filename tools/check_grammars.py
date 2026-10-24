@@ -102,9 +102,9 @@ print("=" * 78)
 import pathlib  # noqa: E402
 
 SAMPLES = [
-    (r"C:\1st_RdpMON\Service\src", ".cs", "c_sharp"),
-    (r"C:\AutoClaw\RAGRAF\scripts", ".ps1", "powershell"),
-    (r"C:\AutoClaw\mdviewer", ".js", "javascript"),
+    (str(pathlib.Path(__file__).resolve().parents[1].parent.parent / "1st_RdpMON" / "Service/src"), ".cs", "c_sharp"),
+    (str(pathlib.Path(__file__).resolve().parents[1] / "scripts"), ".ps1", "powershell"),
+    (str(pathlib.Path(__file__).resolve().parents[1].parent / "mdviewer"), ".js", "javascript"),
 ]
 
 try:

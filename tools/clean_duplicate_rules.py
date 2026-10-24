@@ -25,7 +25,7 @@ import re
 import shutil
 import sys
 
-REPO = pathlib.Path(r"C:\AutoClaw\RAGRAF")
+REPO = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
 CONFIGS = [

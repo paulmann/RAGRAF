@@ -16,7 +16,7 @@ from __future__ import annotations
 import hashlib
 import pathlib
 
-ROOT = pathlib.Path(r"C:\1st_RdpMON\Service")
+ROOT = pathlib.Path(__file__).resolve().parents[1].parent.parent / "1st_RdpMON" / "Service"
 CODE_EXTS = {".cs", ".php", ".js", ".ts", ".py", ".ps1", ".sh", ".pl", ".c",
              ".cpp", ".h", ".java", ".go", ".rb", ".lua", ".sql", ".css",
              ".html", ".htm"}

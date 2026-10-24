@@ -15,7 +15,7 @@ from __future__ import annotations
 import pathlib
 from collections import Counter
 
-REPO = pathlib.Path(r"C:\AutoClaw\RAGRAF")
+REPO = pathlib.Path(__file__).resolve().parents[1]
 
 # Каталоги верхнего уровня: сколько файлов и какой объём.
 print("=" * 78)

@@ -74,9 +74,9 @@ import os  # noqa: E402
 # Каталоги, где AutoClaw и другие агенты держат настройки MCP.
 CANDIDATES = [
     pathlib.Path(os.environ.get("USERPROFILE", "")) / ".pi" / "agent",
-    pathlib.Path(r"C:\AutoClaw") / ".agents",
-    pathlib.Path(r"C:\AutoClaw") / ".openclaw",
-    pathlib.Path(r"C:\AutoClaw") / ".autoclaw",
+    pathlib.Path(__file__).resolve().parents[1].parent / ".agents",
+    pathlib.Path(__file__).resolve().parents[1].parent / ".openclaw",
+    pathlib.Path(__file__).resolve().parents[1].parent / ".autoclaw",
 ]
 for base in CANDIDATES:
     if not base.exists():

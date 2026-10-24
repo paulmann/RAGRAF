@@ -20,7 +20,7 @@ import subprocess
 
 SAGA = pathlib.Path(r"C:\!.Tihon\sagaai_edit_github")
 PY = SAGA / ".venv" / "Scripts" / "python.exe"
-BASETEMP = r"C:\AutoClaw\RAGRAF\.staging\pytest_tmp"
+BASETEMP = str(pathlib.Path(__file__).resolve().parents[1] / ".staging/pytest_tmp")
 
 FAILED = [
     "tests/test_task_state.py::test_next_task_gets_next_number_and_moves_current_marker",

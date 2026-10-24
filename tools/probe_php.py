@@ -13,8 +13,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from ragraf.extract.php_ast import PhpExtractor, build_chunks  # noqa: E402
 
 TARGETS = [
-    "C:/AutoClaw/revoap.com/src/Core/Config.php",
-    "C:/AutoClaw/revoap.com/src/Pipeline/PipelineEngine.php",
+    str(pathlib.Path(__file__).resolve().parents[1].parent / "revoap.com/src/Core/Config.php"),
+    str(pathlib.Path(__file__).resolve().parents[1].parent / "revoap.com/src/Pipeline/PipelineEngine.php"),
 ]
 
 

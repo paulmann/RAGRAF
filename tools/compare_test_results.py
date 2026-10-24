@@ -25,7 +25,7 @@ SAGA = pathlib.Path(r"C:\!.Tihon\sagaai_edit_github")
 TARGET = SAGA / "core" / "dangerous.py"
 BACKUP = TARGET.with_suffix(".py.bak-safe288")
 SAGA_PY = str(SAGA / ".venv" / "Scripts" / "python.exe")
-BASETEMP = r"C:\AutoClaw\RAGRAF\.staging\pytest_tmp"
+BASETEMP = str(pathlib.Path(__file__).resolve().parents[1] / ".staging/pytest_tmp")
 
 
 def run_tests(label: str) -> tuple[set[str], str]:

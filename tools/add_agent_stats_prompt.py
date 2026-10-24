@@ -1,6 +1,6 @@
 """Дополнение промпта агента: учёт агента в статистике RAGRAF.
 
-Зачем. Промпт `C:\\Users\\mvd.AMD5700X3D\\.pi\\agent\\AGENTS.md` описывает
+Зачем. Промпт `C:\\Users\\<пользователь>\\.pi\\agent\\AGENTS.md` описывает
 работу с RAGRAF. Владелец ввёл новую возможность — статистику по агентам,
 и агент должен об этом знать: чтобы передавать своё имя и уметь читать
 разбивку.
@@ -21,7 +21,7 @@ import pathlib
 import shutil
 
 TARGET = pathlib.Path(
-    r"C:\Users\mvd.AMD5700X3D\.pi\agent\AGENTS.md"
+    str(pathlib.Path.home() / ".pi/agent/AGENTS.md")
 )
 print(f"  файл: {TARGET}")
 print(f"  существует: {TARGET.exists()}")

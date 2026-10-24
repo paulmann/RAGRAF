@@ -12,7 +12,7 @@ from __future__ import annotations
 import pathlib
 from collections import Counter
 
-ROOTS = [pathlib.Path(r"C:\1st_RdpMON\Service"), pathlib.Path(r"C:\AutoClaw")]
+ROOTS = [pathlib.Path(__file__).resolve().parents[1].parent.parent / "1st_RdpMON" / "Service", pathlib.Path(__file__).resolve().parents[1].parent]
 
 # Каталоги, которые я добавил в исключения: проверяются на обоих корнях.
 SUSPECTS = ["publish", ".dev_agent", ".staging", "obj", "bin", "packages",

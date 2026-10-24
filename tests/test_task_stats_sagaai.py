@@ -21,7 +21,7 @@ import pathlib
 import sqlite3
 import sys
 
-REPO = pathlib.Path(r"C:\AutoClaw\RAGRAF")
+REPO = pathlib.Path(__file__).resolve().parents[1]
 SAGA = pathlib.Path(r"C:\!.Tihon\sagaai_edit_github")
 FUNC = SAGA / "orchestrators" / "dev_agent" / "functions" / "ragraf.py"
 PROBE_TASK = "probe-task-001"

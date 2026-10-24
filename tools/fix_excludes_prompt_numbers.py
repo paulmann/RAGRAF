@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import pathlib
 
-PROMPT = pathlib.Path(r"C:\Users\mvd.AMD5700X3D\.pi\agent\AGENTS.md")
+PROMPT = pathlib.Path.home() / ".pi/agent/AGENTS.md"
 
 OLD_HEAD = """**Что исключается базово (24 каталога + 4 образца имён):**"""
 NEW_HEAD = """**Что исключается базово: 28 шаблонов — 24 каталога и 4 образца имён.**"""

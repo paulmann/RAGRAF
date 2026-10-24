@@ -18,10 +18,10 @@ import shutil
 import sys
 from datetime import datetime
 
-PROJECT = pathlib.Path("C:/AutoClaw/z.batteryservice.ru")
+PROJECT = pathlib.Path(__file__).resolve().parents[1].parent / "z.batteryservice.ru"
 CSS = PROJECT / "assets" / "css" / "z.css"
 TEMPLATE = PROJECT / "templates" / "auth.htm"
-SECTION = pathlib.Path("C:/AutoClaw/RAGRAF/.staging/auth_styles.css")
+SECTION = pathlib.Path(__file__).resolve().parents[1] / ".staging/auth_styles.css"
 
 MARKER = "Страница входа (templates/auth.htm)"
 

@@ -19,8 +19,8 @@
       «документ без текста» отличается от «разбор не удался».
 
 Проверено на реальных файлах этой машины (tests/test_office_binary.py):
-    C:/AutoClaw/1/BCT-M 600_600.doc  — Word 97, 3 фрагмента, текст извлекается;
-    C:/AutoClaw/a.batteryservice.ru/backup/mail/import/Letters.xls — BIFF8,
+    1/BCT-M 600_600.doc  — Word 97, 3 фрагмента, текст извлекается;
+    a.batteryservice.ru/backup/mail/import/Letters.xls — BIFF8,
     словарь строк 214 записей.
 """
 

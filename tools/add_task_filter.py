@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import pathlib
 
-REPO = pathlib.Path(r"C:\AutoClaw\RAGRAF")
+REPO = pathlib.Path(__file__).resolve().parents[1]
 
 # --- 1. telemetry.summary: параметр и разбивка ---
 print("=" * 78)

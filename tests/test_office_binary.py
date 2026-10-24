@@ -75,8 +75,8 @@ print("=" * 78)
 print("2. РЕАЛЬНЫЕ ФАЙЛЫ: WORD 97 И BIFF8")
 print("=" * 78)
 
-real_doc = pathlib.Path(r"C:\AutoClaw\1\BCT-M 600_600.doc")
-real_xls = pathlib.Path(r"C:\AutoClaw\a.batteryservice.ru\backup\mail\import\Letters.xls")
+real_doc = pathlib.Path(__file__).resolve().parents[1].parent / "1/BCT-M 600_600.doc"
+real_xls = pathlib.Path(__file__).resolve().parents[1].parent / "a.batteryservice.ru/backup/mail/import/Letters.xls"
 
 if real_doc.exists():
     got = documents.extract(real_doc)
@@ -110,7 +110,7 @@ print("=" * 78)
 # Путь вне репозитория: файл принадлежит владельцу, а не проекту. Если его нет —
 # раздел пропускается, а не объявляется успехом.
 real_ppt = pathlib.Path(
-    r"C:\Users\mvd.AMD5700X3D\OneDrive\Документы\Консалтинг.ppt"
+    str(pathlib.Path.home() / "OneDrive/Документы/Консалтинг.ppt")
 )
 if real_ppt.exists():
     got = documents.extract(real_ppt)

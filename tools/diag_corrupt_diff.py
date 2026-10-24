@@ -22,7 +22,7 @@ import subprocess
 import tempfile
 
 SAGA = pathlib.Path(r"C:\!.Tihon\sagaai_edit_github")
-OUT = pathlib.Path(r"C:\AutoClaw\docs\SagaAI\Fixes")
+OUT = pathlib.Path(__file__).resolve().parents[1].parent / "docs/SagaAI/Fixes"
 REL = "tests/test_task_state.py"
 ORIGIN_REL = "tests/test_task_state.py.bak-dirname"
 

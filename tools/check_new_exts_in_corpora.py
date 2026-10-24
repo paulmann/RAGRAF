@@ -15,12 +15,12 @@ import pathlib
 from collections import Counter
 
 CORPORA = {
-    "z.batteryservice.ru": pathlib.Path(r"C:\AutoClaw\z.batteryservice.ru"),
-    "revoap.com": pathlib.Path(r"C:\AutoClaw\revoap.com"),
-    "MD.Viewer": pathlib.Path(r"C:\AutoClaw\MD.Viewer"),
-    "RAGRAF": pathlib.Path(r"C:\AutoClaw\RAGRAF"),
-    "Agents.Creator": pathlib.Path(r"C:\AutoClaw\Agents.Creator"),
-    "Clean_BOM_Senior": pathlib.Path(r"C:\AutoClaw\Clean_BOM_Senior"),
+    "z.batteryservice.ru": pathlib.Path(__file__).resolve().parents[1].parent / "z.batteryservice.ru",
+    "revoap.com": pathlib.Path(__file__).resolve().parents[1].parent / "revoap.com",
+    "MD.Viewer": pathlib.Path(__file__).resolve().parents[1].parent / "MD.Viewer",
+    "RAGRAF": pathlib.Path(__file__).resolve().parents[1],
+    "Agents.Creator": pathlib.Path(__file__).resolve().parents[1].parent / "Agents.Creator",
+    "Clean_BOM_Senior": pathlib.Path(__file__).resolve().parents[1].parent / "Clean_BOM_Senior",
 }
 
 # Расширения, которые появились в карте языков после сканирования стека.

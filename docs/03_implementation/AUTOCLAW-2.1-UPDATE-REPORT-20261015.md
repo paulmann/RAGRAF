@@ -1,7 +1,7 @@
 # Отчёт: что изменилось после переустановки AutoClaw и что из этого сломалось
 
 **Дата замера:** 15 октября 2026, ~14:30–14:45 (локальное время машины).
-**Проект:** RAGRAF (`C:\AutoClaw\RAGRAF`), корпус `rev-0137…rev-0139`, `capability=full`.
+**Проект:** RAGRAF (`RAGRAF`), корпус `rev-0137…rev-0139`, `capability=full`.
 **Роль:** диагностика связки «AutoClaw ↔ RAGRAF». Правки внесены только там, где дефект замерен.
 
 Короткий итог — в разделе 1. Разбор вопроса «чем грозит работа не от админа» — раздел 5.
@@ -15,10 +15,10 @@
    переехало из машинного `C:\Program Files\AutoClaw` в пользовательский
    `%LOCALAPPDATA%\Programs\AutoClaw2`, поэтому и работает без прав администратора.
    Это штатное следствие новой раскладки, а не поломка.
-2. **Главная находка к переустановке не относится.** Каталог `C:\AutoClaw\RAGRAF` помечен
+2. **Главная находка к переустановке не относится.** Каталог `RAGRAF` помечен
    **меткой целостности Low**, а по замеру (раздел 3) **любой exe, лежащий в таком каталоге,
    запускается с низкой целостностью и урезанным токеном**. `java.exe` живёт в
-   `C:\AutoClaw\RAGRAF\.tools\jdk\bin`, поэтому всегда стартует с Low и **не может писать
+   `.tools\jdk\bin`, поэтому всегда стартует с Low и **не может писать
    никуда, кроме этого дерева**: ни в `%TEMP%`, ни в каталоги других проектов. Это и есть
    причина отказа сборки CPG (Joern), о котором писал отчёт по `a.batteryservice.ru`
    (второе вложение): временный `php.ini` для php2cpg и файл `cpg.bin` создаются вне дерева.
@@ -39,7 +39,7 @@
 | Приложение | 1.18.5.851, `C:\Program Files\AutoClaw` | **2.1.1.262**, `%LOCALAPPDATA%\Programs\AutoClaw2` (по-user) |
 | Прежняя установка | — | `C:\Program Files\AutoClaw\AutoClaw.exe` (1.18.5.851, 11.09.2026) осталась на диске |
 | Процесс | — | `AMD5700X3D\mvd`, целостность **Medium**, `Administrators → Group used for deny only` |
-| Состояние приложения | `C:\AutoClaw\.openclaw-autoclaw\` | `%USERPROFILE%\.openclaw-autoclaw\` (workspace агента остался `C:\AutoClaw`) |
+| Состояние приложения | `.openclaw-autoclaw\` | `%USERPROFILE%\.openclaw-autoclaw\` (workspace агента остался `<полигон>`) |
 
 Замер версий:
 
@@ -51,11 +51,11 @@ C:\Program Files\AutoClaw\AutoClaw.exe            FileVersion 1.18.5.851   mtime
 ```
 
 Замечание к последним двум строкам: файл `version` рядом с исполняемым файлом (42.6.1) — это
-версия рантайма Electron, а не приложения; в справочнике `C:\AutoClaw\AMD\01-машина\Окружение.md`
+версия рантайма Electron, а не приложения; в справочнике `AMD\01-машина\Окружение.md`
 именно она записана как версия AutoClaw (строка таблицы «AutoClaw | 42.6.1 | …AutoClaw2»), то есть
 **число в справочнике требует уточнения.** Запись `1.18.5` в `.startup-validation.json` сделана
-сегодня в 07:39 — в те же минуты обновлялись `C:\AutoClaw\config\mcporter.json` (07:38) и
-`C:\AutoClaw\.cluster\expert-playbook.md` (07:39), что похоже на след операции переноса/обновления;
+сегодня в 07:39 — в те же минуты обновлялись `config\mcporter.json` (07:38) и
+`.cluster\expert-playbook.md` (07:39), что похоже на след операции переноса/обновления;
 работающее приложение при этом — из `AutoClaw2`.
 
 ---
@@ -69,13 +69,13 @@ C:\Program Files\AutoClaw\AutoClaw.exe            FileVersion 1.18.5.851   mtime
 
 | Куда положен exe | Метка каталога | Целостность процесса |
 |---|---|---|
-| `C:\AutoClaw\RAGRAF` (корень) | Low | **Low** |
-| `C:\AutoClaw\RAGRAF\src` | Low (наследуется) | **Low** |
-| `C:\AutoClaw\RAGRAF\.tools` | Low (наследуется) | **Low** |
-| `C:\AutoClaw\RAGRAF\.ragraf` | Low (наследуется) | **Low** |
+| `RAGRAF` (корень) | Low | **Low** |
+| `src` | Low (наследуется) | **Low** |
+| `.tools` | Low (наследуется) | **Low** |
+| `.ragraf` | Low (наследуется) | **Low** |
 | `%TEMP%\ragraf-probe` | метки нет | Medium |
-| `C:\AutoClaw` | метки нет | Medium |
-| `C:\AutoClaw\z.batteryservice.ru` | метки нет | Medium |
+| `<полигон>` | метки нет | Medium |
+| `z.batteryservice.ru` | метки нет | Medium |
 | `C:\tools` | метки нет | Medium |
 | `C:\Windows\Temp` | метки нет | Medium |
 | `…\AppData\Local\Microsoft\Windows\INetCache\Low` | Low | **Low** |
@@ -97,16 +97,16 @@ C:\Program Files\AutoClaw\AutoClaw.exe            FileVersion 1.18.5.851   mtime
 
 ### 3.2 Что это делает с java и CPG
 
-`java.exe` лежит в `C:\AutoClaw\RAGRAF\.tools\jdk\bin\java.exe`, то есть **всегда** попадает под
+`java.exe` лежит в `.tools\jdk\bin\java.exe`, то есть **всегда** попадает под
 правило — независимо от того, какой корпус индексируется. Замер (java 21.0.12.1):
 
 ```
-java.io.tmpdir = C:\Users\MVD~1.AMD\AppData\Local\Temp\
+java.io.tmpdir = C:\Users\<пользователь>\AppData\Local\Temp\
   createTempFile      -> AccessDeniedException
   createTempDirectory -> AccessDeniedException
   запись php.ini      -> AccessDeniedException
 
-java -Djava.io.tmpdir=C:\AutoClaw\RAGRAF\.scratch-probe
+java -Djava.io.tmpdir=.scratch-probe
   createTempFile      -> OK
   createTempDirectory -> OK
   запись php.ini      -> OK
@@ -125,7 +125,7 @@ Java… вопрос к вам, а не правка в проекте») под
 ### 3.3 Что ещё стоит на дереве
 
 ```
-C:\AutoClaw\RAGRAF  Everyone:(CI)(DENY)(DC)
+RAGRAF  Everyone:(CI)(DENY)(DC)
                     S-1-4-379822104-920673769:(OI)(CI)(W,D,DC)
                     NT AUTHORITY\Authenticated Users:(OI)(CI)(F)
                     BUILTIN\Users:(OI)(CI)(F)
@@ -136,7 +136,7 @@ C:\AutoClaw\RAGRAF  Everyone:(CI)(DENY)(DC)
                     Mandatory Label\Low Mandatory Level:(OI)(CI)(NW)
 ```
 
-* метка Low выставлена **явно на корне** дерева (`C:\AutoClaw` метки не имеет, то есть она не
+* метка Low выставлена **явно на корне** дерева (`<полигон>` метки не имеет, то есть она не
   унаследована сверху);
 * SID `S-1-4-…` — authority 4 («non-unique»), ни в имя пользователя, ни в группу не
   разрешается (`Translate()` возвращает «identity references could not be translated»), и ему
@@ -145,7 +145,7 @@ C:\AutoClaw\RAGRAF  Everyone:(CI)(DENY)(DC)
   проходит, помех работе не создаёт;
 * владелец корня — `BUILTIN\Administrators`, владелец `.tools` — `AMD5700X3D\mvd`.
 
-**Источник этих ACE и метки не найден** ни в файлах проекта, ни в справочнике `C:\AutoClaw\AMD`,
+**Источник этих ACE и метки не найден** ни в файлах проекта, ни в справочнике `AMD`,
 ни в `.zwork`, ни в конфигурации приложения (искал по `setintegritylevel`, `S-1-4-…`,
 `Low Mandatory`, `Mandatory Label`). Версия-гипотеза (не факт): дерево готовилось как песочница —
 метка Low + запрет удаления + выдача записи отдельному SID. Датировать изменение без
@@ -156,7 +156,7 @@ C:\AutoClaw\RAGRAF  Everyone:(CI)(DENY)(DC)
 Метка — свойство каталога, а не приложения: правило воспроизводится на системных каталогах
 `…\Low`, действует для процесса, запущенного службой, и на поведение процессов, запущенных из
 каталогов без метки, обновление не влияет. Против версии «это сделало обновление» говорит и то,
-что замер по `C:\AutoClaw\RAGRAF` не зависел ни от версии приложения, ни от того, повышен ли
+что замер по `RAGRAF` не зависел ни от версии приложения, ни от того, повышен ли
 процесс.
 
 ---
@@ -181,7 +181,7 @@ C:\AutoClaw\RAGRAF  Everyone:(CI)(DENY)(DC)
 
 | Доступно без повышения | Недоступно без повышения |
 |---|---|
-| `C:\AutoClaw` и подкаталоги, `C:\tools` (Authenticated Users: M), `%TEMP%`, профиль | `C:\Program Files\**`, `C:\Windows\**`, правка `C:\ProgramData\MySQL\data` |
+| `<полигон>` и подкаталоги, `C:\tools` (Authenticated Users: M), `%TEMP%`, профиль | `C:\Program Files\**`, `C:\Windows\**`, правка `C:\ProgramData\MySQL\data` |
 | запись индекса RAGRAF (замерено: пересбор `full`, 621 файл) | службы: `Restart-Service`, `Set-Service`, правка `my.ini` |
 | MySQL: работа с уже запущенной службой, SQL по §7 правил | чтение `HKLM\SECURITY\Policy\Safer` (правила SRP), полный реестр HKLM |
 | git по HTTPS (диспетчер учётных данных) | установка MSI / `--scope machine`, правила брандмауэра, задачи от SYSTEM |
@@ -217,7 +217,7 @@ C:\AutoClaw\RAGRAF  Everyone:(CI)(DENY)(DC)
 | Навык `SKILL.md` | 9 811 б, `6D4C3353…` | проект 12 358 б; развёрнутые копии 11 894 б | **отстали → исправлено (6.2)** |
 | Навык `reference/operations.md` | 7 546 б | проект 14 777 б; развёрнутые 8 503 б | **отстали → исправлено (6.2)** |
 | Навык `reference/repair.md` | 11 271 б, `995A56BB…` | 11 271 б, `995A56BB…` | **совпал** |
-| Правила рабочего каталога `C:\AutoClaw\AGENTS.md` | 12 524 б, `901C10FD…` | 12 524 б, `901C10FD…` | **совпал** |
+| Правила рабочего каталога `AGENTS.md` | 12 524 б, `901C10FD…` | 12 524 б, `901C10FD…` | **совпал** |
 | Правила pwsh `~\.pi\agent\AGENTS.md` | 134 466 б, `1E658D75…` | 147 494 б, `A6B0203E…`, mtime 14.10 19:24 | **вырос**; разделы на месте — в моих инструкциях есть §8, §8.17, §8.20, то есть подхват правил работает; уменьшения/потери нет, рядом 30 резервных копий |
 | Линтер `Test-PwshApiVintage.ps1` | 12 846 б, `AA8C1FC6…` | 12 846 б, `AA8C1FC6…` | **совпал** |
 | Чекер конвенций | 14 проверок, 0/0 | **19 проверок, 0 ошибок, 0 предупреждений, PASS** | вырос, чисто |
@@ -225,7 +225,7 @@ C:\AutoClaw\RAGRAF  Everyone:(CI)(DENY)(DC)
 | Git-источник | `RAGRAF.git\RAGRAF`, ветка `main`, `6a62a07` | ветка `main`, `6a62a07` (12.10) | **совпал** |
 | MCP рабочего каталога | 2 сервера `enabled` | 2 сервера `enabled` (`autoclaw-productivity`, `autoclaw-github`) | **совпал** |
 | Joern | порт 9500 свободен, `java.exe` 0 | порт 9500 свободен, `java.exe` 0 | **совпал** |
-| workspace агента | `C:\AutoClaw` | `agents.defaults.workspace = C:\AutoClaw`; `agents.list`: `main` c `default: true` | **совпал** |
+| workspace агента | `<полигон>` | `agents.defaults.workspace = <полигон>`; `agents.list`: `main` c `default: true` | **совпал** |
 | `runtime.sqlite`: `governed_project_instruction_revisions` | 38 строк | **43** | вырос, потерь нет |
 | SOP платформы (`expert-sop*.json/txt`) | были на месте | на глубине 4 в каталогах аккаунта не найдены | **требует уточнения** (возможно, лежат глубже или переименованы) |
 
@@ -254,9 +254,9 @@ C:\AutoClaw\RAGRAF  Everyone:(CI)(DENY)(DC)
 * не удалял ничего из файлов владельца.
 
 Изменено за задачу: 4 файла копий навыка (6.2). Создано: отчёт и скрипт (раздел 8).
-Пробники удалены: `%TEMP%\ragraf-probe`, `%TEMP%\ragraf-diag`, `C:\AutoClaw\RAGRAF\.scratch-probe`,
-`C:\AutoClaw\RAGRAF\.tools\wprobe.exe`, `C:\AutoClaw\RAGRAF\.tools\jjj.exe`,
-`C:\AutoClaw\RAGRAF\.tools\zan2.exe`.
+Пробники удалены: `%TEMP%\ragraf-probe`, `%TEMP%\ragraf-diag`, `.scratch-probe`,
+`.tools\wprobe.exe`, `.tools\jjj.exe`,
+`.tools\zan2.exe`.
 
 Не проверено (названо прямо): содержимое `HKLM\SECURITY\Policy\Safer`, датировка появления метки,
 SOP-файлы платформы, `Get-MpPreference` (`0x800106ba`).
@@ -293,7 +293,7 @@ pwsh -NoLogo -NoProfile -File .\tools\Fix-LowIntegritySandbox.ps1 -Apply -Confir
 После снятия метки:
 
 ```powershell
-cd C:\AutoClaw\RAGRAF
+cd RAGRAF
 python tools\ragraf.py -p config\ragraf.yaml reindex
 ```
 
@@ -305,7 +305,7 @@ python tools\ragraf.py -p config\ragraf.yaml reindex
 Тогда метку не снимать, а держать записи java внутри дерева:
 
 * задать процессу Joern/php2cpg `TEMP`, `TMP` и `-Djava.io.tmpdir` на каталог внутри
-  `C:\AutoClaw\RAGRAF` — замерено, что этого достаточно (проба в разделе 3.2);
+  `RAGRAF` — замерено, что этого достаточно (проба в разделе 3.2);
 * рабочий каталог Joern держать внутри дерева; для чужих корпусов (вне дерева) это и есть причина
   отказа — им потребуется либо свой Low-помеченный каталог, либо снятая метка;
 * либо перенести инструменты наружу (`C:\tools\jdk`, `C:\tools\joern`) и указать
@@ -328,7 +328,7 @@ fsutil usn readjournal C: | findstr /i ragraf   # датировать изме�
 
 ```powershell
 # 1. целостность процесса из каталога
-$p = 'C:\AutoClaw\RAGRAF'
+$p = 'RAGRAF'
 New-Item -ItemType Directory -Path "$p\il-probe" -Force | Out-Null
 Copy-Item "$env:SystemRoot\System32\whoami.exe" "$p\il-probe\w.exe"
 Start-Process "$p\il-probe\w.exe" -ArgumentList '/groups' -RedirectStandardOutput "$p\il-probe\g.txt" -Wait -NoNewWindow
@@ -336,10 +336,10 @@ Select-String "$p\il-probe\g.txt" -Pattern 'Mandatory Label'     # Low = S-1-16-
 Remove-Item "$p\il-probe" -Recurse -Force
 
 # 2. метка каталога
-icacls C:\AutoClaw\RAGRAF | Select-String 'Mandatory Label'
+icacls RAGRAF | Select-String 'Mandatory Label'
 
 # 3. проба записи java
-& C:\AutoClaw\RAGRAF\.tools\jdk\bin\java.exe -XshowSettings:properties -version 2>&1 | Select-String 'java.io.tmpdir'
+& .tools\jdk\bin\java.exe -XshowSettings:properties -version 2>&1 | Select-String 'java.io.tmpdir'
 ```
 
 ---
@@ -349,11 +349,11 @@ icacls C:\AutoClaw\RAGRAF | Select-String 'Mandatory Label'
 По просьбе владельца метка Low с дерева снята:
 
 ```
-icacls "C:\AutoClaw\RAGRAF" /setintegritylevel "(OI)(CI)M"    -> Successfully processed 1 files
+icacls "RAGRAF" /setintegritylevel "(OI)(CI)M"    -> Successfully processed 1 files
 ```
 
 Снимок состояния до правки: `%TEMP%\ragraf-label-before-20261015-150153.txt`.
-Откат (вернуть песочницу): `icacls "C:\AutoClaw\RAGRAF" /setintegritylevel "(OI)(CI)L"`.
+Откат (вернуть песочницу): `icacls "RAGRAF" /setintegritylevel "(OI)(CI)L"`.
 
 | Проверка | До | После |
 |---|---|---|

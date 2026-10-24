@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import pathlib
 
-TARGET = pathlib.Path(r"C:\AutoClaw\RAGRAF\admin\static\app.js")
+TARGET = pathlib.Path(__file__).resolve().parents[1] / "admin/static/app.js"
 text = TARGET.read_text(encoding="utf-8")
 original_len = len(text)
 

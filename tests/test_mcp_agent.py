@@ -106,7 +106,7 @@ print("=" * 78)
 # агент доходит до журнала: без этого исправление бесполезно.
 import shutil  # noqa: E402
 
-LIVE = pathlib.Path(r"C:\AutoClaw\revoap.com\.ragraf\control.sqlite")
+LIVE = pathlib.Path(__file__).resolve().parents[1].parent / "revoap.com/.ragraf/control.sqlite"
 STAGING = REPO / ".staging"
 STAGING.mkdir(exist_ok=True)
 

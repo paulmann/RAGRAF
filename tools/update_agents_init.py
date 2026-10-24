@@ -37,7 +37,7 @@ new_85 = """### 8.5 Подключение нового проекта (обяз
 **Это первый шаг, если проекта ещё нет в RAGRAF.** Проверить наличие:
 
 ```powershell
-python C:\\AutoClaw\\RAGRAF\\tools\\ragraf.py catalog
+python tools\\ragraf.py catalog
 ```
 
 Если проекта в списке нет — его надо подключить. Порядок:
@@ -45,7 +45,7 @@ python C:\\AutoClaw\\RAGRAF\\tools\\ragraf.py catalog
 **Шаг 1. Создать конфигурацию корпуса.**
 
 ```powershell
-python C:\\AutoClaw\\RAGRAF\\tools\\ragraf.py init C:\\путь\\к\\проекту
+python tools\\ragraf.py init C:\\путь\\к\\проекту
 ```
 
 Команда осматривает каталог и сама собирает конфигурацию: определяет языки
@@ -64,8 +64,8 @@ python C:\\AutoClaw\\RAGRAF\\tools\\ragraf.py init C:\\путь\\к\\проек�
 **Шаг 3. Зарегистрировать и проиндексировать.**
 
 ```powershell
-python C:\\AutoClaw\\RAGRAF\\tools\\ragraf.py -p <путь к конфигу> register
-python C:\\AutoClaw\\RAGRAF\\tools\\ragraf.py -p <путь к конфигу> index
+python tools\\ragraf.py -p <путь к конфигу> register
+python tools\\ragraf.py -p <путь к конфигу> index
 ```
 
 Индексация печатает: число файлов, узлов, рёбер, чанков и разбивку по языкам.
@@ -76,7 +76,7 @@ python C:\\AutoClaw\\RAGRAF\\tools\\ragraf.py -p <путь к конфигу> in
 имени файла или функции:
 
 ```powershell
-python C:\\AutoClaw\\RAGRAF\\tools\\ragraf.py -p <путь к конфигу> query search "имя функции"
+python tools\\ragraf.py -p <путь к конфигу> query search "имя функции"
 ```
 
 Если поиск находит файлы — корпус подключён и дальнейшая работа идёт через RAGRAF.
@@ -111,7 +111,7 @@ new_82 = """### 8.2 Первый шаг задачи на разработку
 **Сначала проверить, подключён ли проект к RAGRAF:**
 
 ```powershell
-python C:\\AutoClaw\\RAGRAF\\tools\\ragraf.py catalog
+python tools\\ragraf.py catalog
 ```
 
 Если проекта нет в списке — его надо подключить: порядок в разделе 8.5.

@@ -21,10 +21,10 @@ import pathlib
 import subprocess
 import sys
 
-REPO = pathlib.Path(r"C:\AutoClaw\RAGRAF")
+REPO = pathlib.Path(__file__).resolve().parents[1]
 BASH = r"C:\Program Files\Git\bin\bash.exe"
-TOOL = r"C:\AutoClaw\Clean_BOM_Senior\clean-bom-senior.sh"
-TOOL_PS1 = r"C:\AutoClaw\Clean_BOM_Senior\clean-bom-senior.ps1"
+TOOL = str(pathlib.Path(__file__).resolve().parents[1].parent / "Clean_BOM_Senior/clean-bom-senior.sh")
+TOOL_PS1 = str(pathlib.Path(__file__).resolve().parents[1].parent / "Clean_BOM_Senior/clean-bom-senior.ps1")
 
 # Только то, что создано или изменено в этой сессии. Ничего лишнего.
 FILES = [

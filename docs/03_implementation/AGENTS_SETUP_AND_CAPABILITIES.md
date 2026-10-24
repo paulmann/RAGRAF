@@ -1,6 +1,6 @@
 # RAGRAF в HARNESS и AutoClaw: настройка и полный каталог возможностей
 
-Дата: 19.10.2026. Проект: `C:\AutoClaw\RAGRAF`.
+Дата: 19.10.2026. Проект: `RAGRAF`.
 Документ отвечает на два вопроса: **что умеет продукт** и **как включить его
 в DeepSeek Harness и AutoClaw**. Числа проверены по коду: 41 инструмент MCP,
 39 операций фасада, 19 подкоманд CLI, 16 языков разбора деревом и 11 текстовых
@@ -103,8 +103,8 @@ python tools/ragraf.py -p config/ragraf.yaml query live_read --path docs/отч�
 | Поле | Значение |
 |---|---|
 | Name | `RAGRAF` |
-| Launch command | `C:\AutoClaw\RAGRAF\.venv\Scripts\python.exe` |
-| Arguments | `C:\AutoClaw\RAGRAF\tools\ragraf-mcp.py --project C:\AutoClaw\RAGRAF\config\ragraf.yaml --agent AutoClaw --agent-kind autoclaw` |
+| Launch command | `.venv\Scripts\python.exe` |
+| Arguments | `tools\ragraf-mcp.py --project config\ragraf.yaml --agent AutoClaw --agent-kind autoclaw` |
 | Environment | пусто |
 
 Ожидается статус `Connected · 41 tools`. Имена инструментов зависят от клиента:
@@ -114,8 +114,8 @@ python tools/ragraf.py -p config/ragraf.yaml query live_read --path docs/отч�
 Если MCP не подключён, работает CLI — это не отменяет обязательности индекса:
 
 ```powershell
-python C:\AutoClaw\RAGRAF\tools\ragraf.py ensure <каталог проекта>
-python C:\AutoClaw\RAGRAF\tools\ragraf.py -p <конфиг> query route "где лежит X"
+python tools\ragraf.py ensure <каталог проекта>
+python tools\ragraf.py -p <конфиг> query route "где лежит X"
 ```
 
 ### 3.2. Навык
@@ -148,7 +148,7 @@ python C:\AutoClaw\RAGRAF\tools\ragraf.py -p <конфиг> query route "где 
 Блок `harness/ragraf-mcp.patch.yml` вставляется в слой патчей профиля
 `$DSH_HOME/profiles/desktop/cordis.patch.yml` отдельной записью `- insert:`
 (бэкап файла обязателен). Сервер: `.venv\Scripts\python.exe`,
-`tools/ragraf-mcp.py`, `cwd=C:\AutoClaw\RAGRAF`.
+`tools/ragraf-mcp.py`, `cwd=RAGRAF`.
 
 Проверка без запуска:
 
@@ -161,7 +161,7 @@ python C:\AutoClaw\RAGRAF\tools\ragraf.py -p <конфиг> query route "где 
 
 ```powershell
 $dst = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.dsh\skills\ragraf-core\SKILL.md'
-Copy-Item 'C:\AutoClaw\RAGRAF\harness\skills\ragraf-core\SKILL.md' $dst -Force
+Copy-Item 'harness\skills\ragraf-core\SKILL.md' $dst -Force
 ```
 
 Провайдер навыков HARNESS читает `$DSH_HOME/skills/<имя>/SKILL.md` и следит за

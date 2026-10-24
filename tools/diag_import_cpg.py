@@ -4,7 +4,7 @@
 
     ConsoleException: Error creating project for input path
     Caused by: AssertionError: CPG generator does not exist at:
-        C:\\AutoClaw\\RAGRAF\\.tools\\joern-cli...\\pysrc2cpg
+        .tools\\joern-cli...\\pysrc2cpg
 
 Серверный путь RAGRAF разбирает исходники заново (`importCode`), а для этого
 ищет исполняемый генератор `pysrc2cpg`. У установленного Joern он есть только

@@ -28,7 +28,7 @@ import subprocess
 SAGA = pathlib.Path(r"C:\!.Tihon\sagaai_edit_github")
 PY = SAGA / ".venv" / "Scripts" / "python.exe"
 SP = SAGA / ".venv" / "Lib" / "site-packages"
-DOCS = pathlib.Path(r"C:\AutoClaw\docs\SagaAI\Fixes")
+DOCS = pathlib.Path(__file__).resolve().parents[1].parent / "docs/SagaAI/Fixes"
 
 TARGETS = {
     "streamlit": "1.65.0",

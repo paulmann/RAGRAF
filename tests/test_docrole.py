@@ -1,7 +1,7 @@
 """Проверка классификатора роли документа на реальных файлах.
 
 Проверяется не выдуманными именами, а фактическими документами двух корпусов:
-C:\\1st_RdpMON\\Service (48 файлов .md) и C:\\AutoClaw\\z.batteryservice.ru.
+1st_RdpMON\\Service (48 файлов .md) и z.batteryservice.ru.
 
 Что проверяется:
   1. каждый документ получает роль;
@@ -133,8 +133,8 @@ print("=" * 78)
 print("4. РЕАЛЬНЫЕ ДОКУМЕНТЫ КОРПУСОВ")
 print("=" * 78)
 ROOTS = [
-    pathlib.Path(r"C:\1st_RdpMON\Service"),
-    pathlib.Path(r"C:\AutoClaw\z.batteryservice.ru"),
+    pathlib.Path(__file__).resolve().parents[1].parent.parent / "1st_RdpMON" / "Service",
+    pathlib.Path(__file__).resolve().parents[1].parent / "z.batteryservice.ru",
 ]
 SKIP = {".git", "node_modules", "vendor", "obj", "bin", "publish", ".dev_agent",
         "dist", "build", ".ragraf", ".zwork"}

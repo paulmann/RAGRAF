@@ -85,7 +85,7 @@ try:
 except OSError:
     port = 8601
 
-log = pathlib.Path(r"C:\AutoClaw\RAGRAF\.staging") / "streamlit_probe.log"
+log = pathlib.Path(__file__).resolve().parents[1] / ".staging" / "streamlit_probe.log"
 log.parent.mkdir(parents=True, exist_ok=True)
 if log.exists():
     log.unlink()

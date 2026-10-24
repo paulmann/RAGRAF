@@ -18,8 +18,8 @@ import subprocess
 import sys
 
 SAGA = pathlib.Path(r"C:\!.Tihon\sagaai_edit_github")
-RAGRAF = pathlib.Path(r"C:\AutoClaw\RAGRAF")
-REPORT = pathlib.Path(r"C:\AutoClaw\docs\SagaAI\SagaAI-отчёт-проблем-2026-10-06.md")
+RAGRAF = pathlib.Path(__file__).resolve().parents[1]
+REPORT = pathlib.Path(__file__).resolve().parents[1].parent / "docs/SagaAI/SagaAI-отчёт-проблем-2026-10-06.md"
 SAGA_PY = str(SAGA / ".venv" / "Scripts" / "python.exe")
 
 PASS = 0

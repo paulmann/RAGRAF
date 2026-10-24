@@ -167,7 +167,7 @@ print("=" * 78)
 # На копии реального журнала: поля добавляются, записи сохраняются.
 import shutil  # noqa: E402
 
-LIVE = pathlib.Path(r"C:\AutoClaw\z.batteryservice.ru\.ragraf\control.sqlite")
+LIVE = pathlib.Path(__file__).resolve().parents[1].parent / "z.batteryservice.ru/.ragraf/control.sqlite"
 MIGR = STAGING / "task_migration_probe.sqlite"
 if LIVE.exists():
     if MIGR.exists():

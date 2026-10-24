@@ -41,7 +41,7 @@ else:
 old3 = '''        status_titles=dict(STATUS_TITLES, signed="Подписан"),'''
 new3 = '''        status_titles=dict(STATUS_TITLES, signed="Подписан"),'''
 # PL описан в отдельном файле pl.php — он не генерируется, проверяем его наличие.
-pl = pathlib.Path("C:/AutoClaw/RAGRAF/.staging/agreements/journals/pl.php")
+pl = pathlib.Path(__file__).resolve().parents[1] / ".staging/agreements/journals/pl.php"
 if pl.exists():
     pt = pl.read_text(encoding="utf-8")
     print("pl.php содержит postponed:", "postponed" in pt)

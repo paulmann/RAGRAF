@@ -210,7 +210,7 @@ print("=" * 78)
 print("5. ДОГОНЯЮЩАЯ МИГРАЦИЯ: СТАРАЯ ИСТОРИЯ НЕ ТЕРЯЕТСЯ")
 print("=" * 78)
 # Проверяется на КОПИИ реального журнала: исходник не меняется.
-LIVE = pathlib.Path(r"C:\AutoClaw\z.batteryservice.ru\.ragraf\control.sqlite")
+LIVE = pathlib.Path(__file__).resolve().parents[1].parent / "z.batteryservice.ru/.ragraf/control.sqlite"
 MIGR = STAGING / "telemetry_migration_probe.sqlite"
 if LIVE.exists():
     if MIGR.exists():

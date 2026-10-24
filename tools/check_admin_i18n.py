@@ -46,7 +46,7 @@
     python tools/check_admin_i18n.py
     python tools/check_admin_i18n.py --base=http://127.0.0.1:8777
     python tools/check_admin_i18n.py --skip-live --skip-startup
-    python tools/check_admin_i18n.py --python=C:\\AutoClaw\\RAGRAF\\.venv\\Scripts\\python.exe
+    python tools/check_admin_i18n.py --python=.venv\\Scripts\\python.exe
 
     Код возврата 0 — все непропущенные проверки прошли.
 

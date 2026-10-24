@@ -34,7 +34,7 @@ import shutil
 from datetime import datetime
 
 SAGA = pathlib.Path(r"C:\!.Tihon\sagaai_edit_github")
-OUT = pathlib.Path(r"C:\AutoClaw\docs\SagaAI\Fixes")
+OUT = pathlib.Path(__file__).resolve().parents[1].parent / "docs/SagaAI/Fixes"
 
 # Каждый файл — ОДНА запись, даже если правок в нём было несколько.
 # Правки перечисляются списком.

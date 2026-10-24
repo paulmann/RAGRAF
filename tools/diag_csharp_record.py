@@ -18,7 +18,7 @@ import sys
 
 from tree_sitter_language_pack import get_parser  # type: ignore
 
-REPO = pathlib.Path(r"C:\AutoClaw\RAGRAF")
+REPO = pathlib.Path(__file__).resolve().parents[1]
 PROBE = REPO / ".staging" / "csharp_probe.cs"
 PROBE.write_text(
     "using System;\n"

@@ -112,7 +112,7 @@ RAGRAF сам обновит индекс при расхождении. Не п
 
 ### Где живёт индекс
 
-- конфигурация корпуса: `C:\\AutoClaw\\RAGRAF\\config\\sagaai.yaml`;
+- конфигурация корпуса: `config\\sagaai.yaml`;
 - данные индекса: `.ragraf/` в корне проекта (в индексацию не попадает);
 - установленная функция: `orchestrators/dev_agent/functions/ragraf.py`;
 - инструкция: `orchestrators/dev_agent/instructions/ragraf_index.md`.

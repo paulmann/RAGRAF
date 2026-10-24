@@ -31,7 +31,7 @@ import subprocess
 import sys
 
 SAGA = pathlib.Path(r"C:\!.Tihon\sagaai_edit_github")
-RAGRAF_ROOT = pathlib.Path(r"C:\AutoClaw\RAGRAF")
+RAGRAF_ROOT = pathlib.Path(__file__).resolve().parents[1]
 FUNC = SAGA / "orchestrators" / "dev_agent" / "functions" / "ragraf.py"
 
 PASS = 0

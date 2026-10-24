@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import pathlib
 
-OUT = pathlib.Path("C:/AutoClaw/RAGRAF/.staging/agreements/journals")
+OUT = pathlib.Path(__file__).resolve().parents[1] / ".staging/agreements/journals"
 
 HEADER = """<?php
 

@@ -22,7 +22,7 @@ import time
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
-ROOT = pathlib.Path(r"C:\AutoClaw\RAGRAF")
+ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 # Пары «до/после»: подпись, имя серии в baseline, имя серии в after, единица.
 # Замер «до» для операции фасада `catalog`: серия из одного вызова, потому что

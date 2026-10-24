@@ -88,7 +88,7 @@ print("  Если да — построение можно делать реже
 
 # Ищется построенный граф корпуса.
 cpg_candidates: list[pathlib.Path] = []
-for root in ("C:/AutoClaw/z.batteryservice.ru", "C:/AutoClaw/revoap.com"):
+for root in (str(pathlib.Path(__file__).resolve().parents[1].parent / "z.batteryservice.ru"), str(pathlib.Path(__file__).resolve().parents[1].parent / "revoap.com")):
     d = pathlib.Path(root) / ".ragraf" / "cpg"
     if d.exists():
         cpg_candidates.extend(

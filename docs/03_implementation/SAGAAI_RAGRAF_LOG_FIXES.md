@@ -1,7 +1,7 @@
 # Отчёт: починка RAGRAF и SagaAI по логу ошибок
 
 Дата: 7 октября 2026 г.
-Источник задачи: `C:\AutoClaw\docs\SagaAI\Fixes\Errors.html` (дамп интерфейса
+Источник задачи: `docs\SagaAI\Fixes\Errors.html` (дамп интерфейса
 DevAgent, 249 КБ). Из него извлечён текст (918 строк) и разобраны сообщения об
 ошибках.
 
@@ -62,7 +62,7 @@ C:\Users\<user>\AppData\Roaming\AutoClaw-oversea-official\toolchain\python\Pytho
 
 **Правка — две части.**
 
-1. **Собственное окружение RAGRAF.** Создано `C:\AutoClaw\RAGRAF\.venv`
+1. **Собственное окружение RAGRAF.** Создано `.venv`
    (Python 3.14.7), установлены все зависимости из `requirements.txt`. Окружение
    автономно: `user site` отключён, поэтому оно не зависит ни от
    `PYTHONUSERBASE`, ни от настроек AutoClaw. Маркер `.interpreter` переключён на
@@ -78,7 +78,7 @@ C:\Users\<user>\AppData\Roaming\AutoClaw-oversea-official\toolchain\python\Pytho
 сервис):
 
 ```
-выбран интерпретатор: C:\AutoClaw\RAGRAF\.venv\Scripts\python.exe
+выбран интерпретатор: .venv\Scripts\python.exe
 
   OK  index_status   OK  symbol      OK  search        OK  callers
   OK  class_usage    OK  policy_trace OK  task_stats   OK  freshness
@@ -235,8 +235,8 @@ subscriptable"}`. После правки — структурированный
 
 | Тест | Результат | Что ловит |
 |---|---|---|
-| `C:\AutoClaw\RAGRAF\tests\test_cli_ops_dispatch.py` | 27 / 0 | каждая операция из `OPS` проходит диспетчер; коды выхода; `--mode` по операции; `--help` при cp1252; маркер не портится; сводка `usage` не зависит от флага телеметрии |
-| `C:\AutoClaw\RAGRAF\tests\test_sagaai_child_output_encoding.py` | 24 / 0 | не-ASCII вывод ребёнка не рождает `'NoneType' object is not subscriptable`; русский текст читается; ошибка/пустой/длинный вывод; путь-режим; `ok:false` вместо исключения |
+| `tests\test_cli_ops_dispatch.py` | 27 / 0 | каждая операция из `OPS` проходит диспетчер; коды выхода; `--mode` по операции; `--help` при cp1252; маркер не портится; сводка `usage` не зависит от флага телеметрии |
+| `tests\test_sagaai_child_output_encoding.py` | 24 / 0 | не-ASCII вывод ребёнка не рождает `'NoneType' object is not subscriptable`; русский текст читается; ошибка/пустой/длинный вывод; путь-режим; `ok:false` вместо исключения |
 
 Регрессионная проверка выполнена явно: при временном возврате исходного
 `tool_executor.py` тест дал **4 ошибки** и дословно то самое сообщение
@@ -332,7 +332,7 @@ task_stats    ok=True   отчёт команды /RAGRAF сформирован
   `orchestrators/dev_agent/system_prompt.md.bak-before-ragraf-section`.
 
 Все файлы сохранены в UTF-8 без BOM с переводами строк LF; проверено
-инструментом `C:\AutoClaw\Clean_BOM_Senior\clean-bom-senior.sh` (явные пути) —
+инструментом `Clean_BOM_Senior\clean-bom-senior.sh` (явные пути) —
 после обработки `BOM=False`, `CRLF=0`.
 
 **Не сделано намеренно:** коммиты и `git push` не выполнялись — репозиторий

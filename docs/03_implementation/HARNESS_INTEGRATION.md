@@ -119,10 +119,10 @@ CLI — 19 подкоманд; чекер — 22 проверки.
 патчей профиля. Приложение дописывает в `cordis.patch.yml` **массив** патчей,
 поэтому блок вставляется отдельной строкой `- insert:` в конец файла.
 
-Источник (в репозитории): `C:\AutoClaw\RAGRAF\harness\ragraf-mcp.patch.yml`
+Источник (в репозитории): `harness\ragraf-mcp.patch.yml`
 
 ```powershell
-$src = 'C:\AutoClaw\RAGRAF\harness\ragraf-mcp.patch.yml'
+$src = 'harness\ragraf-mcp.patch.yml'
 $dst = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.dsh\profiles\desktop\cordis.patch.yml'
 
 # 1. бэкап (обязательно: файл принадлежит пользователю)
@@ -138,7 +138,7 @@ Add-Content -LiteralPath $dst -Value (Get-Content -LiteralPath $src -Raw) -Encod
 Проверить, что патч применяется (ничего не запуская):
 
 ```powershell
-$dsh = 'C:\Users\mvd.AMD5700X3D\AppData\Local\Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd'
+$dsh = 'C:\Users\<пользователь>\AppData\Local\Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd'
 & $dsh --profile headless --patch $src --dump-config | Select-String 'serverName: ragraf' -Context 1,3
 ```
 
@@ -151,7 +151,7 @@ $dsh = 'C:\Users\mvd.AMD5700X3D\AppData\Local\Programs\DeepSeek Harness\resource
 ```powershell
 $skills = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.dsh\skills\ragraf-core'
 New-Item -ItemType Directory -Path $skills -Force | Out-Null
-Copy-Item 'C:\AutoClaw\RAGRAF\harness\skills\ragraf-core\*' $skills -Recurse -Force
+Copy-Item 'harness\skills\ragraf-core\*' $skills -Recurse -Force
 ```
 
 Корень `%USERPROFILE%\.dsh\skills` читается провайдером навыков HARNESS
@@ -185,7 +185,7 @@ python tests\test_gate_live.py                 # свежий и отставш�
 Решение по одному вызову можно получить без DSH — это ровно то, что увидит клиент:
 
 ```powershell
-'{"tool_name":"grep","tool_input":{"pattern":"x","path":"src"},"cwd":"C:\\AutoClaw\\RAGRAF","session_id":"t1"}' |
+'{"tool_name":"grep","tool_input":{"pattern":"x","path":"src"},"cwd":"RAGRAF","session_id":"t1"}' |
   .venv\Scripts\python.exe tools\ragraf.py -p config\ragraf.yaml query gate --payload - --json
 ```
 
@@ -197,7 +197,7 @@ automatically» — то есть `ask` здесь молча превращае
 **1. Сервер сам по себе, в урезанном окружении.** Это проверка того самого дефекта:
 
 ```powershell
-cd C:\AutoClaw\RAGRAF
+cd RAGRAF
 Remove-Item Env:\PYTHONUTF8, Env:\PYTHONIOENCODING -ErrorAction SilentlyContinue
 python tests\test_mcp_compat.py
 ```
@@ -207,8 +207,8 @@ python tests\test_mcp_compat.py
 **2. Живой запуск внутри HARNESS.** Задача, где агент обязан вызвать инструмент:
 
 ```powershell
-$dsh = 'C:\Users\mvd.AMD5700X3D\AppData\Local\Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd'
-& $dsh --profile headless --patch 'C:\AutoClaw\RAGRAF\harness\ragraf-mcp.patch.yml' --json `
+$dsh = 'C:\Users\<пользователь>\AppData\Local\Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd'
+& $dsh --profile headless --patch 'harness\ragraf-mcp.patch.yml' --json `
   "Вызови mcp__ragraf__ragraf_index_status и приведи первую строку ответа"
 ```
 

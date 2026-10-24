@@ -22,7 +22,7 @@ import shutil
 import sys
 
 SAGA = pathlib.Path(r"C:\!.Tihon\sagaai_edit_github")
-SOURCE = pathlib.Path(r"C:\AutoClaw\RAGRAF\.staging\sagaai_skill_ragraf.md")
+SOURCE = pathlib.Path(__file__).resolve().parents[1] / ".staging/sagaai_skill_ragraf.md"
 
 sys.path.insert(0, str(SAGA))
 

@@ -10,7 +10,7 @@
 был смонтирован вовсе: вторая и последующие записи одного и того же плагина
 не поднимаются, активной остаётся одна (по времени установки — bsg).
 
-РЕШЕНИЕ. Один файл `C:\\AutoClaw\\tools\\hooks.json`, собранный из проектных
+РЕШЕНИЕ. Один файл `tools\\hooks.json`, собранный из проектных
 конфигов, и ОДНА запись `insert` в профиле. Проектные конфиги остаются на месте
 и остаются источником правды: правишь свой — запускаешь этот сборщик (его же
 вызывает установщик гейта), общий файл пересобирается.
@@ -30,14 +30,14 @@ REPO = Path(__file__).resolve().parents[1]
 #: для SessionStart (сборка идёт по порядку групп), а решения PreToolUse всё
 #: равно сливаются протоколом как `deny > ask > allow`.
 SOURCES = [
-    ("xerj", Path(r"C:\AutoClaw\tools\xerj\hooks.json")),
-    ("bsg", Path(r"C:\AutoClaw\tools\bsg\hooks.json")),
+    ("xerj", Path(str(pathlib.Path(__file__).resolve().parents[1].parent / "tools/xerj/hooks.json"))),
+    ("bsg", Path(str(pathlib.Path(__file__).resolve().parents[1].parent / "tools/bsg/hooks.json"))),
     ("ragraf", REPO / "harness" / "hooks.json"),
 ]
 #: Куда пишется свод. Лежит В РАГРАФЕ по двум причинам: (1) свод — это
 #: инфраструктура, которую собирает RAGRAF (он и владеет мостом хуков), (2) у
 #: процесса python в DSH песочница «только рабочий каталог», и запись в
-#: `C:\\AutoClaw\\tools` из python отклоняется (измерено 21.10.2026:
+#: `tools` из python отклоняется (измерено 21.10.2026:
 #: `PermissionError`, при этом из PowerShell тот же путь пишется). Профиль DSH
 #: правит PowerShell-установщик, а свод остаётся здесь и читается мостом хуков.
 SHARED = REPO / "harness" / "all-hooks.json"
@@ -64,7 +64,7 @@ def build() -> dict:
                 })
     readme = [
         "Сводный конфиг хуков AutoClaw для DSH (мост @deepseek-ai/dsh-hooks-claude-code).",
-        "СОБРАН АВТОМАТИЧЕСКИ: python C:\\AutoClaw\\RAGRAF\\tools\\merge_hooks.py",
+        "СОБРАН АВТОМАТИЧЕСКИ: python tools\\merge_hooks.py",
         "Источники (правка — в них, не здесь): " + ", ".join(used),
         "Причина одного файла: одна запись плагина в профиле; вторая запись того же",
         "плагина не поднимается — измерено 21.10.2026 (гейт RAGRAF не получал вызовов",

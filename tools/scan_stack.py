@@ -1,6 +1,6 @@
 """Сканирование каталогов на состав кода: какие расширения и сколько файлов.
 
-Задача: понять фактический стек разработки в C:\\AutoClaw и C:\\1st_RdpMON\\Service,
+Задача: понять фактический стек разработки в <полигон> и 1st_RdpMON\\Service,
 чтобы решить, какие языки добавлять в RAGRAF.
 
 Считается по каждому расширению: число файлов, суммарный объём, глубина
@@ -15,8 +15,8 @@ import pathlib
 from collections import defaultdict
 
 REPOS = [
-    pathlib.Path(r"C:\AutoClaw"),
-    pathlib.Path(r"C:\1st_RdpMON\Service"),
+    pathlib.Path(__file__).resolve().parents[1].parent,
+    pathlib.Path(__file__).resolve().parents[1].parent.parent / "1st_RdpMON" / "Service",
 ]
 
 # Каталоги, которые не интересуют: зависимости, сборка, кеши, служебные.

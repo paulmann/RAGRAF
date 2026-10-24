@@ -32,7 +32,7 @@ import subprocess
 import tempfile
 
 SAGA = pathlib.Path(r"C:\!.Tihon\sagaai_edit_github")
-OUT = pathlib.Path(r"C:\AutoClaw\docs\SagaAI\Fixes")
+OUT = pathlib.Path(__file__).resolve().parents[1].parent / "docs/SagaAI/Fixes"
 REL = "tests/test_task_state.py"
 ORIGIN_REL = "tests/test_task_state.py.bak-dirname"
 
@@ -135,7 +135,7 @@ print("=" * 78)
 proc = subprocess.run(
     [str(SAGA / ".venv" / "Scripts" / "python.exe"), "-m", "pytest",
      "tests/test_task_state.py", "-q", "-p", "no:cacheprovider",
-     "--basetemp=C:\\AutoClaw\\RAGRAF\\.staging\\pytest_tmp"],
+     "--basetemp=.staging\\pytest_tmp"],
     capture_output=True, text=True, encoding="utf-8", errors="replace",
     cwd=str(SAGA), timeout=900,
 )

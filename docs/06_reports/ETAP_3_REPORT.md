@@ -1,9 +1,9 @@
 # Отчёт: доработка RAGRAF
 
 **Дата:** 5 октября 2026
-**Проект:** RAGRAF (`C:\AutoClaw\RAGRAF`)
-**Полигон:** `C:\AutoClaw\z.batteryservice.ru`
-**Пилот:** `C:\AutoClaw\revoap.com`
+**Проект:** RAGRAF (`RAGRAF`)
+**Полигон:** `z.batteryservice.ru`
+**Пилот:** `revoap.com`
 
 ---
 

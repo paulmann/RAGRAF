@@ -39,7 +39,7 @@ print("ПРОВЕРКА: АГЕНТ ИЗ ОКРУЖЕНИЯ ДОХОДИТ ДО 
 print("=" * 78)
 
 # Рабочий журнал корпуса копируется во временный: проверка пишет в копию.
-LIVE = pathlib.Path(r"C:\AutoClaw\revoap.com\.ragraf\control.sqlite")
+LIVE = pathlib.Path(__file__).resolve().parents[1].parent / "revoap.com/.ragraf/control.sqlite"
 STAGING = REPO / ".staging"
 STAGING.mkdir(exist_ok=True)
 PROBE_DB = STAGING / "cli_agent_probe.sqlite"

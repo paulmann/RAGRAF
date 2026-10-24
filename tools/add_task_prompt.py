@@ -16,7 +16,7 @@ from __future__ import annotations
 import pathlib
 import shutil
 
-TARGET = pathlib.Path(r"C:\Users\mvd.AMD5700X3D\.pi\agent\AGENTS.md")
+TARGET = pathlib.Path.home() / ".pi/agent/AGENTS.md"
 text = TARGET.read_text(encoding="utf-8")
 print(f"  файл: {TARGET}")
 print(f"  строк до правки: {len(text.splitlines())}")

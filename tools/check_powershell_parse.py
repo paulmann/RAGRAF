@@ -13,7 +13,7 @@ from __future__ import annotations
 import pathlib
 from tree_sitter_language_pack import get_parser  # type: ignore
 
-REPOS = [pathlib.Path(r"C:\AutoClaw"), pathlib.Path(r"C:\1st_RdpMON\Service")]
+REPOS = [pathlib.Path(__file__).resolve().parents[1].parent, pathlib.Path(__file__).resolve().parents[1].parent.parent / "1st_RdpMON" / "Service"]
 SKIP_DIRS = {
     ".git", "node_modules", "vendor", "dist", "build", "target", ".venv",
     "venv", "__pycache__", ".pytest_cache", ".mypy_cache", ".idea", ".vscode",

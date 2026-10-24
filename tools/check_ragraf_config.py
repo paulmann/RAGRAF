@@ -16,7 +16,7 @@ import pathlib
 import sys
 from collections import Counter
 
-REPO = pathlib.Path(r"C:\AutoClaw\RAGRAF")
+REPO = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
 from ragraf import corpus  # noqa: E402

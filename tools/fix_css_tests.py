@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import pathlib
 
-REPO = pathlib.Path(r"C:\AutoClaw\RAGRAF")
+REPO = pathlib.Path(__file__).resolve().parents[1]
 
 # --- 1. test_css_layer.py ---
 CSS_TEST = REPO / "tests" / "test_css_layer.py"

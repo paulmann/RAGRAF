@@ -1,6 +1,6 @@
 # Техническое задание: RAGRAF
 
-**Версия:** 1.0 · **Дата:** 2026-10-04 · **Проект:** `C:\AutoClaw\RAGRAF`
+**Версия:** 1.0 · **Дата:** 2026-10-04 · **Проект:** `RAGRAF`
 **Основание:** `docs/00_plan/PLAN.md`, `docs/01_research/SPEC_INPUT.md`, `docs/02_architecture/ARCHITECTURE.md`
 **Заказчик:** владелец AutoClaw. **Исполнитель:** AutoClaw.
 **Решения заказчика, зафиксированные 2026-10-04:** JVM (JDK 19 + Joern) разрешена · пилот `revoap.com` · эмбеддинги `paraphrase-multilingual-MiniLM-L12-v2` · релиз 1 — только PHP.

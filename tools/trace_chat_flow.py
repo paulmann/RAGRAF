@@ -27,7 +27,7 @@ import subprocess
 
 SAGA = pathlib.Path(r"C:\!.Tihon\sagaai_edit_github")
 PY = SAGA / ".venv" / "Scripts" / "python.exe"
-TRACE = pathlib.Path(r"C:\AutoClaw\RAGRAF\.staging\trace_parse.txt")
+TRACE = pathlib.Path(__file__).resolve().parents[1] / ".staging/trace_parse.txt"
 
 # Тест-обёртка: подменяет _parse_slash_command и запускает тот же сценарий.
 PROBE = SAGA / "tests" / "_probe_trace_chat.py"
@@ -86,7 +86,7 @@ print("ТРАССИРОВКА ВЫЗОВОВ В ТЕСТЕ")
 print("=" * 78)
 proc = subprocess.run([str(PY), "-m", "pytest", str(PROBE), "-q", "-s",
                        "-p", "no:cacheprovider",
-                       "--basetemp=C:\\AutoClaw\\RAGRAF\\.staging\\pytest_tmp"],
+                       "--basetemp=.staging\\pytest_tmp"],
                       capture_output=True, text=True, encoding="utf-8",
                       errors="replace", cwd=str(SAGA), timeout=600)
 out = (proc.stdout or "") + (proc.stderr or "")

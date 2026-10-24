@@ -27,12 +27,12 @@
 
 | файл в дереве | источник (URL + коммит) | sha256 в публичном main | sha256 в дереве | совпадает | путь в поставке |
 |---|---|---|---|---|---|
-| community/CHANGELOG.md | https://github.com/paulmann/RAGRAF/blob/075caf86dc2f6274b9c48487e521915bcdfeaf2c/CHANGELOG.md | 9220ae02aecf197b5c417303b4cea2634051e0d9a3b5ee3d484080b37f1584cb | 651158d4fa6f213b23272b7f99e80d7c308e1c16532fcd33f00578211be03eae | нет | CHANGELOG.md |
-| community/CITATION.cff | https://github.com/paulmann/RAGRAF/blob/075caf86dc2f6274b9c48487e521915bcdfeaf2c/CITATION.cff | 7ea4d5f5f5a41c60d41983e60c6ebc39b172942d0d421390e17e24cbf8859c20 | 8a9c688ece2beaa1afc5d0363c4a9dfcea2269459d600d070950dce1eda0cbb7 | нет | CITATION.cff |
+| community/CHANGELOG.md | https://github.com/paulmann/RAGRAF/blob/075caf86dc2f6274b9c48487e521915bcdfeaf2c/CHANGELOG.md | 9220ae02aecf197b5c417303b4cea2634051e0d9a3b5ee3d484080b37f1584cb | 59c60e874d706dd0d0fd2108ea83a3f11ab0e688d23dde231c31624d01ab4fed | нет | CHANGELOG.md |
+| community/CITATION.cff | https://github.com/paulmann/RAGRAF/blob/075caf86dc2f6274b9c48487e521915bcdfeaf2c/CITATION.cff | 7ea4d5f5f5a41c60d41983e60c6ebc39b172942d0d421390e17e24cbf8859c20 | 09396e7c1f05df10d57df47439acda0dc857dbd1a77f8f16e00f00a34700be8d | нет | CITATION.cff |
 | community/CODE_OF_CONDUCT.md | https://github.com/paulmann/RAGRAF/blob/075caf86dc2f6274b9c48487e521915bcdfeaf2c/CODE_OF_CONDUCT.md | 34596ad809e62b3c5a0f9cfb3106c971c21b4f145b18c7e70704959d6996b580 | 34596ad809e62b3c5a0f9cfb3106c971c21b4f145b18c7e70704959d6996b580 | да | CODE_OF_CONDUCT.md |
 | community/CONTRIBUTING.md | https://github.com/paulmann/RAGRAF/blob/075caf86dc2f6274b9c48487e521915bcdfeaf2c/CONTRIBUTING.md | dcfb15ed0552fd51b285333dd15a129ff54495155f0852485d4f90b664e3546f | 4702989e9f57c205f752d6e5977b692316fae0fa4c61c32355d5289e05d98689 | нет | CONTRIBUTING.md |
 | community/install.ps1 | https://github.com/paulmann/RAGRAF/blob/075caf86dc2f6274b9c48487e521915bcdfeaf2c/install.ps1 | 4ad85ec942408fcc56212d6b7a3471d42138125b5c087551e5a1b691f788a69d | 45e16b8adc0a2ac3853b122e43546db979075ecec7b623fb0e2eb5e7506a7a47 | нет | install.ps1 |
-| community/mkdocs.yml | https://github.com/paulmann/RAGRAF/blob/075caf86dc2f6274b9c48487e521915bcdfeaf2c/mkdocs.yml | 708ac6bc4029b9204dd6f74850e2c3c1bac42e22d724c63ce890593df6dc954a | 5088c8e1ee69aba71e96ef2dca765fd8e1e9f656f44c18614e27a8d09e3dddeb | нет | mkdocs.yml |
+| community/mkdocs.yml | https://github.com/paulmann/RAGRAF/blob/075caf86dc2f6274b9c48487e521915bcdfeaf2c/mkdocs.yml | 708ac6bc4029b9204dd6f74850e2c3c1bac42e22d724c63ce890593df6dc954a | fafbfabe326de2139b7075cc831c358729070a28f0e1b90baa26dbf8bcd4a0e4 | нет | mkdocs.yml |
 | community/README.ru.md | https://github.com/paulmann/RAGRAF/blob/075caf86dc2f6274b9c48487e521915bcdfeaf2c/README.ru.md | f01543822ec8997f548608d3e541e8c8adc72178237ba99017a6df67efa46f5c | 0b54d4d486bab6c2d6838175ac15d416b45c37d69f3a1f488ecef50cc5f8cede | нет | README.ru.md |
 | community/ROADMAP.md | https://github.com/paulmann/RAGRAF/blob/075caf86dc2f6274b9c48487e521915bcdfeaf2c/ROADMAP.md | dae3feb0c20c70ec55cae98740401a02206875e2ebfcc8cded00637ca8ab0cf4 | dae3feb0c20c70ec55cae98740401a02206875e2ebfcc8cded00637ca8ab0cf4 | да | ROADMAP.md |
 | community/SECURITY.md | https://github.com/paulmann/RAGRAF/blob/075caf86dc2f6274b9c48487e521915bcdfeaf2c/SECURITY.md | 8a94f86fd64b71063f9479a32721890d661bb3c69221f874d6c1a13c9456bf92 | 8a94f86fd64b71063f9479a32721890d661bb3c69221f874d6c1a13c9456bf92 | да | SECURITY.md |
@@ -275,13 +275,19 @@ pwsh -NoProfile -File tools\Invoke-ProjectDoctrine.ps1   # 24-я проверк�
    в `RAGRAF_DB_PASSWORD`/файл доступа машины, два подставных значения объявлены
    маркером. Подробности и измеренная причина — `RELEASE-PIPELINE.md` §5.
 4. **Живой конфиг корпуса убран из поставки**, `examples/ragraf.example.yaml`
-   возвращён: до этого сборка несла `root: C:/AutoClaw/RAGRAF` — путь автора.
+   возвращён: до этого сборка несла `root: RAGRAF` — путь автора.
 5. **Появилась карта изданий** (`editions/`, `tools/release/editions_report.py`):
    у каждого файла живого дерева есть место — публикация либо объявленное
    удержание. Обоснование — указание владельца «урезанное издание ничего не
    отменяет».
 
-Осталось названным, но не сделанным: навигация сайта документации всё ещё
-опирается на пути 0.1.0 (`community/mkdocs.yml`), абсолютные пути автора остаются
-в части исторических документов и одноразовых скриптов, публикация в PyPI и сайт
-`ragraf.ru` — вне конвейера.
+Закрыто этапом 4.5 (24.10.2026): навигация сайта переписана под фактический
+состав поставки (59 целей, все существуют; домашняя страница `docs/index.md`
+добавлена; русские ветви `docs/ru/**` заменены прямыми ссылками на
+`docs/02_architecture/**`, `docs/03_implementation/**`, `docs/05_article/**`), и
+пути машины автора убраны из поставки — 86 файлов, из них 21 документ. Проверяльщик
+получил девятое правило `paths`, гейт — пятую порчу «путь машины»; `mkdocs build
+--strict` на собранном дереве даёт код 0.
+
+Осталось названным, но не сделанным: публикация в PyPI и сайт `ragraf.ru` — вне
+конвейера.

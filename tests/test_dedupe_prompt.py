@@ -14,8 +14,8 @@ import pathlib
 import re
 import sys
 
-REPO = pathlib.Path(r"C:\AutoClaw\RAGRAF")
-PROMPT = pathlib.Path(r"C:\Users\mvd.AMD5700X3D\.pi\agent\AGENTS.md")
+REPO = pathlib.Path(__file__).resolve().parents[1]
+PROMPT = pathlib.Path.home() / ".pi/agent/AGENTS.md"
 sys.path.insert(0, str(REPO / "src"))
 
 PASS = 0
@@ -122,7 +122,7 @@ print("3. ЧИСЛА В ПРОМПТЕ СОВПАДАЮТ С ЗАМЕРАМИ")
 print("=" * 78)
 # Числа, полученные замерами этой сессии.
 FACTS = {
-    "5559": "документов просканировано в C:\\AutoClaw",
+    "5559": "документов просканировано в <полигон>",
     "513": "групп копий",
     "3856": "лишних файлов",
     "104": "копий одного ADR (худший случай)",

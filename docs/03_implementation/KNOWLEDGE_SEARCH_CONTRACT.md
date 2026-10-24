@@ -59,7 +59,7 @@ L3-хранилище: `~/.dsh/storages/agent-knowledge/knowledge.sqlite` (от�
   "query": "кто чинил доступ к MySQL на 176.99.5.35",
   "mode": "auto",
   "filters": {
-    "workspaces": ["C:\\AutoClaw\\176.99.5.35"],
+    "workspaces": ["176.99.5.35"],
     "session_ids": [],
     "actor_ids": [],
     "since": "2026-09-01T00:00:00+03:00",
@@ -137,7 +137,7 @@ RAGRAF напрямую нельзя.
           "surface": "current",
           "snippet": "…доступ к MySQL восстановлен, пароль лежит в …",
           "session": {
-            "cwd": "C:\\AutoClaw\\176.99.5.35",
+            "cwd": "176.99.5.35",
             "created_at": "2026-10-21T08:50:00+03:00",
             "agent_preset": "standard",
             "live": false,

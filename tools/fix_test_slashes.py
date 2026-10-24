@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import pathlib
 
-TARGET = pathlib.Path(r"C:\AutoClaw\RAGRAF\tests\test_joern_names.py")
+TARGET = pathlib.Path(__file__).resolve().parents[1] / "tests/test_joern_names.py"
 text = TARGET.read_text(encoding="utf-8")
 
 # В строке исходника четыре обратных слеша → в значении два.

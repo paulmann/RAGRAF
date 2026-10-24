@@ -19,9 +19,9 @@
     "ragraf": {
       "command": "python",
       "args": [
-        "C:/AutoClaw/RAGRAF/tools/ragraf-mcp.py",
+        "tools/ragraf-mcp.py",
         "--project",
-        "C:/AutoClaw/RAGRAF/config/revoap.yaml"
+        "config/revoap.yaml"
       ]
     }
   }

@@ -109,7 +109,7 @@ probe.write_text(
 proc = subprocess.run(
     [str(PY), "-m", "pytest", str(probe), "-q", "-s", "-p",
      "no:cacheprovider",
-     "--basetemp=C:\\AutoClaw\\RAGRAF\\.staging\\pytest_tmp"],
+     "--basetemp=.staging\\pytest_tmp"],
     capture_output=True, text=True, encoding="utf-8", errors="replace",
     cwd=str(SAGA), timeout=600,
 )

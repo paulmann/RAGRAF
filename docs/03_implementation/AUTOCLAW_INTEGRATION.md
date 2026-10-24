@@ -16,8 +16,8 @@ Electron-приложение в `%LOCALAPPDATA%\Programs\AutoClaw2`), и что
 
 1. [Два независимых канала: CLI и MCP](#1-два-независимых-канала-cli-и-mcp)
 2. [Что уже настроено на этой машине](#2-что-уже-настроено-на-этой-машине)
-3. [Канал 1 — CLI: работает без настройки](#3-канал-1--cli-работает-без-настройки)
-4. [Канал 2 — MCP: что даёт и как подключается](#4-канал-2--mcp-что-даёт-и-как-подключается)
+3. [Канал 1 — CLI: работает без настройки](#3-канал-1-cli-работает-без-настройки)
+4. [Канал 2 — MCP: что даёт и как подключается](#4-канал-2-mcp-как-подключается-найдено-в-коде)
 5. [Результат доработки RAGRAF: 4 дефекта совместимости](#5-результат-доработки-ragraf-4-дефекта-совместимости)
 6. [Навык и правила](#6-навык-и-правила)
 7. [Проверка](#7-проверка)
@@ -50,7 +50,7 @@ RAGRAF**: индекс, поиск, схема и графы остаются п
 |---|---|---|
 | Правило «сначала RAGRAF» | **есть** | `~/.pi/agent/AGENTS.md`, раздел 8 |
 | Навык `ragraf-core` | **есть в обоих аккаунтах** | `<account>\runtime\zwork-agent\skills\ragraf-core` |
-| Корпуса в реестре | **18 разработок** | `C:\AutoClaw\RAGRAF\catalog\catalog.json` |
+| Корпуса в реестре | **18 разработок** | `catalog\catalog.json` |
 | CLI RAGRAF в окружении агента | **работает** | `python tools/ragraf.py` найден и отвечает |
 | Инструменты расширения (MCP) | **не подключены** | замер: 0 строк в `governed_connected_sources`, `tool_search` → 0 |
 
@@ -76,7 +76,7 @@ RAGRAF**: индекс, поиск, схема и графы остаются п
 **Первым шагом — актуализировать корпус:**
 
 ```powershell
-python C:\AutoClaw\RAGRAF\tools\ragraf.py ensure <каталог проекта>
+python tools\ragraf.py ensure <каталог проекта>
 ```
 
 Ответ несёт `status`: `actual` — индекс актуален, `reindexed` — пересобран только что,
@@ -86,8 +86,8 @@ python C:\AutoClaw\RAGRAF\tools\ragraf.py ensure <каталог проекта>
 **Дальше — операция, а не чтение файлов:**
 
 ```powershell
-python C:\AutoClaw\RAGRAF\tools\ragraf.py -p C:\AutoClaw\RAGRAF\config\<корпус>.yaml query symbol --name corpus_hash
-python C:\AutoClaw\RAGRAF\tools\ragraf.py -p C:\AutoClaw\RAGRAF\config\<корпус>.yaml check
+python tools\ragraf.py -p config\<корпус>.yaml query symbol --name corpus_hash
+python tools\ragraf.py -p config\<корпус>.yaml check
 ```
 
 **Признак `stale: true` означает, что фактам верить нельзя** до переиндексации:
@@ -96,7 +96,7 @@ python C:\AutoClaw\RAGRAF\tools\ragraf.py -p C:\AutoClaw\RAGRAF\config\<корп
 Список заведённых корпусов даёт команда, которой конфигурация не нужна:
 
 ```powershell
-python C:\AutoClaw\RAGRAF\tools\ragraf.py catalog
+python tools\ragraf.py catalog
 ```
 
 ### Почему CLI здесь предпочтительнее MCP
@@ -201,13 +201,13 @@ label    = RAGRAF: search
 **Launch command:**
 
 ```
-C:\AutoClaw\RAGRAF\.venv\Scripts\python.exe
+.venv\Scripts\python.exe
 ```
 
 **Arguments** — одной строкой:
 
 ```
-C:\AutoClaw\RAGRAF\tools\ragraf-mcp.py --project C:\AutoClaw\RAGRAF\config\ragraf.yaml --agent AutoClaw --agent-kind autoclaw
+tools\ragraf-mcp.py --project config\ragraf.yaml --agent AutoClaw --agent-kind autoclaw
 ```
 
 **Environment variables:** оставить пустым. Причины: (1) зависимостям RAGRAF ничего
@@ -231,7 +231,7 @@ C:\AutoClaw\RAGRAF\tools\ragraf-mcp.py --project C:\AutoClaw\RAGRAF\config\ragra
 (тот же белый список окружения):
 
 ```powershell
-python C:\AutoClaw\RAGRAF\.staging\autoclaw-mcp\probe_autoclaw_env.py
+python .staging\autoclaw-mcp\probe_autoclaw_env.py
 ```
 
 Замер этой сессии: `tools/list: 24`, `ensure` — `rev-0057`, `symbol` —
@@ -303,7 +303,7 @@ MCP-клиент передаёт дочернему процессу тольк
     reference/repair.md      (что делать, когда индекс сломан)
 ```
 
-**Источник — каталог проекта:** `C:\AutoClaw\RAGRAF\docs\skills\ragraf-core\`. Правка идёт
+**Источник — каталог проекта:** `docs\skills\ragraf-core\`. Правка идёт
 в проект, затем копируется в служебный каталог аккаунта. Иначе при следующем развёртывании
 копия в аккаунте «отстанет» от проекта и агент будет работать по старой редакции.
 
@@ -317,7 +317,7 @@ MCP-клиент передаёт дочернему процессу тольк
 **Обновление копии после правки навыка:**
 
 ```powershell
-$src = 'C:\AutoClaw\RAGRAF\docs\skills\ragraf-core'
+$src = 'docs\skills\ragraf-core'
 Get-ChildItem "$env:APPDATA\AutoClaw-oversea-official\accounts" -Directory | ForEach-Object {
     $dst = Join-Path $_.FullName 'runtime\zwork-agent\skills\ragraf-core'
     if (Test-Path -LiteralPath $dst) {
@@ -369,8 +369,8 @@ PDF/DOCX/XLSX/PPTX/EML/ODT/RTF в языке `document`, локальная по
 **1. Канал CLI жив и видит корпуса:**
 
 ```powershell
-python C:\AutoClaw\RAGRAF\tools\ragraf.py catalog
-python C:\AutoClaw\RAGRAF\tools\ragraf.py ensure C:\AutoClaw\RAGRAF
+python tools\ragraf.py catalog
+python tools\ragraf.py ensure RAGRAF
 ```
 
 Ожидается: 18 разработок; `status: actual` и совпадение сумм.
@@ -378,7 +378,7 @@ python C:\AutoClaw\RAGRAF\tools\ragraf.py ensure C:\AutoClaw\RAGRAF
 **2. Свежесть конкретного корпуса:**
 
 ```powershell
-python C:\AutoClaw\RAGRAF\tools\ragraf.py -p C:\AutoClaw\RAGRAF\config\ragraf.yaml check
+python tools\ragraf.py -p config\ragraf.yaml check
 ```
 
 Ожидается: `сумма корпуса сейчас` = `сумма при индексации`, `изменилось после индексации: нет`.
@@ -395,7 +395,7 @@ source_ragraf_ragraf_use_project(project="revoap.com")  → ревизия ДР�
 Независимая проверка сервера — в тех же условиях, что создаёт AutoClaw:
 
 ```powershell
-python C:\AutoClaw\RAGRAF\.staging\autoclaw-mcp\probe_autoclaw_env.py
+python .staging\autoclaw-mcp\probe_autoclaw_env.py
 ```
 
 Замер 13.10.2026: окружение без единой `PYTHON*`, `tools/list` — 24 инструмента,
@@ -403,7 +403,7 @@ python C:\AutoClaw\RAGRAF\.staging\autoclaw-mcp\probe_autoclaw_env.py
 `revoap.com rev-0035`, stderr чист. Штатная регрессия (без приложения):
 
 ```powershell
-cd C:\AutoClaw\RAGRAF
+cd RAGRAF
 Remove-Item Env:\PYTHONUTF8, Env:\PYTHONIOENCODING -ErrorAction SilentlyContinue
 python tests\test_mcp_compat.py        # 15 проверок
 ```
@@ -411,7 +411,7 @@ python tests\test_mcp_compat.py        # 15 проверок
 **4. Телеметрия — видно, кто и что вызвал:**
 
 ```powershell
-python C:\AutoClaw\RAGRAF\tools\ragraf.py -p C:\AutoClaw\RAGRAF\config\ragraf.yaml usage --agent AutoClaw
+python tools\ragraf.py -p config\ragraf.yaml usage --agent AutoClaw
 ```
 
 Ожидается строка по агенту с числом вызовов и операциями, включая `ensure`.
@@ -440,7 +440,7 @@ Copy-Item "$dir\AGENTS.md.bak-20261013-150821-mcp-names" "$dir\AGENTS.md" -Force
 Копии навыка в аккаунтах восстанавливаются из проекта:
 
 ```powershell
-Copy-Item -Recurse -Force C:\AutoClaw\RAGRAF\docs\skills\ragraf-core `
+Copy-Item -Recurse -Force docs\skills\ragraf-core `
     "$env:APPDATA\AutoClaw-oversea-official\accounts\53fa6b3b559c638c798a72686d01e6da331c2f0a886bd5428db5ed926884a587\runtime\zwork-agent\skills\ragraf-core"
 ```
 

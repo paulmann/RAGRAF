@@ -20,7 +20,7 @@ from __future__ import annotations
 import pathlib
 import sqlite3
 
-DB = pathlib.Path(r"C:\AutoClaw\revoap.com\.ragraf\control.sqlite")
+DB = pathlib.Path(__file__).resolve().parents[1].parent / "revoap.com/.ragraf/control.sqlite"
 TEST_AGENT = "TestAgentEnv"
 
 conn = sqlite3.connect(str(DB))

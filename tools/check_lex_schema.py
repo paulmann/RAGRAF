@@ -9,7 +9,7 @@ from __future__ import annotations
 import pathlib
 import sqlite3
 
-LEX = pathlib.Path(r"C:\1st_RdpMON\Service\.ragraf\index\lex\lexvec.sqlite")
+LEX = pathlib.Path(__file__).resolve().parents[1].parent.parent / "1st_RdpMON" / "Service/.ragraf/index/lex/lexvec.sqlite"
 print(f"  файл: {LEX}  ({LEX.stat().st_size / 1024 / 1024:.1f} МБ)")
 
 conn = sqlite3.connect(f"file:{LEX}?mode=ro", uri=True)

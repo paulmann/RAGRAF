@@ -13,8 +13,8 @@ import pathlib
 import sqlite3
 
 ROOTS = {
-    "rdpmon": r"C:\1st_RdpMON\Service",
-    "z": r"C:\AutoClaw\z.batteryservice.ru",
+    "rdpmon": str(pathlib.Path(__file__).resolve().parents[1].parent.parent / "1st_RdpMON" / "Service"),
+    "z": str(pathlib.Path(__file__).resolve().parents[1].parent / "z.batteryservice.ru"),
 }
 
 for label, root in ROOTS.items():

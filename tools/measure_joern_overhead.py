@@ -42,8 +42,8 @@ print("=" * 78)
 
 # Ищется построенный граф корпуса.
 cpg_dir = None
-for name, root in (("z-batteryservice", "C:/AutoClaw/z.batteryservice.ru"),
-                   ("revoap", "C:/AutoClaw/revoap.com")):
+for name, root in (("z-batteryservice", str(pathlib.Path(__file__).resolve().parents[1].parent / "z.batteryservice.ru")),
+                   ("revoap", str(pathlib.Path(__file__).resolve().parents[1].parent / "revoap.com"))):
     candidate = pathlib.Path(root) / ".ragraf" / "cpg"
     if candidate.exists():
         # ВАЖНО про расширение: граф лежит как `<rev>.cpg.bin`, а не `<rev>.cpg`.
@@ -141,8 +141,8 @@ from ragraf import store  # noqa: E402
 from ragraf.config import load as load_config  # noqa: E402
 
 print("\n  полная стадия графа в истории индексации:")
-for name, root in (("z-batteryservice", "C:/AutoClaw/z.batteryservice.ru"),
-                   ("revoap", "C:/AutoClaw/revoap.com")):
+for name, root in (("z-batteryservice", str(pathlib.Path(__file__).resolve().parents[1].parent / "z.batteryservice.ru")),
+                   ("revoap", str(pathlib.Path(__file__).resolve().parents[1].parent / "revoap.com"))):
     cfg = load_config(REPO / "config" / f"{name}.yaml")
     conn = store.connect(cfg.graph_db, readonly=True)
     rows = conn.execute(

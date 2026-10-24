@@ -19,7 +19,7 @@
 
 ### 0. Роль и порядок работы
 
-Ты работаешь в проекте **RAGRAF** (`C:\AutoClaw\RAGRAF`) — графово-векторный
+Ты работаешь в проекте **RAGRAF** (`RAGRAF`) — графово-векторный
 индекс кода, к которому подключён AutoClaw. Перед любым действием прочитай
 `AGENTS.md` проекта и `docs/AGENTS-context.md` и работай по ним: там инварианты,
 которые нельзя ломать. Факт без ссылки `файл:строка` — догадка, а не факт.
@@ -54,8 +54,8 @@
 ### 0.2 Первое действие — актуализировать корпус
 
 ```powershell
-cd C:\AutoClaw\RAGRAF
-python tools/ragraf.py ensure C:\AutoClaw\RAGRAF
+cd RAGRAF
+python tools/ragraf.py ensure RAGRAF
 ```
 
 Ожидается `status=actual` (или `reindexed`). Если `error` или `not_a_project` —
@@ -84,13 +84,13 @@ python tools/ragraf.py ensure C:\AutoClaw\RAGRAF
 | Навык в репозитории | `docs/skills/ragraf-core/SKILL.md` | 9 811 б, `6D4C33534B675357…` |
 | Навык, ссылка операций | `…/reference/operations.md` | 7 546 б, `21C6AF9F456C348C1…` |
 | Навык, восстановление | `…/reference/repair.md` | 11 271 б, `995A56BB9036B6B92…` |
-| Правила рабочего каталога | `C:\AutoClaw\AGENTS.md` | 12 524 б, `901C10FD66EA8CDF…` |
+| Правила рабочего каталога | `AGENTS.md` | 12 524 б, `901C10FD66EA8CDF…` |
 | Правила pwsh-среды | `~\.pi\agent\AGENTS.md` | 134 466 б, `1E658D75A9E43EBB…` |
 | Линтер PowerShell | `~\.pi\agent\tools\Test-PwshApiVintage.ps1` | 12 846 б, `AA8C1FC6AEE62111…` |
 | Чекер конвенций | `tools/Invoke-ProjectDoctrine.ps1` | 14 проверок, 0 ошибок, 0 предупреждений |
 | Чистота текстов | `tools/check_bom_crlf.py` | 38 из 38 чистых |
-| Git-источник | `C:\AutoClaw\RAGRAF.git\RAGRAF` | ветка `main`, коммит `6a62a07` |
-| MCP рабочего каталога | `C:\AutoClaw\config\mcporter.json` | 2 сервера, оба `enabled: true`: `autoclaw-productivity`, `autoclaw-github` |
+| Git-источник | `RAGRAF.git\RAGRAF` | ветка `main`, коммит `6a62a07` |
+| MCP рабочего каталога | `config\mcporter.json` | 2 сервера, оба `enabled: true`: `autoclaw-productivity`, `autoclaw-github` |
 | Админ-панель RAGRAF | `src/ragraf/admin_server.py` | порт 8777, токен печатается при старте |
 | Сервер Joern | порт 9500 | свободен, процессов `java.exe` — 0 |
 | Конфигов корпусов | `config/*.yaml` | 18 (растёт — норма) |
@@ -121,19 +121,19 @@ $t = Get-Content -LiteralPath $f -Raw
 ```
 
 **П1.3. Файлы-маркеры рабочего каталога.** Проверить, что на месте и не
-обнулены: `C:\AutoClaw\AGENTS.md`, `C:\AutoClaw\USER.md`, `TOOLS.md`, `SOUL.md`,
+обнулены: `AGENTS.md`, `USER.md`, `TOOLS.md`, `SOUL.md`,
 `IDENTITY.md`, `HEARTBEAT.md`. У пяти последних эталон от 26.08.2026 — они
 обновлением меняться не должны.
 
 **П1.4. Рабочий каталог агента.** В `.openclaw-autoclaw\openclaw.json` поле
-`agents.defaults.workspace` обязано остаться `C:\AutoClaw`. Список `agents.list`
+`agents.defaults.workspace` обязано остаться `<полигон>`. Список `agents.list`
 обязан содержать запись с `default: true` и тем же workspace. Если каталог
 поменялся, **весь каскад** подхвата файлов (проектный `AGENTS.md` из
 родительских каталогов до границы `.git`, пользовательский `.pi\agent\AGENTS.md`)
 перестанет работать — это находка первой важности.
 
 **П1.5. Инструкции, приходящие от платформы.** Проверить, что рабочие инструкции
-(`C:\AutoClaw\.cluster\expert-playbook.md`) на месте. Файлы SOP платформы
+(`.cluster\expert-playbook.md`) на месте. Файлы SOP платформы
 (`expert-sop-im.txt`, `expert-sop-last-known-good.json`) обновлением меняются
 законно — их содержимое не сверять построчно, достаточно проверить, что в
 `expert-sop-last-known-good.json` осталось упоминание `ragraf` (до обновления —
@@ -173,7 +173,7 @@ python -c "import sqlite3;print('строк:', 'см. таблицу governed_pr
 переводы строк LF.
 
 ```powershell
-$s = 'C:\AutoClaw\RAGRAF\docs\skills\ragraf-core\SKILL.md'
+$s = 'docs\skills\ragraf-core\SKILL.md'
 $b = [IO.File]::ReadAllBytes($s)
 "BOM={0}  CRLF={1}  first3={2}" -f (($b[0] -eq 0xEF) -and ($b[1] -eq 0xBB) -and ($b[2] -eq 0xBF)),
     ([IO.File]::ReadAllText($s) -match "`r`n"), ($b[0..2] -join ',')
@@ -201,7 +201,7 @@ RAGRAF **не был зарегистрирован** в AutoClaw: в `openclaw.
 ```powershell
 # инструменты ragraf_* в текущем Run (если доступен tool_search)
 # и реестр MCP
-Get-Content 'C:\Users\mvd.AMD5700X3D\.openclaw-autoclaw\openclaw.json' -Raw |
+Get-Content 'C:\Users\<пользователь>\.openclaw-autoclaw\openclaw.json' -Raw |
   Select-String -Pattern 'ragraf' -SimpleMatch
 ```
 
@@ -216,7 +216,7 @@ Get-Content 'C:\Users\mvd.AMD5700X3D\.openclaw-autoclaw\openclaw.json' -Raw |
   параметром.
 
 **П3.2. Автоконфигурация MCP не должна была тронуть конфиги рабочего каталога.**
-Сверить `C:\AutoClaw\config\mcporter.json` с эталоном 0.3: два сервера, оба
+Сверить `config\mcporter.json` с эталоном 0.3: два сервера, оба
 включены. Отличие — находка, **но править файл самому нельзя** (см. 0.1, п. 3):
 сообщить владельцу и предложить шаг через интерфейс приложения.
 
@@ -238,7 +238,7 @@ Get-Content 'C:\Users\mvd.AMD5700X3D\.openclaw-autoclaw\openclaw.json' -Raw |
 **П4.1. Индекс и сумма.**
 
 ```powershell
-cd C:\AutoClaw\RAGRAF
+cd RAGRAF
 python tools/ragraf.py -p config/ragraf.yaml check
 ```
 
@@ -317,7 +317,7 @@ Remove-Item Env:\GIT_AUTHOR_NAME,Env:\GIT_AUTHOR_EMAIL,`
 ### Блок 6. Регресс: проверки проекта
 
 ```powershell
-cd C:\AutoClaw\RAGRAF
+cd RAGRAF
 python tools/ragraf.py -p config/ragraf.yaml reindex     # только если правка касалась ядра
 python tools/ragraf.py -p config/ragraf.yaml check
 pwsh -NoLogo -NoProfile -NonInteractive -File tools/Invoke-ProjectDoctrine.ps1
@@ -368,10 +368,10 @@ pytest в репозитории нет, он не соберёт ни одно�
 |---|---|---|
 | Разделы `~\.pi\agent\AGENTS.md` §0–§11 | резервные копии рядом: 23 файла `AGENTS.md.bak-*`, самый свежий `AGENTS.md.bak-session5` | дописать **только утраченные разделы** в конец, не перезаписывая файл целиком |
 | Линтер `~\.pi\agent\tools\Test-PwshApiVintage.ps1` | копии на машине нет | сообщить владельцу: это единственная точка без резерва, восстановлению из репозитория не подлежит |
-| Навык `ragraf-core` | `C:\AutoClaw\RAGRAF\docs\skills\ragraf-core\` (репозиторий) | скопировать в служебный каталог **каждой** учётной записи и сверить хеши |
-| Файлы навыка в репозитории | `C:\AutoClaw\RAGRAF.git\RAGRAF` (ветка `main`) | сверить и, при необходимости, взять версию из коммита `6a62a07` |
-| Правила рабочего каталога `C:\AutoClaw\AGENTS.md` | резервная копия `AGENTS.md.bak.20261004-203526-before-mysql` рядом | восстановить утраченный раздел, не перезаписывая файл |
-| Ядро RAGRAF | `C:\AutoClaw\RAGRAF.git\RAGRAF` | сверить рабочее дерево с `main` и взять расходящийся файл из коммита |
+| Навык `ragraf-core` | `docs\skills\ragraf-core\` (репозиторий) | скопировать в служебный каталог **каждой** учётной записи и сверить хеши |
+| Файлы навыка в репозитории | `RAGRAF.git\RAGRAF` (ветка `main`) | сверить и, при необходимости, взять версию из коммита `6a62a07` |
+| Правила рабочего каталога `AGENTS.md` | резервная копия `AGENTS.md.bak.20261004-203526-before-mysql` рядом | восстановить утраченный раздел, не перезаписывая файл |
+| Ядро RAGRAF | `RAGRAF.git\RAGRAF` | сверить рабочее дерево с `main` и взять расходящийся файл из коммита |
 | Индекс корпуса | — | `python tools/ragraf.py -e … reindex`; индекс производный, восстановление пересборкой |
 
 **Про секретоносные пути.** В `AGENTS.md` проекта они перечислены по именам

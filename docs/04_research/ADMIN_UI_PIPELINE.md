@@ -265,7 +265,7 @@ stdio с тем же `clientInfo`) → след `AutoClaw (Local program)`, ис
 и в stdio-сервере (`tools/ragraf-mcp.py`), и в HTTP-сервисе. Имена агента брались из
 ENV и раньше (`RAGRAF_AGENT`, `RAGRAF_AGENT_KIND`).
 Замер: запуск из каталога `C:\` БЕЗ `--project`, только с `RAGRAF_PROJECT` → сервер
-напечатал «проект C:\AutoClaw\RAGRAF\config\ragraf.yaml», ответил на `initialize` и
+напечатал «проект config\ragraf.yaml», ответил на `initialize` и
 на `tools/call`. Инструкция в панели теперь показывает: Launch command, Arguments
 (путь к `ragraf-mcp.py`), Environment variables тремя строками — и не показывает
 поля, которого в форме нет. Значения с переносами строк выводятся отдельными

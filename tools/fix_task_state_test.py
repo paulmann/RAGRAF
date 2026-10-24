@@ -85,7 +85,7 @@ print("=" * 78)
 proc = subprocess.run(
     [str(PY), "-m", "pytest", "tests/test_task_state.py", "-q",
      "-p", "no:cacheprovider",
-     "--basetemp=C:\\AutoClaw\\RAGRAF\\.staging\\pytest_tmp"],
+     "--basetemp=.staging\\pytest_tmp"],
     capture_output=True, text=True, encoding="utf-8", errors="replace",
     cwd=str(SAGA), timeout=600,
 )
