@@ -98,6 +98,8 @@ FILES = [
     "editions/editions.toml",
     "editions/README.md",
     "editions/legacy-v0.1.0/README.md",
+    "archive/README.md",
+    "tools/keep_cut.py",
     "editions/EXCLUDED-FROM-COMMUNITY.md",
     "pro/README.md",
     "enterprise/README.md",
