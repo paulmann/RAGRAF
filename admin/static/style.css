@@ -1765,3 +1765,85 @@ inherits:false;
 initial-value:solid}
 @property --tw-font-weight{syntax:"*";
 inherits:false}
+
+/* --- вкладка «Форматы»: список чекбоксов с фильтром ---------------------- */
+.fmt-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem;
+  padding-block-end: .5rem;
+  border-block-end: 1px solid var(--border, rgb(0 0 0 / .08));
+}
+
+.fmt-group {
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+  padding-block: .5rem;
+}
+
+.fmt-group__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: .75rem;
+  padding-block: .25rem;
+  border-block-end: 1px dashed var(--border, rgb(0 0 0 / .12));
+}
+
+.fmt-group__title {
+  font-weight: 600;
+}
+
+.fmt-row {
+  display: flex;
+  align-items: flex-start;
+  gap: .625rem;
+  padding: .375rem .5rem;
+  border-radius: .375rem;
+  cursor: pointer;
+}
+
+.fmt-row:hover {
+  background: var(--surface-2, rgb(0 0 0 / .04));
+}
+
+.fmt-row input[type="checkbox"] {
+  margin-block-start: .2rem;
+  inline-size: 1rem;
+  block-size: 1rem;
+  flex: none;
+}
+
+.fmt-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: .375rem .625rem;
+  min-inline-size: 0;
+}
+
+.fmt-title {
+  font-weight: 500;
+}
+
+.fmt-meta {
+  font-size: .8125rem;
+  opacity: .72;
+  overflow-wrap: anywhere;
+}
+
+.fmt-tag {
+  font-size: .75rem;
+  padding: .0625rem .375rem;
+  border-radius: .625rem;
+  border: 1px solid var(--border, rgb(0 0 0 / .16));
+  opacity: .8;
+}
+
+.fmt-note {
+  flex-basis: 100%;
+  font-size: .75rem;
+  opacity: .65;
+}

@@ -421,13 +421,14 @@ class MultiExtractor:
         правды. Если расширение неизвестно, возвращается пустая строка, и файл
         обрабатывается текстовым путём.
         """
-        from ..config import LANG_BY_EXT
+        from ..config import ProjectConfig
 
-        low = path.lower()
-        for ext, lang in LANG_BY_EXT.items():
-            if low.endswith(ext):
-                return lang
-        return ""
+        # Решение принимает карта конфигурации, а не отдельный перебор
+        # расширений здесь. Причина измерена: Dockerfile и Makefile расширения
+        # не имеют, и прежний перебор возвращал пустую строку — файл уходил в
+        # текстовый путь с языком «text», хотя грамматика для него есть.
+        lang = ProjectConfig.language_of_static(path)
+        return lang or ""
 
     def generic_for(self, lang: str):
         """Извлекатель для языка с разбором дерева (или None, если его нет)."""

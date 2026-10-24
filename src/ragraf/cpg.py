@@ -70,7 +70,13 @@ def _stderr_digest(text: str | None, head: int = 900, tail: int = 700) -> str | 
     """
     if not text:
         return None
-    text = str(text).strip()
+    # JVM печатает «Picked up JAVA_TOOL_OPTIONS: …» первой строкой. Это не
+    # причина отказа, но она попадала в заметку индексации и сдвигала начало
+    # вывода, ради которого заметка и собирается.
+    text = "\n".join(
+        line for line in str(text).splitlines()
+        if not line.strip().startswith("Picked up JAVA_TOOL_OPTIONS")
+    ).strip()
     if len(text) <= head + tail:
         return text
     return f"{text[:head]}\n…\n{text[-tail:]}"
@@ -238,6 +244,43 @@ def _extract_script_body(script_text: str, cpg_file: str = "",
     return body.strip() or None
 
 
+def joern_tmp(cfg: ProjectConfig) -> Path:
+    """Личный временный каталог JVM для Joern.
+
+    Зачем не общий `%TEMP%`. Зависимость Joern `zstd-jni` распаковывает нативную
+    библиотеку в `java.io.tmpdir` при КАЖДОМ запуске JVM и не убирает её за
+    собой. Замер 23.10.2026 на этой машине: в `AppData/Local/Temp` накопилось
+    **1532** файла `libzstd-jni-*.dll` общим объёмом **1,73 ГБ**, и с 21.10
+    распаковка перестала работать — `Cannot unpack libzstd-jni-1.5.6-3: Access
+    is denied`. Следствие было не «нет CPG», а тихое «рёбра перенесены из
+    прошлой ревизии»: capability остаётся `full`, связи нового кода теряются.
+
+    Каталог живёт внутри `.ragraf` (он исключён из индексации базовым списком),
+    поэтому мусор не попадает ни в корпус, ни в общий temp, а права и
+    содержимое предсказуемы.
+    """
+    directory = cfg.ragraf_dir / "tmp" / "joern"
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory
+
+
+def prune_joern_tmp(cfg: ProjectConfig) -> int:
+    """Убрать распакованные библиотеки прошлых запусков. Возвращает число файлов.
+
+    Удаляются только файлы `libzstd-jni-*` в НАШЕМ каталоге: они появляются за
+    один запуск JVM и не нужны после него. Занятый другим процессом файл не
+    удалится — это штатно и не мешает.
+    """
+    removed = 0
+    for item in joern_tmp(cfg).glob("libzstd-jni-*"):
+        try:
+            item.unlink()
+            removed += 1
+        except OSError:
+            continue
+    return removed
+
+
 def java_env(cfg: ProjectConfig) -> dict[str, str]:
     """Переменные окружения для запуска Joern с нашим JDK."""
     env = dict(os.environ)
@@ -246,6 +289,12 @@ def java_env(cfg: ProjectConfig) -> dict[str, str]:
         java_home = str(java.parent.parent)
         env["JAVA_HOME"] = java_home
         env["PATH"] = str(java.parent) + os.pathsep + env.get("PATH", "")
+    # `JAVA_TOOL_OPTIONS` действует на КАЖДУЮ JVM, включая те, которые поднимают
+    # bat-скрипты Joern (joern-parse, joern-export): их командную строку мы не
+    # контролируем, а переменную они наследуют. Прежнее значение не затирается.
+    flag = f"-Djava.io.tmpdir={joern_tmp(cfg)}"
+    existing = env.get("JAVA_TOOL_OPTIONS", "").strip()
+    env["JAVA_TOOL_OPTIONS"] = f"{existing} {flag}".strip()
     return env
 
 
@@ -417,6 +466,9 @@ class JoernRunner:
             return CpgResult(False, None, 0.0, note=status.reason)
 
         self.workdir.mkdir(parents=True, exist_ok=True)
+        # Уборка распакованных библиотек прошлых запусков: они занимают место и
+        # в общем временном каталоге уже привели к отказу распаковки.
+        prune_joern_tmp(self.cfg)
         cpg_path = self.workdir / f"{rev_id}.cpg.bin"
         if cpg_path.exists():
             cpg_path.unlink()

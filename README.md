@@ -1,215 +1,114 @@
 # RAGRAF
 
-**A graph-and-vector knowledge base of code for LLM agents.**
+**Графово-векторная база знаний о коде для LLM-агентов.**
 
-[**Website**](https://ragraf.ru) · [**Wiki**](https://github.com/paulmann/RAGRAF/wiki) · [**Docs site**](https://paulmann.github.io/RAGRAF/) · [**Releases**](https://github.com/paulmann/RAGRAF/releases) · [**Discussions**](https://github.com/paulmann/RAGRAF/discussions) · [**Issues**](https://github.com/paulmann/RAGRAF/issues)
-
-![RAGRAF — a graph-and-vector knowledge base of code for LLM agents: 40 MCP tools, verifiable file:line facts, fully offline](assets/social-preview.png)
-
-[![CI](https://github.com/paulmann/RAGRAF/actions/workflows/ci.yml/badge.svg)](https://github.com/paulmann/RAGRAF/actions/workflows/ci.yml)
-[![Docs site](https://github.com/paulmann/RAGRAF/actions/workflows/pages.yml/badge.svg)](https://paulmann.github.io/RAGRAF/)
-[![Release](https://img.shields.io/github/v/release/paulmann/RAGRAF?label=release&sort=semver)](https://github.com/paulmann/RAGRAF/releases)
-[![License: PolyForm NC 1.0.0](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue.svg)](LICENSE)
-[![Python 3.13+](https://img.shields.io/badge/python-3.13%2B-blue?logo=python&logoColor=white)](https://www.python.org/downloads/)
-[![PowerShell 7.6+](https://img.shields.io/badge/PowerShell-7.6%2B-5391FE?logo=powershell&logoColor=white)](https://aka.ms/pwsh)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)](#installation)
-[![MCP](https://img.shields.io/badge/MCP-40%20tools-8A2BE2)](docs/implementation/INTEGRATION.md)
-[![Stars](https://img.shields.io/github/stars/paulmann/RAGRAF?style=social&label=Stars)](https://github.com/paulmann/RAGRAF/stargazers)
-
-An assistant that answers an agent's questions about a codebase — *where is it, who calls it, what breaks if I change it, how is it done elsewhere* — with verifiable facts (`file:line`) instead of blind `rg` and full-file reads. Python 3.13+, SQLite (graph + FTS5 + vectors in one place), tree-sitter, local embeddings without torch. **It runs entirely on the machine that owns the code**: no service to run, no cloud index, nothing sent anywhere — a local RAG index over your own repository. An optional property-graph layer (Java + Joern) unlocks slicing; without it the product still works and says so honestly.
-
-> **Documentation status.** Every count in this tree, in `README.ru.md`, in the Russian originals under `docs/ru/` and in the wiki was **re-measured from the sources on 2026-10-16**; the summary is in [By the numbers](#by-the-numbers), and `Test-DocumentedNumbers` in the project checker compares those numbers with the code. Documents that describe the **release-1 scope** keep their own numbers on purpose — `docs/architecture/SPECIFICATION.md` still says 17 operations and states why — while the current surface is 38 operations / 40 MCP tools / 39 CLI query operations.
+An assistant that answers an agent's questions about a codebase — *where is it, who calls it, what breaks if I change it, how is it done elsewhere* — with verifiable facts (`file:line`) instead of blind `rg` and full-file reads. Python 3.13+, SQLite (graph + FTS5 + vectors in one place), tree-sitter, local embeddings without torch. Optional property-graph layer (Java + Joern) unlocks slicing; without it the product still works and says so honestly.
 
 ---
 
-## Contents
+## Что это и зачем
 
-- [What this is and why](#what-this-is-and-why)
-- [Use cases](#use-cases)
-- [Capabilities](#capabilities)
-- [By the numbers](#by-the-numbers)
-- [How it works](#how-it-works)
-- [Installation](#installation)
-- [First steps](#first-steps)
-- [Requirements and limitations](#requirements-and-limitations)
-- [Documentation](#documentation)
-- [Development](#development)
-- [Contributing](#contributing)
-- [License](#license)
+Агент, работающий над доработкой кода, тратит основную часть контекста на **поиск места**: где определена функция, кто её вызывает, как сделано похожее рядом. Привычный путь — `rg` плюс чтение файлов целиком.
 
----
+RAGRAF заменяет этот путь индексом. Агент задаёт вопрос фиксированной операцией и получает факт со ссылкой `файл:строка`, а не десять кандидатов на просмотр.
 
-## What this is and why
+Замерено на реальном проекте (PHP-портал, 14 задач навигации, `bench/results/`):
 
-An agent working on a code change spends most of its context on **finding the place**: where a function is defined, who calls it, how something similar is done nearby. The usual path is `rg` plus reading whole files.
-
-RAGRAF replaces that path with an index. The agent asks a question through a fixed operation and gets a fact with a `file:line` reference — not ten candidates to review.
-
-Measured on a real project (PHP portal, 14 navigation tasks; the run was made on the author's machine — see *what the shipped artifacts measure* below):
-
-| Metric | Without the index | With the index |
+| Показатель | Без индекса | С индексом |
 |---|---|---|
-| Tool calls for 14 tasks | 28 (realistically 43) | **14** |
-| Average per task | 2.0 / 3.1 | **1.0** |
-| Candidates to review | up to 34 files | 1–5 exact |
-| Files read in full | 14 (minimum) | **0** |
-| Target-file hit on the first query | — | **92%** (12 of 13) |
-| Verifiability (facts with `file:line`) | — | **100%** |
+| Вызовов инструментов на 14 задач | 28 (реалистично 43) | **14** |
+| Среднее на задачу | 2,0 / 3,1 | **1,0** |
+| Кандидатов к просмотру | до 34 файлов | 1–5 точных |
+| Читается файлов целиком | 14 (минимум) | **0** |
+| Попадание в файл-цель с первого запроса | — | **92%** (12 из 13) |
+| Проверяемость (факты со ссылкой `файл:строка`) | — | **100%** |
 
-The call, hit-rate and verifiability numbers are **measurements** of that run; its raw artifacts are not part of the public tree (tracked as `R-REL-1` in [`ROADMAP.md`](ROADMAP.md)). What does ship is the artifact of the graph metric — [`bench/results/M2_rev-0012.json`](bench/results/M2_rev-0012.json) and [`M2_rev-0025.json`](bench/results/M2_rev-0025.json) measure **impact-analysis completeness** on the same portal: does the graph reach the files that were actually co-changed? Mean recall **0.771 → 0.917** over 20 and 8 commits at depth 3, median recall **1.0**, precision 0.072 → 0.020 — deliberately low, because the metric counts connectivity, not prediction — against a naive baseline of **0.0**.
+Числа вызовов, попадания и проверяемости — **измерения** (артефакты прогонов в `bench/results/`). «Реалистично 43» — модельная поправка (агент просматривает до 5 кандидатов вместо одного), и она записана в самом артефакте.
 
-«Realistically 43» is a modeled correction (the agent reviews up to 5 candidates instead of one), and it is recorded in the artifact itself.
+Важная оговорка, которую обычно опускают: **выигрыш в 2–3 раза относится к задачам локализации** («где определено», «кто вызывает»). В цикле правки «прочитал → изменил → проверил» экономии по числу вызовов почти нет — там выигрыш в другом: правки не ломают индекс, а спорный SQL проверяется до запуска.
 
-**Re-measured 2026-10-21, with the artifact shipped in the tree.** The numbers above describe a run whose raw log is not public, so a new probe answers the same question in a way anyone can repeat: [`bench/nav_probe.py`](bench/nav_probe.py) takes a real corpus (an open-source PHP library, 186 files, `rev-0001`, `capability=full`), builds a **deterministic** sample of 14 names from the **source text** (`function` / `class` declarations — the index takes no part in deciding the right answer), then compares two ways of locating a definition: `rg -l` over the same tree, and one `symbol` call.
+---
 
-| Measured 2026-10-21 | Value |
+## Возможности
+
+**40 операций** над репозиторием — фиксированный набор, без языка запросов к графу:
+
+| Операция | Отвечает на вопрос |
 |---|---|
-| Names located on the first returned fact | **13 of 14 (93%)** |
-| Names present anywhere in the single-call answer | **14 of 14** |
-| Candidate files: `rg -l` → index | 161 → 42 |
-| Context to read: `rg` candidates → answer | 15 178 062 B → **59 872 B (×253)** |
-| Median answer | 3 ms |
-| Reproduce | `python bench/nav_probe.py --project config/<corpus>.yaml --limit 14 --out bench/results/nav_probe_<date>.json` |
+| `search` | где об этом написано (гибридно: лексика BM25 + вектор) |
+| `search_multi` | где встречается сразу несколько строк; копии файлов и какой из них рабочий |
+| `duplicates` | какие файлы — копии друг друга и чем доказана активность главного |
+| `entrypoints` | точки входа: маршруты, HTTP-обработчики, CLI, endpoint'ы разметки |
+| `dead_code` | файлы и подпрограммы без ссылок и вне достижимости |
+| `symbol` | где определён символ: вид, файл, строки, сигнатура |
+| `references` | где ещё используется |
+| `callers` / `callees` | кто вызывает / кого вызывает |
+| `impact` | что затронет изменение (доказанные и эвристические связи раздельно) |
+| `slice` | структурный срез: узлы, рёбра, строки — без тел функций |
+| `code` | тела символов (только по явному запросу) |
+| `repo_map` | карта репозитория в заданном бюджете символов |
+| `schema` / `table_usage` | что в таблице БД и кто её читает или пишет |
+| `routes` | маршруты и точки входа |
+| `policy_trace` | кто и по какому условию получает право |
+| `class_usage` | класс оформления: где определён, где использован, что расходится |
+| `write_check` | можно ли так записать (сверка плана записи со схемой до запуска) |
+| `live_read` | актуальный файл с выделением отличий от индекса |
+| `freshness` | актуален ли индекс (сверка контрольной суммы) |
+| `index_status` | ревизия, покрытие, деградация, размер журнала |
+| `drift_report` / `drift_ack` | журнал расхождений между индексом и кодом |
+| `catalog` | реестр корпусов: что проиндексировано и с какими суммами |
+| `route` | куда идти за ответом: какой корпус отвечает и почему (без цитирования) |
+| `neighbors` | есть ли готовая реализация в соседних корпусах того же стека |
+| `calibrate` | калибровка порогов |
+| `usage` | телеметрия обращений и оценка эффекта |
+| `diff` | что изменилось между ревизиями: файлы, символы, рёбра, регрессии (P2-1) |
+| `task_stats` | отчёт по задаче: обращения к индексу, решения гейта (§3.4) |
+| `gate` | решение гейта по вызову инструмента: `allow` / `ask` / `deny` (§3.2) |
+| `note` / `notes` | записать и прочитать заметку о решении — знание между сессиями (P2-3) |
 
-Two honest notes. The single miss is `group`: four definitions carry that name (three `WpCache::$group` properties and one function), so the target sits at position 4 — the answer still carries the **kind**, which `rg` cannot, so the ambiguity is resolved inside the same call. And this corpus ships mirrored copies (`php83/html.php`, `php85/html.php`, `src-8.5/`), which is why file narrowing is only ×3.8 while byte narrowing is ×253: the same source file is legitimately declared in three places, and the index says so instead of hiding it.
+Ещё два режима — не операции, а форма ответа: **`answer=true`** отдаёт
+сформулированный ответ со ссылками вместо структурного результата (P2-2), а
+`brief=true` — краткую оболочку ответа. `usage` показывает метрики эффекта
+(`saved_calls`, `hit_rate`, `avg_ms`, `misses`, `stale_served`).
 
-One caveat usually omitted: **the 2–3× win applies to localization tasks** («where is it defined», «who calls it»). In the edit loop «read → change → verify» there is almost no savings in call count — the win there is different: edits do not corrupt the index, and disputed SQL is checked before it runs.
+Те же операции доступны как **50 инструментов MCP** (`ragraf_*`) — для подключения к агенту как сервер, и через CLI. Отдельная группа инструментов — живой слой баз данных: `ragraf_db_schema`, `ragraf_db_table`, `ragraf_db_relations`, `ragraf_db_sample`, `ragraf_db_drift`, `ragraf_db_cross`.
+Двадцать четвёртый — `use_project`: выбор корпуса, когда один сервер обслуживает несколько проектов. `context` отвечает, какой корпус выбран и на каком основании: без него ответы о чужом проекте было неотличимы от ответов о своём.
+
+**Двадцать девять языков** разбираются деревом (узлы и рёбра графа). У шестнадцати карта узлов описана профилем: PHP, Python, JavaScript, TypeScript, Java, C#, C, C++, Ruby, Lua, Go, Perl, bash, PowerShell, CSS, HTML. У тринадцати (Rust, Kotlin, Swift, Scala, Dart, R, F#, OCaml, Solidity, Fortran, MATLAB, Elm, Lisp) она берётся из tags-запроса самой грамматики: имена узлов у этих языков не совпадают с привычными, и профиль на каждый означал бы выдумывание имён. Каждый язык проверяется на пробном файле — минимум один найденный символ (`tests/test_new_languages.py`).
+
+Ещё сорок подключаются текстом: файлы находятся поиском, узлов не дают. Это Julia, Elixir, Erlang, Haskell, Clojure, Groovy, Visual Basic, Pascal/Delphi, Objective-C, Zig, Nim, Crystal, Tcl, Prolog, Ada, Verilog, VHDL, ассемблер, HCL/Terraform, Dockerfile, Makefile, CMake, SCSS, Less, Vue, Svelte, GraphQL, Protobuf, SQL, batch, Markdown, RST, YAML, JSON, TOML, INI, XML, обычный текст и язык `document`.
+
+**Документы индексируются целиком, включая старые версии.** Word: `.docx`, `.docm`, `.dotx` и `.doc` (Word 97 — собственный разбор OLE, без LibreOffice). Excel: `.xlsx`, `.xlsm`, `.xltx` и `.xls` (BIFF8). PowerPoint: `.pptx`, `.pptm`, `.ppsx`, `.potx` и `.ppt`. Плюс PDF, OpenDocument (`.odt`, `.ods`, `.odp`, `.odg`), EPUB, RTF, письма `.eml` и `.msg`, файлы WPS Office. Форматы без разборщика (Pages, OneNote, CHM, DjVu, `.xlsb`) не выдают себя за пустой документ — они помечаются причиной.
+
+Что именно индексировать, выбирается в панели: **Настройки → вкладка «Форматы»** — 84 формата по группам (языки, документы, данные), окно фильтра по имени, расширению и способу разбора, кнопки «все»/«ничего» и счётчик включённых. По умолчанию включены все, а значение `*` означает «все, включая добавленные позже». Выключение формата меняет состав корпуса и вызывает переиндексацию при следующей проверке свежести.
 
 ---
 
-## Use cases
+## Как это устроено
 
-| You are doing | Ask RAGRAF for | What comes back |
-|---|---|---|
-| Onboarding an agent onto a 200k-line repository it has never seen | `repo_map`, then `search` / `symbol` | one fact per question, with `file:line`, instead of a wall of candidates |
-| Refactoring a function that is called from a dozen places | `callers`, `impact`, `slice` when the CPG is available | proven links separated from heuristics; a slice that says what it actually covers |
-| Renaming or dropping a database column | `write_check` **before** the SQL runs, then `table_usage` | missing columns with nearest-name suggestions; who reads and who writes the table |
-| Reviewing someone else's diff | `diff`, `drift_report`, `live_read` | symbols and edges that changed, regressions included, and the current file marked against the index |
-| Hunting copies (`Files.php` … `Files7.php`) | `duplicates` | which files are copies, and which copy is *proven* live |
-| «How is this done elsewhere in this codebase?» | `search` (BM25 + vectors, hybrid) | ranked fragments from the corpus, no model download needed for the answers |
-| Wiring the index into an agent | the **40 MCP tools** `ragraf_*`, or the CLI | the same operations over stdio — see [`docs/implementation/INTEGRATION.md`](docs/implementation/INTEGRATION.md) |
+**Три хранилища SQLite** на корпус, в каталоге `.ragraf/` **внутри индексируемого проекта**:
 
-The numbers above are the contract, not marketing: a localization win is measured at **2–3× fewer tool calls**, and the edit loop is measured honestly — see [What this is and why](#what-this-is-and-why).
-
----
-
-## Capabilities
-
-**Thirty-eight operations** over a repository — a fixed set, with no graph query language:
-
-| Operation | Answers the question |
+| Хранилище | Что внутри |
 |---|---|
-| `search` | where is this written about (hybrid: BM25 lexicon + vector) |
-| `search_multi` | where several strings occur at once; file copies and which one is live |
-| `duplicates` | which files are copies of each other, and what proves the main copy is live |
-| `entrypoints` | entry points: routes, HTTP handlers, CLI, markup endpoints |
-| `dead_code` | files and routines with no references and outside reachability |
-| `symbol` | where is the symbol defined: kind, file, lines, signature |
-| `references` | where else is it used |
-| `callers` / `callees` | who calls it / what does it call |
-| `impact` | what will a change affect (proven and heuristic links reported separately) |
-| `slice` | structural slice: nodes, edges, lines — without function bodies |
-| `code` | symbol bodies (only on explicit request) |
-| `repo_map` | repository map within a given character budget |
-| `schema` / `table_usage` | what is in a DB table and who reads or writes it |
-| `routes` | routes and entry points |
-| `policy_trace` | who gets a permission, and under which condition |
-| `class_usage` | a styling class: where defined, where applied, what diverges |
-| `write_check` | is this write valid (write plan checked against the schema before running) |
-| `live_read` | the current file, with differences from the index highlighted |
-| `freshness` | is the index current (checksum comparison) |
-| `index_status` | revision, coverage, degradation, ledger size |
-| `drift_report` / `drift_ack` | ledger of divergences between index and code |
-| `catalog` | corpus registry: what is indexed and with which checksums |
-| `calibrate` | threshold calibration |
-| `usage` | call telemetry and effect estimation |
-| `diff` | what changed between revisions: files, symbols, edges, regressions |
-| `task_stats` | per-task report: index calls, gate decisions |
-| `gate` | gate decision for a tool call: `allow` / `ask` / `deny` |
-| `note` / `notes` | record and read a decision note — knowledge between sessions |
+| `graph.sqlite` | узлы (класс, функция, метод), рёбра (вызовы, наследование, импорты), схема БД |
+| `lexvec.sqlite` | лексика FTS5 (BM25) и векторы в одном файле; сырой текст чанков для выдачи фрагментов |
+| `control.sqlite` | ревизии, журнал расхождений, телеметрия обращений |
 
-The same operations are available as **40 MCP tools** (`ragraf_*`) — to attach to an agent as a server — and through the CLI.
+**Поток индексации:** `scan` (обход и контрольные суммы) → `ast` (tree-sitter: символы, вызовы, SQL) → `load` → `resolve` (имена) → `schema` (таблицы из миграций) → `cpg` (межпроцедурные вызовы через Joern) → `lexvec` (FTS5 + векторы).
 
-**Sixteen languages** are parsed as trees (graph nodes and edges): PHP, Python, JavaScript, TypeScript, Java, C#, C, C++, Ruby, Lua, Go, Perl, bash, PowerShell, CSS, HTML — thirteen generic profiles plus dedicated PHP, CSS and HTML extractors. Eleven more are attached as text — files are findable by search but yield no nodes: Markdown, SQL, YAML, JSON, TOML, INI, XML, RST, Rust, batch, plain text. 55 file extensions are mapped in total.
+**Три решения, определяющие поведение** — каждое выведено из измеренного дефекта:
+
+1. **Неизменяемый индекс и журнал различий вместо «обновления по ходу».** Внутри ревизии индекс не меняется; правки кода копятся в журнале, а затронутые факты помечаются `stale`. Иначе факты разных моментов времени смешивались бы в одном ответе без различия — именно так и рождаются неверные выводы.
+2. **Агенту не даётся язык запросов к графу.** Только фиксированные операции. Основание: в LLMxCPG (USENIX Security '25) базовые модели дают 132/1278 и 19/1278 валидных CPGQL-запросов против 1278/1278 у обученной — то есть свободный язык превращается в генератор ошибок.
+3. **Каждый факт несёт доказательство.** `path:line`, `provenance` (`stated` — доказано, `derived` — эвристика), `index_rev`, `confidence`. Ребро без доказательства выглядит достоверно только потому, что пришло «из базы».
+
+**Деградация вместо падения.** Отсутствие графа свойств кода даёт `capability=degraded` и понятный отказ операции `slice` с указанием фактического режима; остальные операции работают. Нет модели эмбеддингов — работает лексический поиск. Нет свободного порта — сервер сообщает причину. Молчаливой деградации не бывает.
 
 ---
 
-## By the numbers
+## Установка
 
-Every count below was measured on the published tree on **2026-10-16** — not copied from earlier prose. The two that matter most are gated by `Test-DocumentedNumbers` in [`tools/Invoke-ProjectDoctrine.ps1`](tools/Invoke-ProjectDoctrine.ps1), which compares the documents with the code.
-
-| Surface | Count | Measured from |
-|---|---|---|
-| Facade operations | **38** | `def op_*` in `src/ragraf/facade.py` |
-| MCP tools | **40** — 6 of them the live-database layer | `ragraf_*` names in `src/ragraf/mcp_server.py` |
-| MCP resources / prompts | 3 + 1 URI template / 2 | `ragraf://status`, `ragraf://catalog`, `ragraf://corpus/{name}/map`; prompts `ragraf-check`, `ragraf-repair` |
-| CLI subcommands / `query` operations | 14 / **39** | `add_parser(…)` and `OPS` in `src/ragraf/cli.py` |
-| Languages parsed as trees | **16** | `TREE_LANGS` in `src/ragraf/config.py` |
-| Languages attached as text | **11** | every other language in `LANG_BY_EXT` |
-| File extensions mapped | 55 | `LANG_BY_EXT` |
-| Admin-panel API routes | 32 | `src/ragraf/admin_server.py` |
-| Runtime dependencies | 7 (+1 optional extra, `tls`) | `pyproject.toml` |
-| Python in `src/` | 50 files · 37 592 lines | the published tree |
-| PowerShell — installer, wrappers, checker | 5 files · 3 423 lines | the published tree |
-| Markdown | 28 files (20 under `docs/`, 9 of them Russian) + 15 wiki pages | the published tree and the wiki |
-| Portable test suites | 6 suites · **164 checks, 0 failures** | each suite run standalone |
-| Defect register | 61 findings | [`docs/DEFECTS.md`](docs/DEFECTS.md); the audited revision's summary counts 43 of them by severity |
-| Published tree | 136 files · 3.5 MB | the published tree |
-
-Dogfooding, for scale: RAGRAF indexes its own working tree (648 files, 140 741 lines — larger than this published subset) into 3 620 symbols, 46 296 edges and 3 417 chunks in **74 s**, 63 s of which is the optional Joern/CPG stage (`rev-0156`, measured 2026-10-16; `capability=full`, 0 failed files). Full breakdown: [wiki → Benchmarks and Limits](https://github.com/paulmann/RAGRAF/wiki/11-Benchmarks-and-Limits).
-
-**Measured polygon, anonymised.** The registry knows **28 corpora, 25 of them indexed** — 10 with the CPG layer, 15 degraded. The 16 whose revision record was read on 2026-10-16 hold **7 527 files, 94 528 symbols, 791 871 edges and 86 790 chunks**. Project names, paths and domains are withheld on purpose; the labels are ordered by size, and only the author's private map resolves them.
-
-| Corpus | Kind | Files | Symbols | Edges | Mode |
-|---|---|---|---|---|---|
-| C-02 | PHP web application | 2 722 | 32 761 | 355 192 | degraded |
-| C-04 | C# service / desktop | 1 274 | 20 331 | 98 605 | degraded |
-| C-05 | PHP web application | 928 | 17 381 | 99 029 | full |
-| C-18 | PowerShell automation toolkit | 81 | 324 | 4 214 | degraded |
-| C-24 | Markdown + bash (smallest) | 18 | 184 | 1 515 | degraded |
-
-The full 16-row table, the anonymisation rules and a counting caveat are in the [wiki → Benchmarks and Limits](https://github.com/paulmann/RAGRAF/wiki/11-Benchmarks-and-Limits). That caveat matters when quoting numbers: the corpus registry and the revision record report **different** totals for the same revision (measured on one corpus: 8 721 vs 4 498 symbols, 41 201 vs 56 106 edges), so every count above is taken from the **revision record** — the one the answer envelope reports.
-
----
-
-## How it works
-
-**Three SQLite stores** per corpus, in a `.ragraf/` directory **inside the indexed project**:
-
-| Store | Contents |
-|---|---|
-| `graph.sqlite` | nodes (class, function, method), edges (calls, inheritance, imports), DB schema |
-| `lexvec.sqlite` | FTS5 lexicon (BM25) and vectors in one file; raw chunk text for returning fragments |
-| `control.sqlite` | revisions, drift ledger, call telemetry |
-
-**Indexing flow:** `scan` (walk + checksums) → `ast` (tree-sitter: symbols, calls, SQL) → `load` → `resolve` (names) → `schema` (tables from migrations) → `cpg` (interprocedural calls via Joern) → `lexvec` (FTS5 + vectors).
-
-**Three decisions that define the behavior** — each derived from a measured defect:
-
-1. **An immutable index and a ledger of differences instead of «updating on the fly».** Within a revision the index does not change; code edits accumulate in the ledger, and affected facts are marked `stale`. Otherwise facts from different moments in time would mix in a single answer with no way to tell them apart — which is exactly how wrong conclusions are born.
-2. **The agent gets no graph query language.** Fixed operations only. Rationale: in LLMxCPG (USENIX Security '25) base models produce 132/1278 and 19/1278 valid CPGQL queries versus 1278/1278 for a fine-tuned one — a free-form language turns into an error generator.
-3. **Every fact carries proof.** `path:line`, `provenance` (`stated` — proven, `derived` — heuristic), `index_rev`, `confidence`. An edge without evidence looks credible only because it came «from the database».
-
-**Degradation instead of failure.** A missing code property graph yields `capability=degraded` and an honest refusal from the `slice` operation stating the actual mode; all other operations work. No embedding model — lexical search works. No free port — the server reports the reason. Silent degradation never happens.
-
----
-
-## Installation
-
-Requires **Python 3.13 or newer**. No administrator rights needed.
-
-### Quick start (one command)
-
-The bootstrap installer fetches the package from GitHub and deploys it in a dialogue:
-
-```powershell
-iwr -OutFile install.ps1 https://raw.githubusercontent.com/paulmann/RAGRAF/main/install.ps1
-pwsh -NoLogo -NoProfile -File .\install.ps1
-```
-
-It asks for the installation directory (default `C:\RAGRAF`), creates the virtual environment and installs dependencies through `scripts/install.ps1`, offers to locate AutoClaw and DeepSeek Harness and to set up the connection, and finally prints how to start the admin panel plus a warning about access to it.
-
-It states plainly what it does not do: **AutoClaw values are shown, not written** — AutoClaw accepts MCP servers only through its own interface, and its store belongs to the product. For **Harness** the installer can write the profile block, with a backup and a parse check afterwards. An existing installation is never overwritten silently, and a rehearsal run that skips dependencies is available: `-SkipDeps`.
+Требуется **Python 3.13 или новее**. Права администратора не нужны.
 
 ### Windows (PowerShell 7.6+)
 
@@ -219,100 +118,94 @@ cd RAGRAF
 pwsh -NoLogo -NoProfile -File scripts/install.ps1
 ```
 
-The script creates a virtual environment in `~/.ragraf/venv`, installs dependencies, and **verifies that the result is a working environment** — step by step, ending with a summary table. It does not «pretend to install»: every step ends with a check. A full transcript is written to `~/.ragraf/logs/install-<timestamp>.log`, and every external command runs under a timeout.
+Скрипт создаст виртуальное окружение в `~/.ragraf/venv`, поставит зависимости и **проверит, что получилось работоспособное окружение** — шаг за шагом, с итоговой таблицей. Он не «делает вид, что установил»: каждый шаг заканчивается проверкой.
 
-Useful variants:
+Полезные варианты:
 
 ```powershell
-# install and immediately prepare a corpus for your project
+# установить и сразу подготовить корпус для своего проекта
 pwsh -File scripts/install.ps1 -Project C:\work\myproject
 
-# same, plus full indexing (downloads the ~240 MB embedding model)
+# то же плюс полная индексация (скачает модель эмбеддингов ~240 МБ)
 pwsh -File scripts/install.ps1 -Project C:\work\myproject -Index
 
-# indexing without vectors: no model download, lexical search works
+# индексация без векторов: модель не скачивается, лексический поиск работает
 pwsh -File scripts/install.ps1 -Project C:\work\myproject -Index -NoVectors
 
-# in a TLS-inspecting network (corporate proxy)
+# в сети с TLS-инспекцией (корпоративный прокси)
 pwsh -File scripts/install.ps1 -WithTruststore
 ```
 
-### Other platforms
+### Другие платформы
 
-One common path, works anywhere with Python 3.13+:
+Один общий путь, работает везде, где есть Python 3.13+:
 
 ```bash
 git clone https://github.com/paulmann/RAGRAF.git
 cd RAGRAF
 python -m venv .venv
 . .venv/bin/activate            # Windows: .venv\Scripts\Activate.ps1
-pip install -e .                # or: pip install -r requirements.txt
+pip install -e .                # или: pip install -r requirements.txt
 ragraf --version
 ```
 
-The product also works without installing the package — via a wrapper that adds `src/` to the path itself:
+Без установки пакета продукт тоже работает — через обёртку, которая сама добавляет `src/` в путь:
 
 ```bash
 python tools/ragraf.py --version
 ```
 
-> `scripts/install.ps1` is verified on Windows (PowerShell 7.6, Python 3.14). The common `pip` path on Linux and macOS is **not verified** — the product was developed and measured on Windows.
+> `scripts/install.ps1` проверен на Windows (PowerShell 7.6, Python 3.14.7). Общий путь через `pip` на Linux и macOS **не проверялся** — продукт разрабатывался и замерялся на Windows.
 
-### External layer: Java and Joern (optional)
+### Внешний слой: Java и Joern (необязательно)
 
-The interprocedural graph (the `slice` operation) needs JDK 21 and Joern. Without them the product works: the index builds, search and structure are available, and `slice` refuses with a reason.
+Для межпроцедурного графа (операция `slice`) нужны JDK 21 и Joern. Без них продукт работает: индекс строится, поиск и структура доступны, `slice` отказывает с причиной.
 
 ```powershell
-# fetch (official GitHub release + Adoptium API), verify SHA-256, unpack, self-check
-pwsh -File scripts/install-joern.ps1 -Download
-
-# or verify/prepare from locally placed artifacts (no network)
 pwsh -File scripts/install-joern.ps1
 ```
 
-Archives go to `.tools/downloads/` — the script is idempotent. The unpacked set takes about 5–6 GB.
+Архив кладётся в `.tools/downloads/` — скрипт идемпотентен. Распакованный комплект занимает около 5 ГБ.
 
 ---
 
-## First steps
+## Первые шаги
 
 ```bash
-# 1. Prepare the corpus: find it, create it if missing, rebuild a stale index.
-#    A corpus for an unknown directory is created by this same command.
+# 1. Подготовить корпус: найти, досоздать, пересобрать отставший индекс.
+#    Корпус для незнакомого каталога создаётся этой же командой.
 ragraf ensure C:\work\myproject
 
-# 2. Check the environment (report on 11 components).
-#    NOTE: the command ALWAYS returns exit code 0 — it is not a gate; read the report.
-ragraf -p <config> selftest
+# 2. Проверить окружение (отчёт по 11 компонентам).
+#    ВНИМАНИЕ: команда ВСЕГДА возвращает код 0 — это не гейт, читайте отчёт.
+ragraf -p <конфиг> selftest
 
-# 3. Ask
-ragraf -p <config> query search "reindex delay"
-ragraf -p <config> query symbol --name corpus_hash
-ragraf -p <config> query code --name corpus_hash
-ragraf -p <config> query callers --name dedupe
-ragraf -p <config> query impact --target Facade --depth 2
+# 3. Спросить
+ragraf -p <конфиг> query search "задержка переиндексации"
+ragraf -p <конфиг> query symbol --name corpus_hash
+ragraf -p <конфиг> query code --name corpus_hash
+ragraf -p <конфиг> query callers --name dedupe
+ragraf -p <конфиг> query impact --target Facade --depth 2
 
-# 4. Freshness: did the code change after indexing
-ragraf -p <config> check
+# 4. Свежесть: изменился ли код после индексации
+ragraf -p <конфиг> check
 ```
 
-Full command list: `ragraf --help`. Important: **the global flags `--project/-p` and `--json` go BEFORE the subcommand** (`ragraf -p cfg query search ...`), while the subcommand's own flags go after it.
+Полный список команд — `ragraf --help`. Важно: **глобальные ключи `--project/-p` и `--json` ставятся ДО подкоманды** (`ragraf -p cfg query search ...`), а собственные ключи подкоманды — после неё.
 
-Exit codes: **0** — success (including an empty result with `found=false`), **1** — error, **2** — usage, **3** — the operation cannot run right now (e.g. `slice` while `capability != full`).
-
-### Corpus management
+### Управление корпусом
 
 ```bash
-ragraf init C:\work\myproject         # create the corpus config and print its path
-ragraf -p <config> register           # register the project in the registry
-ragraf -p <config> index              # full indexing
-ragraf -p <config> reindex            # reindex + archive the drift ledger
-ragraf -p <config> drift --scan       # register differences WITHOUT touching the index
-ragraf -p <config> status             # state: revision, coverage, ledger size
-ragraf -p <config> usage              # telemetry: calls, facts, effect estimate
+ragraf init C:\work\myproject         # создать конфигурацию корпуса и показать путь к ней
+ragraf -p <конфиг> register           # зарегистрировать разработку в реестре
+ragraf -p <конфиг> index              # полная индексация
+ragraf -p <конфиг> reindex            # переиндексация + архивация журнала расхождений
+ragraf -p <конфиг> drift --scan       # зарегистрировать различия, НЕ меняя индекс
+ragraf -p <конфиг> status             # состояние: ревизия, покрытие, размер журнала
+ragraf -p <конфиг> usage              # телеметрия: обращения, факты, оценка эффекта
 ```
 
-### Attaching to an agent as an MCP server
+### Подключение к агенту как MCP-сервер
 
 ```json
 {
@@ -321,7 +214,7 @@ ragraf -p <config> usage              # telemetry: calls, facts, effect estimate
       "command": "python",
       "args": [
         "/path/to/RAGRAF/tools/ragraf-mcp.py",
-        "--project", "/path/to/RAGRAF/config/mycorpus.yaml",
+        "--project", "/path/to/RAGRAF/examples/mycorpus.yaml",
         "--agent", "my-agent",
         "--agent-kind", "external"
       ]
@@ -330,83 +223,85 @@ ragraf -p <config> usage              # telemetry: calls, facts, effect estimate
 }
 ```
 
-`--project` is required. `--agent` and `--agent-kind` exist only for per-agent call statistics: without them, calls are logged as `unknown`.
+`--project` обязателен. `--agent` и `--agent-kind` нужны только для раздельной статистики обращений: без них вызовы попадут в журнал как `unknown`.
 
-### Admin panel
+### Панель настроек
 
 ```bash
 python tools/ragraf-admin.py --no-browser
 ```
 
-Opens on `127.0.0.1:8777` and listens on that address only. Shows corpora and their index states, store sizes, index quality, call statistics. Mutating requests require the access token printed at startup.
+Открывается на `127.0.0.1:8777`, слушает только этот адрес. Показывает корпуса и состояние их индексов, размеры хранилищ, качество индекса, статистику обращений. Изменяющие запросы требуют токен доступа, который печатается при запуске.
+
+Страница источников — `http://127.0.0.1:8777/sources`: разрешённые корни «Я это ты», их состояние, добавление, скан, включение и удаление. Изменения требуют того же токена; содержимое файлов не читается, секретоносные файлы видны только числом и правилом. Сетевой корень допускается только как UNC или смонтированный путь с `--network`; URL-коннекторы (`ssh://`, `s3://`, `webdav://`) не реализованы и отклоняются с причиной.
+
+Страница пользы — `http://127.0.0.1:8777/value`: 30-дневные обращения, факты, оценка токенов и строк, сложенные по корпусам. Оценки помечены явно; путей и запросов там нет.
 
 ---
 
-## Requirements and limitations
+## Требования и ограничения
 
-| Item | Value |
+| Что | Значение |
 |---|---|
-| Python | **3.13+** (declared in `requires-python`; verified on 3.14) |
-| Platform | Windows + PowerShell 7.6 — verified; other OSes — **not verified** |
-| Privileges | none required: everything runs from the user profile |
-| Disk | corpus index `.ragraf/` — roughly 1 MB per 1–2 source files; the external Java/Joern layer — ~5–6 GB |
-| Internet | needed twice: at install time (PyPI) and at the **first indexing with vectors** — the ~240 MB embedding model downloads to `~/.ragraf/models` |
-| Java + Joern | optional; without them `capability=degraded` and `slice` is unavailable |
-| GPU | optional; accelerates vector encoding only and engages above a break-even threshold |
+| Python | **3.13+** (объявлено `requires-python`; проверено на 3.14) |
+| Платформа | Windows + PowerShell 7.6 — проверено; другие ОС — **не проверялись** |
+| Права | не требуются: всё работает из пользовательского каталога |
+| Диск | индекс корпуса `.ragraf/` — примерно 1 МБ на 1–2 файла исходников; внешний слой Java/Joern — ~5 ГБ |
+| Интернет | нужен дважды: при установке (PyPI) и при **первой индексации с векторами** — скачивается модель эмбеддингов ~240 МБ в `~/.ragraf/models` |
+| Java + Joern | необязательны; без них `capability=degraded` и `slice` недоступна |
+| Видеокарта | необязательна; ускоряет только кодирование векторов и включается по порогу окупаемости |
 
-**About the internet and certificates.** In a TLS-inspecting network (corporate proxy) the model download fails certificate validation. The cure is `truststore`:
+**Про интернет и сертификаты.** В сети с TLS-инспекцией (корпоративный прокси) загрузка модели падает на проверке сертификата. Лечится установкой `truststore`:
 
 ```bash
-pip install truststore      # or: install.ps1 -WithTruststore
+pip install truststore      # или: install.ps1 -WithTruststore
 ```
 
-On a home network the package is unnecessary. Measured: without it — `certificate verify failed`; with it — 240 MB download in 9.2 s.
+В домашней сети пакет не нужен. Измерено: без него — отказ `certificate verify failed`, с ним — 240 МБ скачиваются за 9,2 с.
 
-**About the model cache.** The cache directory is overridden by `RAGRAF_MODEL_CACHE`. Read operations never download the model — only indexing with vectors does.
+**Про cache модели.** Каталог кэша переопределяется переменной `RAGRAF_MODEL_CACHE`. Операции чтения модель не скачивают никогда — только индексация с векторами.
 
 ---
 
-## Documentation
+## Документация
 
-| Document | Contents |
+| Документ | Что внутри |
 |---|---|
-| [ragraf.ru](https://ragraf.ru) | the public website: features, measured benchmarks, and an emulator of the admin panel |
-| [Wiki](https://github.com/paulmann/RAGRAF/wiki) | 15 pages — getting started, operations reference, CLI, MCP, CPG layer, troubleshooting, FAQ |
-| [Docs site](https://paulmann.github.io/RAGRAF/) | this documentation set rendered with search (built and deployed by `pages.yml`) |
-| [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md) | principles, components, store schemas, operation contracts |
-| [`docs/architecture/SPECIFICATION.md`](docs/architecture/SPECIFICATION.md) | functional and non-functional requirements, acceptance criteria |
-| [`docs/architecture/ACCEPTANCE.md`](docs/architecture/ACCEPTANCE.md) | measurement protocols M1–M7 and the test map |
-| [`docs/implementation/INTEGRATION.md`](docs/implementation/INTEGRATION.md) | attaching to an agent: MCP, working rules, the regimen |
-| [`docs/implementation/CPG_INTEGRATION.md`](docs/implementation/CPG_INTEGRATION.md) | the code property graph: Joern, JDK, degradation modes |
-| [`docs/skills/ragraf-core/SKILL.md`](docs/skills/ragraf-core/SKILL.md) | the skill of working with the index: choosing operations, recovery |
-| [`docs/article/RAGRAF_ARTICLE.md`](docs/article/RAGRAF_ARTICLE.md) | overview article: stack, architecture, measurements |
-| [`docs/DEFECTS.md`](docs/DEFECTS.md) | the defect register of the published revision — every finding carries `file:line` evidence |
-| [`ROADMAP.md`](ROADMAP.md) | planned improvements and development directions |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md) | how to report defects and propose changes |
-
-> Historical note: the original Russian documentation set is preserved under `docs/ru/` in the source repository history. Some internal documents referenced by the deep-dive docs (research notes, effect reports on the author's private corpora) are intentionally not part of the public tree; references to them are marked *(not shipped)*.
+| `docs/02_architecture/ARCHITECTURE.md` | принципы, компоненты, схема хранилищ, контракт операций |
+| `docs/02_architecture/TZ.md` | функциональные и нефункциональные требования, критерии приёмки |
+| `docs/03_implementation/INTEGRATION.md` | подключение к агенту: MCP, правила работы, регламент |
+| `docs/03_implementation/AGENTS_SETUP_AND_CAPABILITIES.md` | настройка в HARNESS и AutoClaw, полный каталог возможностей |
+| `docs/03_implementation/HARNESS_INTEGRATION.md` | DeepSeek Harness: MCP, навык, правила, гейт |
+| `docs/03_implementation/AUTOCLAW_INTEGRATION.md` | AutoClaw: MCP, навык, правила, откат |
+| `docs/03_implementation/CPG_INTEGRATION.md` | граф свойств кода: Joern, JDK, режимы деградации |
+| `docs/skills/ragraf-core/SKILL.md` | навык работы с индексом: выбор операции, восстановление |
+| `docs/05_article/RAGRAF_ARTICLE.md` | обзорная статья: стек, архитектура, замеры |
+| `AGENTS.md` | правила разработки самого проекта; базовый чекер конвенций |
 
 ---
 
-## Development
+## Разработка
 
 ```bash
-# tests run as standalone scripts — there is no unified runner yet
+# тесты запускаются отдельными скриптами — единого раннера нет
 python tests/test_lang_routing.py
 python tests/test_watch.py
 
-# project convention checker (14 checks)
+# чекер конвенций проекта (14 проверок)
 pwsh -NoLogo -NoProfile -File tools/Invoke-ProjectDoctrine.ps1
 
-# refresh the index of RAGRAF itself
+# актуализация индекса самого RAGRAF
 python tools/ragraf.py ensure .
 ```
 
-The shipped checks are only those that run on **synthetic fixtures** and are portable. The rest measured behavior on the author's real corpora (a PHP portal, a C# service, their project configs) and would be meaningless on other code.
+В поставке — только те проверки, которые работают на **синтетических
+фикстурах** и переносимы. Остальные замеряют поведение на реальных корпусах
+автора (PHP-портал, C#-служба, конфигурации их проектов) и на другом коде
+смысла не имеют.
 
-What passes right after installation:
+Что проходит сразу после установки:
 
-| Test | Checks |
+| Тест | Проверок |
 |---|---|
 | `test_lang_routing.py` | 56 |
 | `test_watch.py` | 31 |
@@ -415,34 +310,91 @@ What passes right after installation:
 | `test_ensure.py` | 17 |
 | `test_csharp_records.py` | 12 |
 
-Three checks require things the base installation does not include, and that is **not a packaging defect** but the nature of the check:
+Три проверки требуют того, чего нет в базовой установке, и это **не дефект
+поставки**, а характер проверки:
 
-* `test_joern_server.py` — needs the external Java + Joern layer (`scripts/install-joern.ps1`);
-* `test_graph_algo.py` — needs `torch` (~2.5 GB), which is in neither `pyproject.toml` nor `requirements.txt`: GPU graph algorithms are an optional branch, and without `torch` it honestly degrades to CPU;
-* `test_cpg_call_names.py` — needs a corpus config (the `config/` directory is not published); you can run the test by copying `examples/ragraf.example.yaml` into `config/` and pointing it at your own root; without one it refuses to run rather than passing silently.
+* `test_joern_server.py` — нужен внешний слой Java + Joern (`scripts/install-joern.ps1`);
+* `test_graph_algo.py` — нужен `torch` (около 2,5 ГБ), которого нет ни в `pyproject.toml`,
+  ни в `requirements.txt`: графовые алгоритмы на видеокарте — необязательная ветка,
+  и без `torch` она честно деградирует на процессор;
+* `test_cpg_call_names.py` — нужен конфиг корпуса (каталог `config/` не публикуется);
+  тест можно запустить, скопировав `examples/ragraf.example.yaml` в `config/` и
+  указав в нём свой корень.
 
-A tenth file, `test_capability_consistency.py`, reports «not applicable» until a corpus config exists — it validates the declared `capability` against what the graph actually contains. `test_graph_algo.py` without `torch` still runs **7 checks** and names the **17 properties it could not check**, rather than printing a green line over untested code.
-
-The project checker is equally explicit about this published subset: of its **14 checks**, 11 pass here and 3 report files that are deliberately absent from the public tree (the corpus config, `tests/test_dedupe.py`, `tests/test_text_from_index.py`) — tracked as `R-REL-1` in [`ROADMAP.md`](ROADMAP.md).
-
-`selftest` is **not a gate**: it prints a report on 11 components and always returns exit code 0. A non-zero code is not provided for, so a «green selftest» proves nothing by itself.
-
----
-
-## Contributing
-
-Useful reports: a reproducible defect with the command and its output; a document diverging from the code; a case of degradation the product did not name. One thing is welcome above all: a fact with a file-and-line reference. See [CONTRIBUTING.md](CONTRIBUTING.md); questions, ideas and measurements on your own corpus go to [Discussions](https://github.com/paulmann/RAGRAF/discussions). Participation is covered by the [Code of Conduct](CODE_OF_CONDUCT.md).
-
-The project is developed for concrete tasks, so architecture proposals are discussed more readily than large patches without a prior conversation. Security problems are reported privately, never as a public issue — see [SECURITY.md](SECURITY.md).
-
-If this saved you a context window, a star helps the next agent find it.
+`selftest` — **не гейт**: он печатает отчёт по 11 компонентам и всегда
+возвращает код 0. Ненулевого кода у него не предусмотрено, поэтому «зелёный
+selftest» сам по себе ничего не доказывает.
 
 ---
 
-## License
+## Участие
 
-**[PolyForm Noncommercial License 1.0.0](LICENSE)** — free for any noncommercial purpose: personal projects, study, research, experiment and testing, and use by charitable, educational, public-research, public-safety, health and environmental organizations. Commercial use needs a separate license from the copyright holder, who keeps every right not expressly granted. [CHANGELOG.md](CHANGELOG.md) records the transition from MIT on 2026-10-15.
+Полезные сообщения: воспроизводимый дефект с командой и выводом; расхождение документа с кодом; случай деградации, которую продукт не назвал. Приветствуется одно: факт со ссылкой на файл и строку.
 
-> GitHub's licence badge for this repository reads «Other»: PolyForm is not in the catalogue GitHub detects, so the badge cannot be trusted here. `LICENSE` and `pyproject.toml` (`license = "PolyForm-Noncommercial-1.0.0"`) are the authoritative sources.
+Проект разрабатывается под конкретные задачи, поэтому предложения по архитектуре обсуждаются охотнее, чем большие патчи без предварительного разговора.
 
-External dependencies keep their own licenses: `tree-sitter` (MIT), `sqlite-vec` (MIT/Apache-2.0), `fastembed` (Apache-2.0), `PyYAML` (MIT), `tiktoken` (MIT), `ijson` (BSD). Java and Joern, installed separately, are distributed under Apache-2.0 and are not part of the distribution.
+---
+
+## Проект в числах и измеренный полигон
+
+Публикуемые числа (сверены 24.10.2026): **40 операций** фасада, **50 инструментов MCP**, **19** подкоманд CLI, **29** языков деревом и **40** текстом (включая `document`), **84** формата данных в реестре (61 язык, 9 семейств документов, 10 видов данных, 4 без разборщика); собственный индекс RAGRAF — 726 файлов, 4 206 узлов и 53 308 рёбер (точные числа и ревизия — `python tools/ragraf.py -p config/ragraf.yaml status`).
+
+**Полигон, обезличенно** (названия проектов, пути и домены скрыты): в реестре **28 корпусов, 25 проиндексированы** — 10 со слоем CPG, 15 в режиме `degraded`. У 16 из них запись ревизии прочитана 16.10.2026: **7 527 файлов, 94 528 символов, 791 871 ребро, 86 790 чанков**.
+
+| Корпус | Тип | Файлов | Символов | Рёбер | Режим |
+|---|---|---|---|---|---|
+| C-02 | веб-приложение на PHP | 2 722 | 32 761 | 355 192 | degraded |
+| C-04 | служба / десктоп на C# | 1 274 | 20 331 | 98 605 | degraded |
+| C-05 | веб-приложение на PHP | 928 | 17 381 | 99 029 | full |
+| C-18 | набор автоматизации на PowerShell | 81 | 324 | 4 214 | degraded |
+| C-24 | Markdown + bash (самый малый) | 18 | 184 | 1 515 | degraded |
+
+Полная таблица на 16 строк, правила обезличивания и оговорка к подсчёту — в [вики → Benchmarks and Limits](https://github.com/paulmann/RAGRAF/wiki/11-Benchmarks-and-Limits). Оговорка: реестр корпусов и запись ревизии дают разные итоги для одной ревизии (8 721 против 4 498 символов, 41 201 против 56 106 рёбер), поэтому числа взяты из записи ревизии. Приватная карта меток `C-*` → проекты лежит вне репозитория (`.staging/polygon_labels.json`).
+
+---
+
+## Лицензия
+
+**[Business Source License 1.1](LICENSE)** — исходный код открыт, и лицензия разрешает любое использование, включая коммерческую деятельность и производственное использование внутри организации. Запрещено одно: предоставлять продукт или его производные третьим лицам как размещённую или управляемую службу, основная ценность которой — функциональность RAGRAF. Через четыре года после выпуска версии она переходит на Apache-2.0.
+
+Источники истины — по одному вопросу на файл, без пересказа:
+
+| Вопрос | Файл |
+|---|---|
+| Текст лицензии и её параметры | [`LICENSE`](LICENSE) |
+| Третьи стороны и их лицензии | [`NOTICE`](NOTICE) |
+| Условия вклада | [`CLA.md`](CLA.md) |
+| Поддержка: что обещано и что нет | [`SUPPORT.md`](SUPPORT.md) |
+| Что можно, что нельзя, история лицензий | [`docs/03_implementation/LICENSING.md`](docs/03_implementation/LICENSING.md) |
+
+> BSL 1.1 **не является open source** лицензией: OSI её не одобряет, поэтому правильные слова — «source-available», «исходный код открыт». Значок лицензии на GitHub показывает «Other»: BSL нет в каталоге, который он распознаёт.
+
+Для случая, который грант не покрывает, нужна отдельная коммерческая лицензия от правообладателя: все права, явно не предоставленные, за ним сохранены. Выданные ранее права не отзываются — история лицензий в [`docs/03_implementation/LICENSING.md`](docs/03_implementation/LICENSING.md).
+
+Внешние зависимости сохраняют свои лицензии: перечень с измеренными версиями — в [`NOTICE`](NOTICE). Java и Joern в поставку не входят и устанавливаются отдельно.
+
+### Хранилище секретов (решение владельца 2026-10-24)
+
+Раньше действовало правило «значений нет и быть не может» — только реестр мест.
+Владелец изменил его: значения нужны, но жить они могут **только** в `catalog/`
+(вне корпуса), **только** зашифрованными и выдаваться агенту по праву с записью
+в аудит. Правило «не индексировать» осталось в силе: `catalog/**` исключён из
+корпуса, поэтому значение не попадает ни в индекс, ни в поиск.
+
+- типы: пароль, токен, ключ API, закрытый ключ, сертификат, строка подключения,
+  SSH-ключ, вебхук, заметка — то есть не «только пароли»;
+- шифрование: PyNaCl `SecretBox` (XSalsa20-Poly1305), ключ записи выводится из
+  мастер-ключа с солью идентификатора, в шифротекст вложен контекст записи —
+  перестановка строк между записями отвергается проверкой подлинности;
+- права по агентам: `all` (по умолчанию — доступен всем), `listed` (только
+  перечисленным), `owner_only` (только сохранившему); плюс общий список
+  разрешённых агентов в настройках;
+- аудит: каждая выдача и каждый отказ, журнал append-only на уровне базы;
+- настройки: раздел `secrets_*` в панели — включение хранилища, сохранение
+  встреченных секретов, видимость по умолчанию, требование причины выдачи,
+  предел длины значения, список разрешённых агентов, предупреждение о сроке.
+
+CLI: `python tools/ragraf.py secrets list | show | reveal | set | rm | grant |
+revoke | check | rotate | export | import | policy | audit`. Значение `set`
+берётся из stdin, переменной окружения или файла — не из аргумента командной
+строки. MCP: `ragraf_secret_list/show/reveal/set/grant/revoke/delete/policy`.

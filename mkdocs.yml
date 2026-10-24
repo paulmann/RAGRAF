@@ -24,8 +24,8 @@ docs_dir: docs
 site_dir: site
 
 copyright: >-
-  RAGRAF — <a href="https://github.com/paulmann/RAGRAF/blob/main/LICENSE">PolyForm
-  Noncommercial License 1.0.0</a> · <a href="https://ragraf.ru">ragraf.ru</a>
+  RAGRAF — <a href="https://github.com/paulmann/RAGRAF/blob/main/LICENSE">Business
+  Source License 1.1</a> · <a href="https://ragraf.ru">ragraf.ru</a>
 
 theme:
   name: material

@@ -1,45 +1,34 @@
 [build-system]
-requires = ["setuptools>=69", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "ragraf"
-version = "0.1.0"
+# Версия объявлена ОДИН раз — в `src/ragraf/__init__.py` (`__version__`).
+# Здесь она не повторяется: `dynamic` + `tool.setuptools.dynamic` читают её
+# оттуда, поэтому метаданные пакета не могут разойтись с кодом. Замер
+# 24.10.2026: до этого версия стояла в трёх местах (здесь, в `__init__.py`
+# и в `CITATION.cff`), и все три пришлось бы поднимать вручную.
+dynamic = ["version"]
 description = "RAGRAF — графово-векторная база знаний о коде для LLM-агентов"
 readme = "README.md"
 requires-python = ">=3.13"
-license = "PolyForm-Noncommercial-1.0.0"
-license-files = ["LICENSE"]
+license = "BUSL-1.1"
+# ВНИМАНИЕ: идентификатор лицензии — именно BUSL-1.1. Написание `BSL-1.1`
+# сборка отвергает (InvalidLicenseExpression: Unknown license), проверено
+# вызовом 24.10.2026. Нижняя граница setuptools поднята до 77, потому что
+# license-files и выражение лицензии — это PEP 639; на 69–76 метаданные
+# собирались бы иначе и результат зависел бы от машины.
+license-files = ["LICENSE", "NOTICE"]
 authors = [
     { name = "Mikhail Deynekin", email = "mid1977@gmail.com" },
 ]
-keywords = [
-    "code-analysis",
-    "code-search",
-    "code-knowledge-base",
-    "knowledge-graph",
-    "code-property-graph",
-    "static-analysis",
-    "tree-sitter",
-    "vector-search",
-    "embeddings",
-    "rag",
-    "retrieval-augmented-generation",
-    "llm-agents",
-    "ai-agents",
-    "mcp",
-    "mcp-server",
-    "sqlite",
-    "local-first",
-    "developer-tools",
-]
+keywords = ["code-analysis", "knowledge-graph", "vector-search", "llm-agents", "mcp", "sqlite"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
     "Intended Audience :: Developers",
-    "Operating System :: Microsoft :: Windows",
     "Programming Language :: Python :: 3.13",
-    "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Documentation",
     "Topic :: Software Development :: Quality Assurance",
 ]
@@ -67,13 +56,18 @@ dependencies = [
 #   скачиваются за 9,2 с. В домашней сети не требуется.
 [project.optional-dependencies]
 tls = ["truststore>=0.10"]
+# Документы: PDF, DOCX, XLSX, PPTX (G5). Без них язык `document` даёт
+# metadata_only с причиной, а не падает: зависимости необязательны.
+documents = [
+    "pypdf>=6,<7",
+    "python-docx>=1.1,<2",
+    "openpyxl>=3.1,<4",
+    "python-pptx>=1.0,<2",
+]
 
 [project.urls]
-Homepage = "https://ragraf.ru"
-Documentation = "https://paulmann.github.io/RAGRAF/"
-Wiki = "https://github.com/paulmann/RAGRAF/wiki"
+Homepage = "https://github.com/paulmann/RAGRAF"
 Repository = "https://github.com/paulmann/RAGRAF"
-Changelog = "https://github.com/paulmann/RAGRAF/blob/main/CHANGELOG.md"
 Issues = "https://github.com/paulmann/RAGRAF/issues"
 
 [project.scripts]
@@ -85,3 +79,8 @@ package-dir = { "" = "src" }
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["ragraf*"]
+
+[tool.setuptools.dynamic]
+# Единственное место объявления версии — атрибут `__version__` в пакете.
+# setuptools читает его статически (AST), не исполняя модуль.
+version = { attr = "ragraf.__version__" }

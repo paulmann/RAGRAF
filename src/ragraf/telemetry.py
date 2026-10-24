@@ -121,6 +121,12 @@ class CallRecord:
         """Оценка токенов ответа (не измерение): 4 символа на токен."""
         return int(self.result_chars / CHARS_PER_UNIT)
 
+    # Шаг 0.6 плана: измеренная экономия в СИМВОЛАХ, а не флаг «эта операция
+    # обычно заменяет чтение». Считается по фактически выданным путям ответа
+    # (см. Facade._saved_chars): 0 означает «нечего было заменять», и это
+    # честный ноль, а не отсутствие измерения.
+    replaces_chars: int = 0
+
     @property
     def replaces_reading(self) -> bool:
         """Заменяет ли эта операция чтение файлов агентом."""
@@ -327,7 +333,10 @@ class Telemetry:
         # Числовые метрики P2-4: `stale` (ответ отдан с пометкой устаревания) и
         # `missed` (не найдено). Отдельный список, потому что тип INTEGER, а не
         # TEXT, и смешивать их в одном цикле значило бы положить числа в текст.
-        for column in ("stale", "missed"):
+        # Шаг 0.6: измеренная экономия символов рядом с прежним флагом.
+        # Догоняющая миграция: старые журналы не требуют удаления, у прежних
+        # записей значение NULL и в сводке считается как «не измерялось».
+        for column in ("stale", "missed", "replaces_chars"):
             try:
                 self.control.conn.execute(
                     f"ALTER TABLE usage_call ADD COLUMN {column} INTEGER"
@@ -424,10 +433,10 @@ class Telemetry:
             "usage_call",
             """INSERT INTO usage_call(session_id, ts, op, rev_id, capability, duration_ms,
                        found, fact_count, facts_with_span, result_chars, est_tokens,
-                       replaces, error, tool, agent, agent_kind, task,
+                       replaces, replaces_chars, error, tool, agent, agent_kind, task,
                        arg_hash, arg_digest, token_id, token_label,
                        stale, missed)
-                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 self.session_id,
                 time.time(),
@@ -441,6 +450,7 @@ class Telemetry:
                 rec.result_chars,
                 rec.est_tokens,
                 1 if rec.replaces_reading else 0,
+                int(getattr(rec, "replaces_chars", 0) or 0),
                 rec.error,
                 rec.tool,
                 self.agent,
@@ -807,6 +817,36 @@ class Telemetry:
             for row in access_rows
         ]
 
+        # --- польза за 30 дней ---
+        # Отдельный срез по времени: общая сводка считает весь журнал, а
+        # решение «работает ли индекс сейчас» принимают по свежему периоду.
+        try:
+            since30 = time.time() - 30 * 86400.0
+            cond30 = (where + " AND ts >= ?") if where else "WHERE ts >= ?"
+            row30 = conn.execute(
+                f"""SELECT COUNT(*) AS calls,
+                              SUM(COALESCE(fact_count, 0)) AS facts,
+                              SUM(COALESCE(result_chars, 0)) AS chars,
+                              SUM(CASE WHEN replaces = 1 THEN COALESCE(result_chars, 0) ELSE 0 END) AS replacing,
+                              SUM(CASE WHEN error IS NOT NULL AND error <> '' THEN 1 ELSE 0 END) AS errors
+                         FROM usage_call {cond30}""",
+                params + (since30,),
+            ).fetchone()
+            chars30 = int(row30["chars"] or 0)
+            replacing30 = int(row30["replacing"] or 0)
+            last30 = {
+                "days": 30,
+                "calls": int(row30["calls"] or 0),
+                "facts": int(row30["facts"] or 0),
+                "chars": chars30,
+                "tokens": int(chars30 / CHARS_PER_UNIT),
+                "lines": int(replacing30 / CHARS_PER_LINE),
+                "errors": int(row30["errors"] or 0),
+                "estimate": "токены и строки — оценка, не измерение",
+            }
+        except Exception as exc:  # noqa: BLE001 — срез не должен прятать общую сводку
+            last30 = {"error": f"{type(exc).__name__}: {exc}"}
+
         return {
             "by_access": by_access,
             # sessions_total — сессии, попавшие под фильтр; sessions_total_all
@@ -879,6 +919,7 @@ class Telemetry:
             "est_tokens_replacing_reading": int(replacing / CHARS_PER_UNIT),
             "est_lines_not_read": int(replacing / CHARS_PER_LINE),
             "by_op": by_op,
+            "last30": last30,
             "by_arg": by_arg,
             "estimate_note": (
                 "Токены и строки — ОЦЕНКА: символы делятся на 4 (токен) и на 45 "

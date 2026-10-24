@@ -1,77 +1,75 @@
-# Example RAGRAF corpus configuration.
+# Пример конфигурации корпуса RAGRAF.
 #
-# This is a TEMPLATE, not a working config: the `root` path below is a stub.
-# Your config for a concrete project is created by the command that inspects the
-# directory and picks languages, exclusions and thresholds from the actual contents:
+# Это ШАБЛОН, а не рабочий конфиг: путь `root` ниже — заглушка. Свой конфиг
+# под конкретный проект создаётся командой, которая осматривает каталог и
+# подбирает языки, исключения и пороги по фактическому содержимому:
 #
-#     ragraf init C:\path\to\project
+#     ragraf init C:\путь\к\проекту
 #
-# The command prints the path of the created file. After init, check two lists —
-# `include` and `exclude`: they decide what lands in the index. Pay special
-# attention to directories with secrets (`config.local.*`, `.env`, keys) — they
-# must not be indexed.
+# Команда печатает путь созданного файла. После init проверьте два списка —
+# `include` и `exclude`: от них зависит, что попадёт в индекс. Особое внимание
+# на каталоги с секретами (`config.local.*`, `.env`, ключи) — они не должны
+# индексироваться.
 #
-# Then register and build the index:
+# Затем зарегистрировать и построить индекс:
 #
 #     ragraf -p examples/mycorpus.yaml register
 #     ragraf -p examples/mycorpus.yaml index
 #
-# Or everything in one command (find the corpus, rebuild a stale index, create a
-# corpus for an unknown directory):
+# Либо одной командой всё сразу (найти корпус, пересобрать отставший индекс,
+# создать корпус для незнакомого каталога):
 #
-#     ragraf ensure C:\path\to\project
+#     ragraf ensure C:\путь\к\проекту
 #
-# Where the index ends up: in the `.ragraf/` directory INSIDE the indexed project.
-# That is machine-local derived data — add `.ragraf/` to that repository's
-# .gitignore.
+# Где окажется индекс: в каталоге `.ragraf/` ВНУТРИ индексируемого проекта.
+# Это машинно-локальные производные данные — добавьте `.ragraf/` в .gitignore
+# того репозитория.
 
 project: myproject
 root: C:/path/to/your/project
 
-# Languages whose files land in the index. Tree parsing (graph nodes and edges)
-# is available for 16 languages; the rest are attached as text — files are
-# findable by search but yield no nodes. The full list is in README.md.
+# Языки, файлы которых попадают в индекс. Разбор деревом (узлы и рёбра графа)
+# доступен для 16 языков; остальные подключаются текстом — файлы находятся
+# поиском, но узлов не дают. Полный перечень — в README.md.
 #
-# The `init` command fills this list from the directory's actual contents.
-# If the project has .ps1, .sh, .bat scripts or .cs, .py, .pl code — make sure
-# their languages are here, otherwise the files are not indexed.
+# Команда `init` заполняет список по фактическому содержимому каталога.
+# Если в проекте есть скрипты .ps1, .sh, .bat или код .cs, .py, .pl —
+# убедитесь, что их языки здесь есть, иначе файлы не индексируются.
 languages:
   - python
   - javascript
   - markdown
 
-# What to index: file masks. The defaults below are for a Python project.
+# Что индексировать: маски файлов. Значения по умолчанию для Python-проекта.
 include:
   - "**/*.py"
   - "**/*.js"
   - "**/*.md"
 
-# What to exclude. The base list (history, dependencies, build, caches, and the
-# .ragraf directory itself) ALWAYS applies and is not replaced by this list:
-# rules from here are ADDED to the base ones.
-# NOTE: matching is case-sensitive (known limitation, roadmap R-CORE-1) —
-# on Windows list both cases when in doubt (**/cache/** and **/Cache/**).
+# Что исключать. Базовый список (история, зависимости, сборка, кеши, а также
+# собственный каталог .ragraf) применяется ВСЕГДА и не заменяется этим списком:
+# правила отсюда ДОБАВЛЯЮТСЯ к базовым.
 exclude:
   - "**/.git/**"
   - "**/node_modules/**"
   - "**/build/**"
   - "**/dist/**"
 
-# Files with secrets: not indexed, contents not read.
+# Файлы с секретами: не индексируются, содержимое не читается.
 secrets_exclude:
   - "**/*.local.php"
   - "**/.env"
   - "**/*.pem"
 
-# DB schema from migrations (when the project has migrations/*.sql).
+# Схема БД из миграций (когда в проекте есть migrations/*.sql).
 db:
   enabled: false
 
 embedding:
-  # The model is local, works without the cloud. ~240 MB, downloaded once at the
-  # first indexing with vectors into <home>/.ragraf/models.
-  # Override the cache directory: the RAGRAF_MODEL_CACHE environment variable.
-  # Indexing without the model: ragraf index --no-vectors (lexicon keeps working).
+  # Модель локальная, работает без облака. ~240 МБ, скачивается один раз
+  # при первой индексации с векторами в <домашний каталог>/.ragraf/models.
+  # Переопределить каталог кэша: переменная окружения RAGRAF_MODEL_CACHE.
+  # Индексация без модели: ragraf index --no-vectors (лексика продолжит работать).
   model: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
   dim: 384
   batch_size: 64
@@ -84,18 +82,18 @@ chunking:
   min_chunk_lines: 3
 
 index:
-  # How many revisions to keep. Old ones are not deleted from history: they are
-  # marked rotated; only the graph and lexicon data is cleaned.
+  # Сколько ревизий хранить. Старые не удаляются из истории: помечаются
+  # rotated, чистятся только данные графа и лексики.
   retain_revs: 3
   batch_size: 2000
-  # The code property graph (interprocedural calls) requires Java and Joern.
-  # Without them the index still builds, but capability=degraded: the slice
-  # operation refuses with a reason, the rest work.
+  # Граф свойств кода (межпроцедурные вызовы) требует Java и Joern.
+  # Без них индекс строится, но capability=degraded: операция slice
+  # отказывает с причиной, остальные работают.
   joern_enabled: true
   joern_server: true
   joern_server_port: 9500
   joern_heap_gb: 8
-  # Auto-tuning of reindex thresholds by accumulated edits.
+  # Автоподбор порогов переиндексации по накоплению правок.
   reindex_after_changes: 5
   full_reindex_after_changes: 20
   reindex_interval_minutes: 15

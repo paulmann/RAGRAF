@@ -38,6 +38,10 @@ OPS = [
     "code", "repo_map", "schema", "table_usage", "routes", "index_status",
     "drift_report", "drift_ack", "live_read", "calibrate", "write_check", "usage",
     "freshness", "catalog", "policy_trace", "class_usage",
+    # Маршрут к локальному индексу (G1): где лежит и что отвечает.
+    "route",
+    # Соседние контуры: готовая реализация того же стека в других корпусах.
+    "neighbors",
     # Структура корпуса: копии, точки входа, мёртвый код (P1-2).
     "duplicates", "entrypoints", "dead_code",
     # Слой живых баз данных: структура, связи, примеры, сверки.
@@ -431,14 +435,18 @@ def _agent_from_env() -> tuple[str, str]:
     """
     import os as _os
 
-    agent = (_os.environ.get("RAGRAF_AGENT") or "").strip() or "unknown"
+    # Пустое окружение — это НЕ «неизвестно»: вызов пришёл из командной
+    # строки, и назвать его `ragraf-cli` честнее, чем `unknown`. Замер
+    # 23.10.2026: команда `status` писала 42 записи `unknown` за три часа,
+    # потому что этот путь не называл себя вовсе.
+    agent = (_os.environ.get("RAGRAF_AGENT") or "").strip() or "ragraf-cli"
     kind = (_os.environ.get("RAGRAF_AGENT_KIND") or "").strip()
     if not kind:
         low = agent.lower().replace("-", "").replace("_", "")
         if "autoclaw" in low:
             kind = "autoclaw"
-        elif agent == "unknown":
-            kind = "unknown"
+        elif low in ("ragrafcli", "ragrafadmin", "phase0measure"):
+            kind = "internal"
         else:
             kind = "external"
     return agent, kind
@@ -457,6 +465,7 @@ def dispatch_op(fc, args: argparse.Namespace) -> dict:
     answer = bool(getattr(args, "answer", False))
     if op == "search":
         return fc.op_search(args.text or "", limit=args.limit,
+                            kinds=([str(args.kind)] if getattr(args, "kind", None) else None),
                             with_text=bool(getattr(args, "with_text", False)),
                             text_width=int(getattr(args, "text_width", 160)),
                             answer=answer)
@@ -560,6 +569,22 @@ def dispatch_op(fc, args: argparse.Namespace) -> dict:
         # Свежесть индекса: совпадает ли контрольная сумма корпуса с кодом.
         # При --force проверка идёт минуя кэш — сразу после правки кода.
         return fc.op_freshness(force=bool(getattr(args, "force_check", False)))
+    if op == "route":
+        return fc.op_route(args.text or args.name or "", limit=args.limit,
+                           verify=bool(getattr(args, "verify", True)))
+    if op == "neighbors":
+        # Кросс-корпусный поиск: чужие индексы открываются только на чтение.
+        return fc.op_neighbors(
+            query=args.text or "",
+            name=args.name or "",
+            limit=args.limit,
+            per_corpus=int(getattr(args, "per_corpus", 5) or 5),
+            stack=getattr(args, "stack", None),
+            min_shared=int(getattr(args, "min_shared", 1) or 1),
+            with_text=bool(getattr(args, "nb_text", True)),
+            kinds=([str(args.kind)] if getattr(args, "kind", None) else None),
+            answer=answer,
+        )
     if op == "catalog":
         # Реестр разработок: что индексировано, когда, с какими суммами.
         return fc.op_catalog()
@@ -712,7 +737,8 @@ def cmd_usage(args: argparse.Namespace, cfg: ProjectConfig) -> int:
     """
     from .facade import Facade
 
-    facade = Facade(cfg, tool="cli", telemetry=True)
+    facade = Facade(cfg, tool="cli", agent=_agent_from_env()[0],
+                    agent_kind=_agent_from_env()[1], task=_task_from_env())
     try:
         if args.reset:
             n = facade.telemetry.reset()
@@ -760,6 +786,11 @@ def cmd_usage(args: argparse.Namespace, cfg: ProjectConfig) -> int:
               f"среднее время {summary.get('avg_ms', 0)} мс, "
               f"«не найдено» {summary.get('misses', 0)}, "
               f"устаревших ответов {summary.get('stale_served', 0)}")
+        last30 = summary.get("last30") or {}
+        if last30 and not last30.get("error"):
+            print(f"за 30 дней: обращений {last30.get('calls', 0)}, "
+                  f"фактов {last30.get('facts', 0)}, "
+                  f"строк не читалось ~{last30.get('lines', 0)} (ОЦЕНКА)")
 
         # --- разбивка по агентам ---
         # Ответ на вопрос «какой агент использовал RAGRAF»: без этой
@@ -1009,6 +1040,263 @@ def cmd_catalog(args: argparse.Namespace, cfg: ProjectConfig | None = None) -> i
     return 0
 
 
+def cmd_sources(args: argparse.Namespace) -> int:
+    """Разрешённые корни режима «Я это ты»: список, добавление, права, секреты."""
+    from .sources import SourceRegistry, SourcesError
+
+    action = getattr(args, "action", "list")
+    reg = SourceRegistry()
+    try:
+        if action == "add":
+            root = getattr(args, "root", None) or getattr(args, "ident", None)
+            if not root:
+                print("[sources] не указан каталог: sources add <путь>", file=sys.stderr)
+                return EXIT_USAGE
+            src = reg.add(
+                root,
+                kind=getattr(args, "kind", None),
+                priority=int(getattr(args, "priority", 0) or 0),
+                note=getattr(args, "note", "") or "",
+                network=bool(getattr(args, "network", False)),
+            )
+            if args.json:
+                _print(src.to_dict(), True)
+            else:
+                print(f"[sources] добавлен источник id={src.id} ({src.kind})")
+                print(f"  корень:    {src.root}")
+                print(f"  приоритет: {src.priority}")
+                print("  содержимое не читается: карта хранит только метаданные")
+            return EXIT_OK
+        if action in ("remove", "enable", "disable"):
+            target = getattr(args, "ident", None)
+            if action == "remove":
+                src = reg.remove(target)
+                # Строки карты удаляются вместе с доступом: держать метаданные
+                # каталога, разрешение на который отозвано, нельзя.
+                try:
+                    from .global_map import GlobalMap
+                    from .sources import CATALOG_DIR
+
+                    if (CATALOG_DIR / "global_map.sqlite").exists():
+                        gm = GlobalMap()
+                        try:
+                            gm.sync_sources(reg)
+                        finally:
+                            gm.close()
+                except Exception:  # noqa: BLE001 — удаление доступа важнее чистки карты
+                    pass
+                if args.json:
+                    _print(src.to_dict(), True)
+                else:
+                    print(f"[sources] удалён источник id={src.id}: {src.root}")
+                    print("  файлы на диске не тронуты")
+                return EXIT_OK
+            src = reg.set_enabled(target, action == "enable")
+            if args.json:
+                _print(src.to_dict(), True)
+            else:
+                state = "включён" if src.enabled else "выключен"
+                print(f"[sources] источник id={src.id} {state}: {src.root}")
+            return EXIT_OK
+        if action == "priority":
+            src = reg.set_priority(getattr(args, "ident", None),
+                                   int(getattr(args, "value", 0) or 0))
+            if args.json:
+                _print(src.to_dict(), True)
+            else:
+                print(f"[sources] приоритет id={src.id} = {src.priority}: {src.root}")
+            return EXIT_OK
+        if action == "secrets":
+            from .global_map import GlobalMap
+            from .sources import CATALOG_DIR
+
+            if not (CATALOG_DIR / "global_map.sqlite").exists():
+                print("карта ещё не построена: сначала выполните `map scan`")
+                return EXIT_OK
+            gm = GlobalMap()
+            try:
+                rows = gm.secret_places(getattr(args, "source", None))
+            finally:
+                gm.close()
+            if args.json:
+                _print({"count": len(rows), "places": rows}, True)
+                return EXIT_OK
+            print(f"[secrets] мест, исключённых по правилам: {len(rows)}")
+            print("  значения не читаются и не хранятся: только путь, правило, размер")
+            for row in rows:
+                print(f"  {row['rel_path']}  ({row['rule']}, {row['size']} б)")
+            return EXIT_OK
+        # list
+        rows = reg.sources()
+        counts: dict[int, dict] = {}
+        try:
+            from .global_map import GlobalMap
+            from .sources import CATALOG_DIR
+
+            if (CATALOG_DIR / "global_map.sqlite").exists():
+                gm = GlobalMap()
+                try:
+                    gm.sync_sources(reg)
+                    counts = {int(r["id"]): r for r in gm.status()["sources"]}
+                finally:
+                    gm.close()
+        except Exception:  # noqa: BLE001 — список не должен падать из-за карты
+            counts = {}
+        payload = []
+        for src in rows:
+            row = counts.get(src.id) or {}
+            item = src.to_dict()
+            item["files"] = row.get("files")
+            item["secrets"] = row.get("secrets")
+            item["last_scan_at"] = row.get("last_scan_at")
+            item["scan_status"] = row.get("scan_status")
+            payload.append(item)
+        if args.json:
+            _print({"count": len(rows), "sources": payload}, True)
+            return EXIT_OK
+        print(f"[sources] разрешённых корней: {len(rows)}")
+        if not rows:
+            print("  (пусто; добавьте корень командой: sources add <каталог>)")
+        for item in payload:
+            mark = "вкл" if item["enabled"] else "выкл"
+            counts_text = (f"файлов={item['files']} секретов={item['secrets']}"
+                           if item.get("files") is not None else "карта не построена")
+            print(f"  id={item['id']:<3} {mark:>3}  {item['kind']:<7} приоритет={item['priority']:<4} {item['root']}")
+            print(f"        {counts_text}")
+            if item.get("note"):
+                print(f"        {item['note']}")
+        return EXIT_OK
+    except SourcesError as exc:
+        print(f"[sources] {exc}", file=sys.stderr)
+        return EXIT_USAGE
+
+
+def cmd_map(args: argparse.Namespace) -> int:
+    """Карта метаданных: скан разрешённых корней и состояние хранилища."""
+    from .global_map import GlobalMap
+    from .sources import SourceRegistry, SourcesError
+
+    action = getattr(args, "action", "status")
+    reg = SourceRegistry()
+    gm = GlobalMap()
+    try:
+        if action == "scan":
+            gm.sync_sources(reg)
+            wanted: list = []
+            ident = getattr(args, "source", None)
+            if ident is not None:
+                src = reg.get(ident)
+                if src is None:
+                    print(f"[map] источник не найден: {ident}", file=sys.stderr)
+                    return EXIT_USAGE
+                wanted = [src]
+            else:
+                wanted = reg.sources(enabled_only=True)
+            if not wanted:
+                print("[map] нет включённых источников: добавьте командой sources add")
+                return EXIT_OK
+            limits = {}
+            if getattr(args, "max_files", None):
+                limits["max_files"] = int(args.max_files)
+            if getattr(args, "max_seconds", None):
+                limits["max_seconds"] = float(args.max_seconds)
+            results = [gm.scan(src, limits=limits or None) for src in wanted]
+            if args.json:
+                _print({"scans": [r.to_dict() for r in results]}, True)
+                return EXIT_OK
+            for res in results:
+                print(f"[map] {res.root}")
+                print(f"  статус:   {res.status}")
+                print(f"  файлов:   {res.files}  секретных мест: {res.secrets}  пропущено: {res.skipped}")
+                print(f"  отпечаток: {res.fingerprint[:16] if res.fingerprint else '(нет)'}")
+                if res.reason:
+                    print(f"  причина:  {res.reason}")
+                for err in res.errors[:5]:
+                    print(f"  ошибка:   {err}")
+            return EXIT_OK
+        if action == "find":
+            tokens = [t for t in str(getattr(args, "text", "") or "").split() if t]
+            rows = gm.find(tokens, limit=int(getattr(args, "limit", 50) or 50))
+            if args.json:
+                _print({"query": tokens, "count": len(rows), "files": rows}, True)
+                return EXIT_OK
+            print(f"[map] найдено файлов по имени/пути: {len(rows)}")
+            for row in rows:
+                print(f"  {row['root']}/{row['rel_path']}  ({row['size']} б)")
+            return EXIT_OK
+        # status
+        gm.sync_sources(reg)
+        data = gm.status()
+        if args.json:
+            _print(data, True)
+            return EXIT_OK
+        print(f"[map] хранилище: {data['storage']}")
+        print(f"  источников: {data['count']}, включено: {data['enabled']}, файлов: {data['files']}, секретных мест: {data['secrets']}")
+        for row in data["sources"]:
+            mark = "вкл" if row["enabled"] else "выкл"
+            print(f"  id={row['id']:<3} {mark:>3}  файлов={row['files']:<7} секретов={row['secrets']:<4} {row['root']}")
+            if row.get("last_scan_at"):
+                print(f"        скан: {row['last_scan_at']}  статус: {row.get('scan_status') or '—'}")
+        return EXIT_OK
+    except SourcesError as exc:
+        print(f"[map] {exc}", file=sys.stderr)
+        return EXIT_USAGE
+    finally:
+        gm.close()
+
+
+def cmd_route(args: argparse.Namespace) -> int:
+    """Маршрут без конфига корпуса: где лежит и что отвечает.
+
+    Отдельная команда нужна потому, что вопрос «какой индекс использовать»
+    задаётся ДО выбора корпуса. `query route` остаётся для тех, у кого корпус
+    уже выбран: там ответ идёт в общем конверте с ревизией и свежестью.
+    """
+    from .route import route
+
+    data = route(
+        getattr(args, "text", "") or "",
+        limit=int(getattr(args, "limit", 10) or 10),
+        verify=bool(getattr(args, "verify", True)),
+    )
+    if args.json:
+        _print(data, True)
+        return EXIT_OK
+    print(f"[route] запрос: {data['query']!r}")
+    print(f"  слов: {', '.join(data['tokens']) or '(нет)'}")
+    print(f"  совпадений в карте: {data['map_hits']}, разработок в реестре: {data['corpora']}")
+    if not data["candidates"]:
+        print("  кандидатов нет")
+    for cand in data["candidates"]:
+        kind = "корпус" if cand["type"] == "corpus" else "источник"
+        name = cand.get("category") or cand.get("root")
+        print(f"\n  [{kind}] {name}  score={cand['score']:.2f}")
+        if cand.get("root"):
+            print(f"    корень: {cand['root']}")
+        if cand.get("file_hits"):
+            print(f"    файлов по запросу: {cand['file_hits']}")
+        local = cand.get("local_index")
+        if local:
+            age = local.get("age_seconds")
+            age_text = f"{(age or 0) / 3600:.1f} ч назад" if age is not None else "время неизвестно"
+            print(f"    индекс: {local.get('rev_id')}  режим: {local.get('capability') or '—'}  обновлён: {age_text}")
+            if local.get("fingerprint_match") is True:
+                print("    отпечаток: совпадает (факты актуальны)")
+            elif local.get("fingerprint_match") is False:
+                print("    отпечаток: РАЗОШЁЛСЯ (факты могут быть устаревшими)")
+        else:
+            print("    локального индекса нет")
+        for reason in cand.get("why") or []:
+            print(f"    причина: {reason}")
+    recommended = data.get("recommended")
+    if recommended:
+        print(f"\n  рекомендовано: {recommended.get('category')}  ({recommended.get('root')})")
+        print("  дальше: ensure этого каталога, затем search/symbol по нему")
+    for note in data.get("notes") or []:
+        print(f"  примечание: {note}")
+    return EXIT_OK
+
+
 def cmd_ensure(args: argparse.Namespace) -> int:
     """Привести RAGRAF в соответствие проекту, из которого идёт запрос.
 
@@ -1062,10 +1350,56 @@ def cmd_ensure(args: argparse.Namespace) -> int:
     print(f"  время:      {data['seconds']:.2f} с")
     return EXIT_OK if data["status"] != "error" else EXIT_ERROR
 
+def cmd_feedback(args: argparse.Namespace, cfg: ProjectConfig) -> int:
+    """Локальный черновик отчёта о пользе. Сеть не используется."""
+    from . import feedback
+
+    data = feedback.build(cfg, days=int(getattr(args, "days", 30) or 30))
+    if args.json:
+        _print(data, True)
+        return EXIT_OK
+    print(f"[feedback] черновик сохранён: {data['path']}")
+    print("  ничего не отправлено: fork, ветку и PR создаёт владелец\n")
+    print(data["report"])
+    return EXIT_OK
+
+
+def cmd_analytics(args: argparse.Namespace, cfg: ProjectConfig) -> int:
+    """Экспорт и удаление локальной аналитики. Сеть не используется."""
+    from . import analytics
+
+    action = str(getattr(args, "action", "export") or "export")
+    if action == "delete":
+        if not getattr(args, "yes", False):
+            print("удаление журнала требует подтверждения: добавьте --yes\n"
+                  "перед удалением создаётся резервная копия в catalog/analytics/",
+                  file=sys.stderr)
+            return EXIT_USAGE
+        data = analytics.delete(cfg)
+        if args.json:
+            _print(data, True)
+        else:
+            print(f"[analytics] удалено вызовов: {data['deleted_calls']}, "
+                  f"сессий: {data['deleted_sessions']}")
+            print(f"  резервная копия: {data['backup']}")
+        return EXIT_OK
+    data = analytics.export(cfg, days=int(getattr(args, "days", 30) or 30),
+                            out=getattr(args, "out", None))
+    if args.json:
+        _print(data, True)
+    else:
+        print(f"[analytics] экспорт сохранён: {data['path']}")
+        print("  ничего не отправлено: файл локальный")
+    return EXIT_OK
+
+
 def cmd_status(args: argparse.Namespace, cfg: ProjectConfig) -> int:
     from .facade import Facade
 
-    fc = Facade(cfg)
+    # Идентичность обязательна: без неё каждая проверка состояния добавляла в
+    # журнал запись `tool=unknown, agent=unknown` (измерено: 42 за три часа).
+    fc = Facade(cfg, tool="cli", agent=_agent_from_env()[0],
+                agent_kind=_agent_from_env()[1], task=_task_from_env())
     try:
         data = fc.op_index_status()
     finally:
@@ -1161,6 +1495,149 @@ def cmd_selftest(args: argparse.Namespace, cfg: ProjectConfig) -> int:
 # --------------------------------------------------------------------------
 
 
+
+def cmd_secrets(args: argparse.Namespace) -> int:
+    """Хранилище секретов: значения, права агентов, аудит.
+
+    Значение НИКОГДА не берётся из аргумента командной строки: аргумент виден
+    в истории оболочки и в списке процессов. Источники — stdin (по умолчанию),
+    переменная окружения или файл.
+    """
+    import json as _json
+
+    from . import vault as vault_mod
+    from . import vault_ops
+
+    action = str(getattr(args, "action", None) or "list")
+    actor = vault_ops.cli_actor()
+    box = vault_mod.Vault()
+
+    def emit(data) -> int:
+        print(_json.dumps(data, ensure_ascii=False, indent=2, default=str))
+        return 0
+
+    def agents_list() -> list[str]:
+        raw = str(getattr(args, "agents", "") or "")
+        return [part.strip() for part in raw.replace(";", ",").split(",") if part.strip()]
+
+    try:
+        if action == "init":
+            return emit(vault_mod.init_master_key(force=bool(args.force)))
+        if action == "policy":
+            return emit(box.policy())
+        if action == "list":
+            data = box.list(actor=actor, query=str(args.query or ""),
+                            kind=str(args.kind or ""), tag=str(args.tag or ""),
+                            limit=int(args.limit), include_hidden=bool(actor.admin))
+            if args.json:
+                return emit(data)
+            print(f"секретов: {data['count']}"
+                  f" (скрыто от вас: {data['hidden']})")
+            for item in data["items"]:
+                flags = []
+                if item["expired"]:
+                    flags.append("просрочен")
+                elif item["expiring_soon"]:
+                    flags.append(f"истекает через {item['days_left']} дн")
+                mode = item["visibility"]
+                if mode == "listed":
+                    mode = "только " + ", ".join(item["agents"])
+                elif mode == "owner_only":
+                    mode = "только автор"
+                print(f"  {item['name']:<34} {item['kind']:<18} "
+                      f"{item['masked']:<6} {mode:<22} "
+                      f"добавил: {item['created_by'] or '—'} "
+                      f"{item['created_at']}")
+                if flags:
+                    print(f"      ! {', '.join(flags)}")
+            return 0
+        if action == "show":
+            data = box.show(str(args.name or ""), actor=actor)
+            return emit(data)
+        if action == "reveal":
+            data = box.reveal(str(args.name or ""), actor=actor,
+                              reason=str(args.reason or ""))
+            if args.json:
+                return emit(data)
+            # Значение — единственное, что идёт в stdout без обёртки: команду
+            # используют в конвейере, и обёртка там была бы мусором.
+            print(data["value"])
+            print(f"получено: {data['name']} · причина: {data['reason'] or '—'}",
+                  file=sys.stderr)
+            return 0
+        if action == "set":
+            value = _secret_value_from(args)
+            meta = box.set(
+                str(args.name or ""), value, actor=actor,
+                kind=str(args.kind or "password"),
+                service=str(args.service or ""), label=str(args.label or ""),
+                owner=str(args.owner or ""), note=str(args.note or ""),
+                tags=[t for t in str(args.tags or "").split(",") if t.strip()],
+                project=str(args.project or ""), visibility=args.visibility,
+                agents=agents_list(), expires_at=str(args.expires or ""),
+                captured=bool(args.captured),
+            )
+            return emit(meta)
+        if action == "rm":
+            return emit(box.delete(str(args.name or ""), actor=actor))
+        if action == "grant":
+            return emit(box.grant(str(args.name or ""), agents_list(),
+                                  mode=args.visibility, actor=actor))
+        if action == "revoke":
+            return emit(box.revoke(str(args.name or ""), agents_list(),
+                                   actor=actor))
+        if action == "check":
+            report = box.check()
+            print(_json.dumps(report, ensure_ascii=False, indent=2))
+            return 0 if report.get("ok") else EXIT_ERROR
+        if action == "rotate":
+            return emit(box.rotate_key(actor=actor))
+        if action == "export":
+            phrase = _phrase_from(args)
+            return emit(box.export(str(args.out or "secrets.export.json"),
+                                   phrase, actor=actor))
+        if action == "import":
+            phrase = _phrase_from(args)
+            return emit(box.import_(str(args.out or ""), phrase, actor=actor))
+        if action == "audit":
+            return emit(box.audit_rows(limit=int(args.limit),
+                                       name=str(args.name or "")))
+        print(f"неизвестное действие: {action}", file=sys.stderr)
+        return EXIT_USAGE
+    except vault_mod.VaultError as exc:
+        print(f"{exc.code}: {exc.message}", file=sys.stderr)
+        return EXIT_ERROR
+
+
+def _secret_value_from(args: argparse.Namespace) -> str:
+    """Значение для `secrets set`: env, файл или stdin. Не аргумент."""
+    import os as _os
+    from pathlib import Path as _Path
+
+    var = getattr(args, "from_env", None)
+    if var:
+        value = _os.environ.get(str(var))
+        if value is None:
+            raise RuntimeError(f"переменная окружения {var} не задана")
+        return value
+    path = getattr(args, "from_file", None)
+    if path:
+        return _Path(str(path)).read_text(encoding="utf-8").rstrip("\r\n")
+    return sys.stdin.read().rstrip("\r\n")
+
+
+def _phrase_from(args: argparse.Namespace) -> str:
+    """Парольная фраза снимка — тоже только из окружения или stdin."""
+    import os as _os
+
+    var = getattr(args, "passphrase_env", None)
+    if var:
+        value = _os.environ.get(str(var))
+        if value:
+            return value
+        raise RuntimeError(f"переменная окружения {var} не задана")
+    return sys.stdin.readline().rstrip("\r\n")
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="ragraf",
@@ -1214,6 +1691,8 @@ def build_parser() -> argparse.ArgumentParser:
     pq.add_argument("--detail", default="normal", choices=["normal", "deep"])
     pq.add_argument("--hard", action="store_true", help="только доказанные связи")
     pq.add_argument("--budget", type=int, default=2000, help="бюджет токенов для repo_map")
+    pq.add_argument("--no-verify", dest="verify", action="store_false", default=True,
+                    help="route: не сверять отпечаток рекомендованного корпуса")
     pq.add_argument("--limit", type=int, default=50)
     pq.add_argument("--since", type=int, default=None)
     pq.add_argument("--since-rev", default=None,
@@ -1228,7 +1707,8 @@ def build_parser() -> argparse.ArgumentParser:
     pq.add_argument("--entry-ids", default=None)
     pq.add_argument("--start", type=int, default=None)
     pq.add_argument("--end", type=int, default=None)
-    pq.add_argument("--kind", default=None)
+    pq.add_argument("--kind", default=None,
+                    help="search: вид чанка (file, symbol, table, route, doc)")
     pq.add_argument("--note", default=None)
     # `search --with-text`: текст хитов из индекса одним вызовом. Замер rev-0031:
     # без него за 20 хитов приходилось читать 20 файлов вторым шагом.
@@ -1240,6 +1720,17 @@ def build_parser() -> argparse.ArgumentParser:
                     help="search_multi: считать запрос регулярным выражением")
     pq.add_argument("--text-width", type=int, default=160,
                     help="длина фрагмента в символах (с --with-text)")
+    # neighbors: сколько хитов брать из каждого соседа, каким стеком сравнивать
+    # и сколько общих языков достаточно. Разделены явно: у поиска по одному
+    # корпусу этих понятий нет, а у кросс-корпусного — есть.
+    pq.add_argument("--per-corpus", dest="per_corpus", type=int, default=5,
+                    help="neighbors: сколько хитов брать из каждого соседа")
+    pq.add_argument("--stack", default=None,
+                    help="neighbors: стек через запятую вместо измеренного (php,sql)")
+    pq.add_argument("--min-shared", dest="min_shared", type=int, default=1,
+                    help="neighbors: сколько общих языков считается соседством")
+    pq.add_argument("--no-text", dest="nb_text", action="store_false", default=True,
+                    help="neighbors: не добавлять фрагмент текста к хитам")
     # `code --source`: по умолчанию текст берётся из индекса, `disk` — прежнее
     # поведение (чтение рабочего дерева).
     pq.add_argument("--source", default="auto", choices=["auto", "index", "disk"])
@@ -1291,6 +1782,20 @@ def build_parser() -> argparse.ArgumentParser:
     pu.add_argument("--task", default=None,
                     help="только эта задача (метка RAGRAF_TASK)")
     pu.set_defaults(func=cmd_usage)
+
+    pfb = sub.add_parser("feedback", help="локальный отчёт о пользе (без сети)")
+    pfb.add_argument("--days", type=int, default=30, help="период отчёта в днях")
+    pfb.add_argument("--json", action="store_true", help="машиночитаемый вывод")
+    pfb.set_defaults(func=cmd_feedback)
+
+    pan = sub.add_parser("analytics", help="экспорт и удаление локальной аналитики")
+    pan.add_argument("action", choices=["export", "delete"], nargs="?", default="export")
+    pan.add_argument("--days", type=int, default=30)
+    pan.add_argument("--out", default=None, help="куда записать JSON (по умолчанию catalog/analytics/)")
+    pan.add_argument("--yes", action="store_true",
+                     help="подтвердить удаление журнала (копия создаётся обязательно)")
+    pan.add_argument("--json", action="store_true")
+    pan.set_defaults(func=cmd_analytics)
 
     pdb = sub.add_parser("db", help="сбор структуры живых баз и примеров строк")
     pdb.add_argument("--probe-only", action="store_true",
@@ -1351,6 +1856,86 @@ def build_parser() -> argparse.ArgumentParser:
 
     pcat = sub.add_parser("catalog", help="реестр разработок: что индексировано и с какими суммами")
     pcat.set_defaults(func=cmd_catalog, needs_config=False)
+
+    # --- «Я это ты»: разрешённые корни и карта метаданных (G0) ---
+    psrc = sub.add_parser("sources", help="разрешённые корни для карты метаданных")
+    psrc.add_argument("action", choices=["list", "add", "remove", "enable", "disable",
+                                         "priority", "secrets"], nargs="?", default="list")
+    psrc.add_argument("ident", nargs="?", default=None,
+                      help="id или путь источника (для remove/enable/disable/priority)")
+    psrc.add_argument("value", nargs="?", default=None, help="значение приоритета")
+    psrc.add_argument("--root", default=None, help="путь к каталогу (для add)")
+    psrc.add_argument("--kind", choices=["project", "folder", "share"], default=None)
+    psrc.add_argument("--priority", type=int, default=0)
+    psrc.add_argument("--note", default="")
+    psrc.add_argument("--network", action="store_true",
+                      help="разрешить сетевой (UNC) корень: без флага такой путь отклоняется")
+    psrc.add_argument("--source", type=int, default=None, help="id источника (для secrets)")
+    psrc.add_argument("--json", action="store_true", help="машиночитаемый вывод")
+    psrc.set_defaults(func=cmd_sources, needs_config=False)
+
+    pmap = sub.add_parser("map", help="карта метаданных разрешённых корней")
+    pmap.add_argument("action", choices=["status", "scan", "find"], nargs="?", default="status")
+    pmap.add_argument("text", nargs="?", default="", help="запрос для find")
+    pmap.add_argument("--source", default=None, help="id или путь источника (для scan)")
+    pmap.add_argument("--max-files", type=int, default=None)
+    pmap.add_argument("--max-seconds", type=float, default=None)
+    pmap.add_argument("--limit", type=int, default=50)
+    pmap.add_argument("--json", action="store_true", help="машиночитаемый вывод")
+    pmap.set_defaults(func=cmd_map, needs_config=False)
+
+    # Маршрут без конфига: вопрос «какой индекс использовать» задаётся до
+    # выбора корпуса. С конфигом доступен и `query route`.
+    proute = sub.add_parser("route", help="куда идти за ответом: карта и локальные индексы")
+    proute.add_argument("text", nargs="?", default="", help="что ищем")
+    proute.add_argument("--limit", type=int, default=10)
+    proute.add_argument("--no-verify", dest="verify", action="store_false", default=True,
+                        help="не сверять отпечаток рекомендованного корпуса")
+    proute.add_argument("--json", action="store_true", help="машиночитаемый вывод")
+    proute.set_defaults(func=cmd_route, needs_config=False)
+
+    # --- хранилище секретов (решение владельца 2026-10-24) ---
+    psec = sub.add_parser(
+        "secrets",
+        help="хранилище секретов: значения, права агентов, аудит",
+    )
+    psec.add_argument("action", nargs="?", default="list",
+                      choices=["init", "set", "list", "show", "reveal", "rm",
+                               "grant", "revoke", "check", "rotate", "export",
+                               "import", "policy", "audit"])
+    psec.add_argument("name", nargs="?", default="", help="имя секрета")
+    psec.add_argument("--kind", default=None,
+                      help="тип: password, token, api_key, private_key, "
+                           "certificate, connection_string, ssh_key, webhook, "
+                           "note, other")
+    psec.add_argument("--service", default="", help="к какому сервису относится")
+    psec.add_argument("--label", default="", help="человеческое название")
+    psec.add_argument("--owner", default="", help="кто отвечает за значение")
+    psec.add_argument("--note", default="", help="заметка без значения")
+    psec.add_argument("--tags", default="", help="метки через запятую")
+    psec.add_argument("--project", default="", help="корпус или проект")
+    psec.add_argument("--visibility", default=None,
+                      choices=["all", "listed", "owner_only"],
+                      help="кому доступна запись")
+    psec.add_argument("--agents", default="",
+                      help="имена агентов через запятую (для listed)")
+    psec.add_argument("--expires", default="", help="срок: 2027-01-31T00:00:00Z")
+    psec.add_argument("--reason", default="", help="причина выдачи (аудит)")
+    psec.add_argument("--captured", action="store_true",
+                      help="сохранено как встреченное (нужно включённое сохранение)")
+    psec.add_argument("--from-env", default=None,
+                      help="взять значение из переменной окружения")
+    psec.add_argument("--from-file", default=None,
+                      help="взять значение из файла")
+    psec.add_argument("--passphrase-env", default=None,
+                      help="переменная с парольной фразой для export/import")
+    psec.add_argument("--out", default=None, help="файл снимка для export/import")
+    psec.add_argument("--query", default="", help="поиск по имени и метаданным")
+    psec.add_argument("--tag", default="", help="фильтр по метке")
+    psec.add_argument("--limit", type=int, default=50)
+    psec.add_argument("--force", action="store_true", help="перезаписать ключ")
+    psec.add_argument("--json", action="store_true", help="машиночитаемый вывод")
+    psec.set_defaults(func=cmd_secrets, needs_config=False)
 
     return p
 

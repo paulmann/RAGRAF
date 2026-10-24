@@ -85,6 +85,18 @@ DEFAULTS: dict[str, Any] = {
     # пробой: панель сообщает расхождение с фактом, а не делает вид, что
     # режим всё включает сам. Значения: cli | mcp-stdio | mcp-http | both.
     "ragraf_mode": "cli",
+    # --- какие форматы данных индексировать ---
+    #
+    # `*` означает «включены все», а не «ничего не выбрано»: сохранённый
+    # полный список молча пропускал бы форматы, добавленные позже, и новый
+    # язык появлялся бы в реестре, но не в индексе. Значение разворачивается
+    # в полный набор в `formats.normalize`.
+    #
+    # Настройка ГЛОБАЛЬНАЯ: вопрос «индексировать ли PDF» не зависит от
+    # проекта. Корпус, которому нужно иначе, задаёт `formats:` (или
+    # `index_formats:` в секции index) у себя — тогда исключение видно в
+    # его конфиге, а не спрятано в общем файле настроек.
+    "index_formats": ["*"],
 }
 
 # Допустимые границы: защита от опечатки вида «2000 правок» или «0 минут»,
@@ -138,6 +150,18 @@ EDITABLE: tuple[str, ...] = (
     # Канал работы: выбор режима в панели.
     "ragraf_mode",
 )
+
+#: Настройки, которые живут ТОЛЬКО в глобальном файле.
+#
+# Зачем отдельный список. `index_formats` — не число и не перечисление одного
+# значения: это список идентификаторов. В таблице «по разработкам» он
+# рисовался бы полем числа со значением вроде `[object Object]`. Поэтому он
+# не входит в EDITABLE (список для интерфейса разработки), но обязан читаться
+# и проверяться хранилищем — иначе сохранение отвечало бы «не поддерживается».
+GLOBAL_ONLY: tuple[str, ...] = ("index_formats",)
+
+#: Полный набор ключей, которые хранятся в файле настроек.
+STORE_KEYS: tuple[str, ...] = EDITABLE + GLOBAL_ONLY
 
 # Настройки-перечисления: значение проверяется по списку, а не по границам.
 # Нужно потому, что опечатка вида `dedupe_scope: doc` привела бы к ошибке
@@ -255,6 +279,13 @@ DESCRIPTIONS: dict[str, str] = {
         "Записывать в ответ операции разбор групп: какие копии отброшены "
         "и почему. Нужно для проверяемости — без этого схлопывание "
         "невидимо и его нельзя подтвердить.",
+    "index_formats":
+        "Какие форматы данных индексировать: языки программирования, "
+        "документы (Word, Excel, PowerPoint, PDF, OpenDocument, EPUB, почта) "
+        "и текстовые данные. Значение «*» — включены все, в том числе "
+        "добавленные позже. Выключенный формат не удаляет уже собранный "
+        "индекс, но при следующей проверке свежести состав корпуса изменится "
+        "и потребуется переиндексация.",
 }
 
 
@@ -276,6 +307,12 @@ class SettingsState:
     enums: dict[str, list[str]] = field(
         default_factory=lambda: {k: list(v) for k, v in ENUM_KEYS.items()}
     )
+    # Перечень форматов данных: панель рисует по нему вкладку «Форматы»,
+    # в том числе окно фильтра. Список приходит с сервера, а не хранится в
+    # JavaScript: иначе реестр пришлось бы дублировать, и они разошлись бы.
+    formats: list[dict[str, Any]] = field(default_factory=list)
+    #: Сводка: сколько форматов и групп включено.
+    formats_summary: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -315,7 +352,7 @@ class SettingsStore:
         out = dict(DEFAULTS)
         # Читаются только известные ключи: посторонние значения из файла
         # не попадают в настройки, иначе опечатка в ключе стала бы настройкой.
-        for key in EDITABLE:
+        for key in STORE_KEYS:
             if key in source:
                 out[key] = source[key]
             elif key in raw:
@@ -333,14 +370,39 @@ class SettingsStore:
         if problems:
             raise ValueError("; ".join(problems))
         for key, value in values.items():
-            if key in EDITABLE:
+            if key in STORE_KEYS:
                 clean[key] = value
         util.write_json(
             self.path,
-            {"version": 1, "settings": {k: clean[k] for k in EDITABLE}, "updated_at": util.now_iso()},
+            {"version": 1, "settings": {k: clean[k] for k in STORE_KEYS},
+             "updated_at": util.now_iso()},
             indent=2,
         )
         return clean
+
+
+def _check_formats(value: Any) -> list[str]:
+    """Проверить значение `index_formats`. Возвращает причины отказа."""
+    from . import formats as formats_mod
+
+    if isinstance(value, str):
+        if value.strip() == formats_mod.ALL:
+            return []
+        parts = [p.strip() for p in value.split(",") if p.strip()]
+    elif isinstance(value, (list, tuple)):
+        parts = [str(p).strip() for p in value]
+    else:
+        return ["«index_formats» принимает список идентификаторов форматов или «*»"]
+    if not parts:
+        # Пустой список — это «выключить всё». Такого состояния не бывает:
+        # normalize превращает его в «все», и молча продолжать с пустым
+        # значением значило бы обещать одно, а делать другое.
+        return ["«index_formats»: пустой список недопустим — для всех форматов "
+                "укажите «*»"]
+    unknown = [p for p in parts if p != formats_mod.ALL and p not in formats_mod.BY_ID]
+    if unknown:
+        return [f"«index_formats»: неизвестные форматы {', '.join(sorted(unknown))}"]
+    return []
 
 
 def validate(values: dict[str, Any], current: dict[str, Any] | None = None) -> list[str]:
@@ -358,8 +420,14 @@ def validate(values: dict[str, Any], current: dict[str, Any] | None = None) -> l
     """
     problems: list[str] = []
     for key, value in (values or {}).items():
-        if key not in EDITABLE:
+        if key not in STORE_KEYS:
             problems.append(f"настройка «{key}» не поддерживается")
+            continue
+        # Список форматов проверяется по реестру, а не по типу значения:
+        # опечатка `wind` вместо `word` иначе прошла бы молча и выключила
+        # бы Word, ничего не сообщив.
+        if key == "index_formats":
+            problems.extend(_check_formats(value))
             continue
         if key in BOOLEAN_KEYS:
             if not isinstance(value, bool):
@@ -565,4 +633,108 @@ def state(catalog_entries: dict[str, dict[str, Any]], repo_root: Path | None = N
         merged["config_exists"] = config_path.exists()
         per_project[name] = merged
 
-    return SettingsState(global_settings=glob, per_project=per_project)
+    from . import formats as formats_mod
+
+    return SettingsState(
+        global_settings=glob,
+        per_project=per_project,
+        formats=formats_mod.catalog(glob.get("index_formats")),
+        formats_summary=formats_mod.summary(glob.get("index_formats")),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Секреты: правила хранилища (решение владельца 2026-10-24)
+#
+# Зачем отдельный блок, а не строки в общих словарях выше. Это целый раздел
+# настроек со своей семантикой: он отвечает не «как индексировать», а «что
+# делать с секретом, который агент встретил». Держать его рядом с порогами
+# реиндексации значило бы спрятать правила доступа среди настроек скорости.
+#
+# Каждый ключ ниже ЧТО-ТО МЕНЯЕТ. Переключатель, который ничего не меняет, —
+# дефект, а не запас на будущее: владелец включает его и ждёт эффекта.
+# ---------------------------------------------------------------------------
+_VAULT_DEFAULTS = {
+    # Хранилище включено. Выключение запрещает ВСЕ операции сразу: и запись,
+    # и выдачу. Так «выключить секреты» не оставляет щели через старую запись.
+    "secrets_enabled": True,
+    # Сохранять ли секрет, ВСТРЕЧЕННЫЙ агентом в запросе или файле. По
+    # умолчанию нет: сохранение чужого пароля без спроса — действие, а не
+    # наблюдение. Владелец включает, когда хочет накопление.
+    "secrets_capture_enabled": False,
+    # Кому доступна новая запись, если права не заданы явно: всем агентам
+    # (решение владельца) или только сохранившему.
+    "secrets_default_visibility": "all",
+    # Требовать причину выдачи значения. Причина попадает в аудит: без неё
+    # журнал отвечает «кто взял», но не «зачем».
+    "secrets_reveal_requires_reason": True,
+    # Предел длины значения: защита от попытки положить в хранилище файл
+    # целиком (сертификат с цепочкой — это килобайты, а не мегабайты).
+    "secrets_max_value_bytes": 8192,
+    # Общий список разрешённых агентов. Пусто — разрешены все (так и просил
+    # владелец). Непустой список сильнее режима самой записи: он отсекает
+    # агента целиком, а не одну запись.
+    "secrets_allowed_agents": [],
+    # За сколько суток до истечения срока предупреждать (сертификаты, токены).
+    "secrets_expiry_warn_days": 30,
+}
+
+DEFAULTS.update(_VAULT_DEFAULTS)
+
+BOUNDS.update({
+    "secrets_max_value_bytes": (16, 1048576),
+    "secrets_expiry_warn_days": (0, 3650),
+})
+
+EDITABLE = EDITABLE + (
+    "secrets_enabled",
+    "secrets_capture_enabled",
+    "secrets_default_visibility",
+    "secrets_reveal_requires_reason",
+    "secrets_max_value_bytes",
+    "secrets_allowed_agents",
+    "secrets_expiry_warn_days",
+)
+
+BOOLEAN_KEYS = BOOLEAN_KEYS + (
+    "secrets_enabled",
+    "secrets_capture_enabled",
+    "secrets_reveal_requires_reason",
+)
+
+ENUM_KEYS.update({
+    "secrets_default_visibility": ("all", "owner_only"),
+})
+
+DESCRIPTIONS.update({
+    "secrets_enabled":
+        "Хранилище секретов включено. Выключение запрещает и запись, и выдачу "
+        "значений: «выключить секреты» не оставляет щели через старые записи.",
+    "secrets_capture_enabled":
+        "Сохранять ли секрет, встреченный агентом в запросе или файле. По "
+        "умолчанию нет: сохранение чужого пароля без спроса — действие, а не "
+        "наблюдение. При включении агент сохраняет встреченное сам, если "
+        "владелец не сказал обратного.",
+    "secrets_default_visibility":
+        "Кому доступна новая запись, если права не заданы явно: «all» — всем "
+        "агентам (по умолчанию), «owner_only» — только сохранившему. Права "
+        "меняются у каждой записи отдельно и здесь не перебиваются.",
+    "secrets_reveal_requires_reason":
+        "Требовать причину выдачи значения. Причина пишется в аудит: без неё "
+        "журнал отвечает «кто взял», но не «зачем».",
+    "secrets_max_value_bytes":
+        "Предел длины значения в байтах. Защита от попытки положить в "
+        "хранилище файл целиком: сертификат с цепочкой — это килобайты.",
+    "secrets_allowed_agents":
+        "Общий список разрешённых агентов (имена). Пусто — разрешены все. "
+        "Непустой список сильнее режима отдельной записи: он отсекает агента "
+        "целиком.",
+    "secrets_expiry_warn_days":
+        "За сколько суток до истечения срока предупреждать. Касается записей "
+        "со сроком: сертификаты, временные токены.",
+})
+
+# `STORE_KEYS` вычислен выше по прежнему составу `EDITABLE`, поэтому его нужно
+# пересчитать: иначе новые ключи не читались бы из файла настроек и всегда
+# отдавали значение по умолчанию (так уже было с вложенным форматом файла).
+STORE_KEYS = EDITABLE + GLOBAL_ONLY

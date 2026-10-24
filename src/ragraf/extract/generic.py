@@ -119,6 +119,20 @@ class LangProfile:
     # а не по тексту целиком: текст включал бы ключевые слова (`public`, `extends`)
     # и давал бы несуществующие "классы".
     inherit_nodes: tuple[str, ...] = ()
+    # Разбирать по tags-запросу грамматики вместо списков имён узлов.
+    #
+    # Зачем. У части языков имена узлов не совпадают с привычными до
+    # неузнаваемости: в R объявление функции — это `binary_operator`
+    # (`f <- function(x) ...`), в F# всё содержимое лежит внутри
+    # `named_module`. Писать профиль на каждый такой язык — значит выдумывать
+    # имена узлов и потом проверять догадку догадкой. tags-запрос — часть
+    # самой грамматики: он уже описывает, какой узел является объявлением,
+    # какой — именем, какой — ссылкой на вызов.
+    #
+    # Проверено вызовом на пробных файлах (tests/test_new_languages.py):
+    # kotlin, swift, scala, dart, r, fsharp, ocaml, solidity, fortran, matlab,
+    # elm, lisp (commonlisp), rust — по одному символу минимум на язык.
+    tags: bool = False
 
 
 # Профили языков. Наборы составлены по фактическому разбору файлов из каталогов
@@ -252,6 +266,27 @@ PROFILES: dict[str, LangProfile] = {
         calls=("call_expression",),
         imports=("preproc_include",),
     ),
+    # --- Языки, разбираемые по tags-запросу ---
+    #
+    # В этих профилях намеренно НЕТ списков имён узлов: карта берётся из
+    # tags-запроса грамматики. Пустые наборы здесь означают не «ничего не
+    # нашли», а «искать надо не по имени узла».
+    "rust": LangProfile(name="rust", title="Rust", tags=True),
+    "kotlin": LangProfile(name="kotlin", title="Kotlin", tags=True),
+    "swift": LangProfile(name="swift", title="Swift", tags=True),
+    "scala": LangProfile(name="scala", title="Scala", tags=True),
+    "dart": LangProfile(name="dart", title="Dart", tags=True),
+    "r": LangProfile(name="r", title="R", tags=True),
+    "fsharp": LangProfile(name="fsharp", title="F#", tags=True),
+    "ocaml": LangProfile(name="ocaml", title="OCaml", tags=True),
+    "solidity": LangProfile(name="solidity", title="Solidity", tags=True),
+    "fortran": LangProfile(name="fortran", title="Fortran", tags=True),
+    "matlab": LangProfile(name="matlab", title="MATLAB", tags=True),
+    "elm": LangProfile(name="elm", title="Elm", tags=True),
+    # Язык в карте расширений называется `lisp`, а грамматика — `commonlisp`:
+    # именно она обслуживает .lisp/.lsp/.cl. Scheme и Racket идут текстом —
+    # у них свои грамматики, и подмешивать их сюда значило бы врать о языке.
+    "lisp": LangProfile(name="commonlisp", title="Lisp", tags=True),
 }
 
 
@@ -265,6 +300,9 @@ class GenericExtractor:
     def __init__(self, profile: LangProfile) -> None:
         self.profile = profile
         self._parser = None
+        # Скомпилированный tags-запрос: компиляция стоит дороже разбора,
+        # а экземпляр живёт на весь прогон.
+        self._tags_query = None
         self._data: bytes = b""
         self._res: FileExtraction | None = None
         self._declared: dict[str, str] = {}   # имя → node_id объявленного символа
@@ -327,7 +365,12 @@ class GenericExtractor:
             self._collect_perl_declarations(tree.root_node)
             if self.profile.name == "perl" else {}
         )
-        self._visit(tree.root_node, parent=None, container=file_id)
+        if self.profile.tags:
+            # Карта узлов берётся из tags-запроса грамматики, обход по именам
+            # узлов для такого языка не дал бы ничего.
+            self._visit_tags(tree.root_node, file_id)
+        else:
+            self._visit(tree.root_node, parent=None, container=file_id)
 
         # Отложенные вызовы привязываются после обхода: цель может быть
         # объявлена позже места вызова.
@@ -354,7 +397,156 @@ class GenericExtractor:
                 )
         return res
 
-    # ---- обход дерева ----
+    # ---- разбор по tags-запросу ----
+    #
+    # Что даёт этот путь. Ровно то же, что обход по именам узлов: символы с
+    # видом, именем, диапазоном строк и ребро `contains` от контейнера. Плюс
+    # отложенные вызовы, которые привязываются общим `_resolve_pending`.
+    #
+    # Чего он НЕ делает: не выдумывает вид символа, если грамматика его не
+    # назвала. Незнакомое имя захвата пропускается молча — и это видно по
+    # числу символов в отчёте операции, а не скрыто за «примерно сработало».
+
+    #: Имя захвата tags-запроса → вид символа в графе.
+    _TAG_KINDS: dict[str, str] = {
+        "function": "function",
+        "method": "method",
+        "class": "class",
+        "interface": "interface",
+        "trait": "interface",
+        "struct": "struct",
+        "enum": "enum",
+        "enum_variant": "enum",
+        "module": "module",
+        "namespace": "module",
+        "property": "property",
+        "field": "property",
+        "constant": "constant",
+        "type": "type",
+    }
+
+    @classmethod
+    def _tag_kind(cls, capture: str) -> str | None:
+        if not capture.startswith("definition."):
+            return None
+        return cls._TAG_KINDS.get(capture.split(".", 1)[1])
+
+    def _matches(self, root):
+        """Совпадения tags-запроса: список (шаблон, {захват: [узлы]})."""
+        from tree_sitter import Query, QueryCursor
+        from tree_sitter_language_pack import get_language, get_tags_query
+
+        if self._tags_query is None:
+            source = get_tags_query(self.profile.name)
+            if not source:
+                raise LookupError("у грамматики нет tags-запроса")
+            self._tags_query = Query(get_language(self.profile.name), source)
+        return QueryCursor(self._tags_query).matches(root)
+
+    def _visit_tags(self, root, file_id: str) -> None:
+        try:
+            matches = list(self._matches(root))
+        except Exception as exc:  # noqa: BLE001 — отсутствие запроса штатно
+            # Файл не теряется: текстовые чанки всё равно будут, а причина
+            # видна в примечании разбора.
+            self._res.parse_status = "failed"
+            self._res.parse_note = (
+                f"tags-запрос недоступен: {type(exc).__name__}: {exc}"
+            )
+            return
+
+        # Проход 1: объявления. Сортируются по началу — так внешнее объявление
+        # всегда оказывается раньше вложенного, и вложенность считается по
+        # уже известным диапазонам.
+        found: list[tuple[int, int, str, str, int]] = []
+        call_nodes: list[tuple[int, int, str, int]] = []
+        for _pattern, caps in matches:
+            name_nodes = caps.get("name") or []
+            name = self._text(name_nodes[0]).strip() if name_nodes else ""
+            defined = False
+            for capture, nodes in caps.items():
+                kind = self._tag_kind(capture)
+                if kind is None or not nodes:
+                    continue
+                node = nodes[0]
+                if name:
+                    found.append((node.start_byte, node.end_byte, kind, name,
+                                  node.start_point[0] + 1))
+                defined = True
+                break
+            if defined:
+                continue
+            for capture, nodes in caps.items():
+                if capture in ("reference.call", "reference.method") and nodes:
+                    node = nodes[0]
+                    text = self._text(node).strip()
+                    if text and len(text) < 200:
+                        call_nodes.append((node.start_byte, node.end_byte, text,
+                                           node.start_point[0] + 1))
+                    break
+
+        by_span: list[tuple[int, int, str, str]] = []   # start, end, fqn, node_id
+        for start, end, kind, name, line in sorted(found):
+            parent_fqn: str | None = None
+            container = file_id
+            best = None
+            for p_start, p_end, p_fqn, p_id in by_span:
+                if p_start <= start and end <= p_end:
+                    span = p_end - p_start
+                    if best is None or span < best:
+                        best = span
+                        parent_fqn = p_fqn
+                        container = p_id
+            node_id = util.stable_id(kind, name, self._res.path, line)
+            fqn = f"{self._res.path}:{name}"
+            head = self._data[start : min(end, start + 400)].decode(
+                "utf-8", errors="replace"
+            )
+            self._res.symbols.append(
+                SymbolRec(
+                    node_id=node_id,
+                    kind=kind,
+                    name=name,
+                    fqn=fqn,
+                    start_line=line,
+                    end_line=self._line_of(end),
+                    start_byte=start,
+                    end_byte=end,
+                    signature=_collapse(head.split("\n", 1)[0].strip(), 300),
+                    parent_fqn=parent_fqn,
+                    props={
+                        "lang": self.profile.name,
+                        "tags": True,
+                        "body_sha": util.sha256_bytes(
+                            self._data[start:end]
+                        )[:16],
+                    },
+                )
+            )
+            self._res.edges.append(
+                EdgeRec(container, node_id, "contains", "stated", line, 1.0)
+            )
+            self._declared.setdefault(name, node_id)
+            by_span.append((start, end, fqn, node_id))
+
+        # Проход 2: вызовы. Контейнер — ближайшее объявление, внутри которого
+        # стоит вызов: без этого ребро уходило бы в файл, и `callers` не знал
+        # бы, из какой функции зовут.
+        for start, end, text, line in call_nodes:
+            container = file_id
+            best = None
+            for p_start, p_end, _fqn, p_id in by_span:
+                if p_start <= start and end <= p_end:
+                    span = p_end - p_start
+                    if best is None or span < best:
+                        best = span
+                        container = p_id
+            self._pending.append((container, text, line, "calls", "stated"))
+
+    def _line_of(self, byte_end: int) -> int:
+        """Номер строки по байтовому смещению конца узла."""
+        chunk = self._data[:byte_end]
+        return chunk.count(b"\n") + 1
 
     def _text(self, node) -> str:
         return self._data[node.start_byte : node.end_byte].decode(

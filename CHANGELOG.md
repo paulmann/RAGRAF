@@ -5,6 +5,41 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: [S
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-10-24
+
+### Changed (version and delivery, 2026-10-24)
+- The version is declared **once**, in `src/ragraf/__init__.py` (`__version__`):
+  `pyproject.toml` reads it through `dynamic = ["version"]` and
+  `[tool.setuptools.dynamic]`, so the package metadata can no longer drift from the
+  code. `CITATION.cff` restates it because CFF requires the field, and the 25th
+  doctrine check now asserts the two agree instead of trusting them.
+- The shipped tree is rebuilt from the working tree by the pipeline and carries no
+  machine-local configuration: the live corpus config was in the build and is out,
+  `examples/ragraf.example.yaml` — the documented example — is in.
+- `tests/test_db_index.py` no longer carries a live database password. The value comes
+  from `RAGRAF_DB_PASSWORD` or from the machine's own access store, which is never
+  shipped. Two negative-test placeholder values are declared as placeholders in the
+  release checker rather than those files being dropped from the shipment.
+- The docs site navigation still names the pre-0.2.0 page paths. The shipped tree uses
+  the numbered chapters (`docs/02_architecture/…`), so `mkdocs build --strict` fails
+  until the navigation is rewritten; this is stated here rather than fixed silently.
+
+### Changed (licence metadata, 2026-10-24)
+- Licence moved from PolyForm Noncommercial 1.0.0 to **Business Source License 1.1**
+  (Community). `pyproject.toml` carries the SPDX expression `BUSL-1.1`, and the tree
+  ships `LICENSE` (official SPDX text plus the BSL parameters), `NOTICE` (third-party
+  components), `CLA.md` (relicensing rights) and `SUPPORT.md`.
+- `CITATION.cff`, `mkdocs.yml`, `README.ru.md`, `CONTRIBUTING.md` now point at the
+  licence file instead of restating its terms. Restating them is exactly how this tree
+  ended up publishing PolyForm terms while `pyproject.toml` said MIT.
+- History is **not rewritten**: MIT (until 2026-10-15) → PolyForm Noncommercial 1.0.0
+  (2026-10-15) → BUSL-1.1 (2026-10-24). Rights granted under earlier licences are not
+  revoked.
+- The delivery tree is now built from the working tree by `tools/release/build_release.py`
+  against `tools/release/manifest.toml`, checked by `verify_release.py` and gated by
+  `gate_release.py`. The wrapper documents in this directory are inputs of that build,
+  not a hand-kept copy.
+
 ### Added (anonymised polygon measurement, 2026-10-16)
 - `README.md`, `README.ru.md` and the wiki's [Benchmarks and Limits](https://github.com/paulmann/RAGRAF/wiki/11-Benchmarks-and-Limits) now publish the **measured polygon**: **28 registered corpora, 25 indexed** (10 with the Joern CPG layer, 15 degraded) and an anonymised table of the 16 whose revision record was read — **7 527 files, 94 528 symbols, 791 871 edges, 86 790 chunks**. Project names, paths, domains and hashes are withheld: the rows are labelled `C-01`…`C-28` by size, `Kind` is derived from each corpus's file-extension profile, and the private label map is kept outside the repository (in the working tree's git-ignored `.staging/`).
 - A **counting discrepancy** was recorded rather than smoothed over: for the *same* revision the corpus registry and the revision record disagree — one corpus reports 8 721 symbols / 41 201 edges against the revision's 4 498 / 56 106, another 13 800 / 45 361 against 3 620 / 46 296. Registered as **E-10** in [`docs/DEFECTS.md`](docs/DEFECTS.md); the published tables quote the **revision record**, because that is what the answer envelope reports, and corpus-level counts taken from the registry are provisional until the two aggregation paths are reconciled.
@@ -84,5 +119,6 @@ First public release («Публикация RAGRAF: установщик, READM
 ### Found by
 - Installation-verification runs of the maintainer environment (see the release commit message for the full protocol: clean-environment install, synthetic-project init→index→search→symbol→code, 6 portable suites, syntax of 49 files, BOM/CRLF clean).
 
-[Unreleased]: https://github.com/paulmann/RAGRAF/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/paulmann/RAGRAF/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/paulmann/RAGRAF/releases/tag/v0.2.0
 [0.1.0]: https://github.com/paulmann/RAGRAF/releases/tag/v0.1.0

@@ -31,9 +31,9 @@ authors:
 
 repository-code: "https://github.com/paulmann/RAGRAF"
 url: "https://ragraf.ru"
-license: PolyForm-Noncommercial-1.0.0
-version: "0.1.0"
-date-released: "2026-10-12"
+license: BUSL-1.1
+version: "0.2.0"
+date-released: "2026-10-24"
 
 keywords:
   - code knowledge base

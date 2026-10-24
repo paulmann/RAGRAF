@@ -53,16 +53,8 @@ USER_HOME = Path(os.path.expanduser("~"))
 DSH_HOME = Path(os.environ.get("DSH_HOME") or (USER_HOME / ".dsh"))
 DSH_PATCH = DSH_HOME / "profiles" / "desktop" / "cordis.patch.yml"
 
-# Расположение инструмента SagaAI задаётся настройкой окружения: инструмент
-# живёт в ЧУЖОМ проекте, и угадывать локальный путь нельзя — на другой машине он
-# другой. Пустое значение означает «не заявлен», и состояние сообщается как
-# «не найден», а не выдумывается.
-_saga_env = os.environ.get("RAGRAF_SAGA_ROOT") or ""
-SAGA_ROOT: Path | None = Path(_saga_env) if _saga_env else None
-SAGA_TOOL: Path | None = (
-    SAGA_ROOT / "orchestrators" / "dev_agent" / "functions" / "ragraf.py"
-    if SAGA_ROOT else None
-)
+SAGA_ROOT = Path(r"C:\!.Tihon\sagaai_edit_github")
+SAGA_TOOL = SAGA_ROOT / "orchestrators" / "dev_agent" / "functions" / "ragraf.py"
 
 HTTP_PORT = 8765
 MARK_BEGIN = "# == RAGRAF: подключение MCP (добавлено панелью RAGRAF)"
@@ -225,7 +217,7 @@ def harness_block(transport: str = "stdio", access_hint: str = "") -> dict[str, 
 
 def sagaai_state() -> dict[str, Any]:
     """Состояние инструмента SagaAI: только чтение, без правок."""
-    exists = bool(SAGA_TOOL) and SAGA_TOOL.is_file()
+    exists = SAGA_TOOL.is_file()
     config = ""
     if exists:
         text = SAGA_TOOL.read_text(encoding="utf-8", errors="replace")
@@ -234,7 +226,7 @@ def sagaai_state() -> dict[str, Any]:
     return {
         "client": "sagaai",
         "title": "SagaAI",
-        "tool_path": str(SAGA_TOOL or ""),
+        "tool_path": str(SAGA_TOOL),
         "tool_exists": exists,
         "config": config,
         "config_exists": bool(config) and Path(config).is_file(),

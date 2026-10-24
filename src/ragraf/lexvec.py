@@ -111,14 +111,22 @@ class LexVecStore:
     работает, запись — нет.
     """
 
-    def __init__(self, cfg: ProjectConfig) -> None:
+    def __init__(self, cfg: ProjectConfig, *, readonly: bool = False) -> None:
         self.cfg = cfg
-        self.writable = True
-        try:
-            self.conn = store.connect(cfg.lexvec_db)
-        except (OSError, sqlite3.OperationalError):
+        self.writable = not readonly
+        if readonly:
+            # Чужой корпус: соединение открывается чтением СРАЗУ, без попытки
+            # получить право записи. Нужно операции `neighbors`, которая обязана
+            # быть читающей по отношению к соседям: попытка открыть чужой индекс
+            # на запись создавала бы в нём `-wal`/`-shm` и меняла файлы, которых
+            # правка не касается.
             self.conn = store.connect(cfg.lexvec_db, readonly=True)
-            self.writable = False
+        else:
+            try:
+                self.conn = store.connect(cfg.lexvec_db)
+            except (OSError, sqlite3.OperationalError):
+                self.conn = store.connect(cfg.lexvec_db, readonly=True)
+                self.writable = False
         # Загрузка расширения ОБЯЗАТЕЛЬНА ДО проверки vec0: без неё pragma_module_list
         # не содержит vec0 и векторный слой молча отключался (выявлено сверкой с
         # selftest, где расширение грузилось явно).

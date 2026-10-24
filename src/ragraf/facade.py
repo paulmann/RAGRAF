@@ -1,9 +1,4 @@
-"""Фасад: 38 операций и единый конверт ответа (ФТ-16).
-
-Число пересчитано 16.10.2026 подсчётом `def op_*` в этом файле; спецификация
-релиза 1 перечисляла 17 операций (ФТ-14..ФТ-23) — здесь их больше, и
-`tools/Invoke-ProjectDoctrine.ps1` (`Test-DocumentedNumbers`) сверяет это число
-с документами текущего состояния.
+"""Фасад: 17 операций (ФТ-14..ФТ-23) и единый конверт ответа (ФТ-16).
 
 Конверт обязателен для каждого ответа:
     op, index_rev, capability, drift, provenance, limits, result, stale_warnings
@@ -81,6 +76,13 @@ DEFINED_LIMITS = ["статический анализ; динамика (зна
 # этот порог пока НЕ применяет — совпадение двух исполнителей обхода проверено
 # по направлению и списку видов рёбер, а не по достоверности.
 MIN_EDGE_CONFIDENCE = 0.5
+
+# Срок жизни кэша ответа `catalog` (шаг 0.4 плана). Измерено 23.10.2026:
+# полный ответ стоил 242 255 мс, потому что пересчитывал контрольные суммы
+# 36 корпусов. За 60 с состав реестра практически не меняется, а любая
+# правка файла реестра кэш обесценивает немедленно (сверка mtime).
+CATALOG_CACHE_TTL_SEC = 60.0
+
 
 
 def _edge_passes_floor(provenance: Any, confidence: Any) -> bool:
@@ -809,6 +811,7 @@ class Facade:
             return
         try:
             facts, spans, chars = summarize_result(data)
+            saved_chars = self._saved_chars(data)
             # Первичный аргумент — самая содержательная часть вызова: имя
             # символа, таблицы, поисковый запрос. Для операций без аргумента
             # (index_status, repo_map) он пуст — это норма.
@@ -854,10 +857,64 @@ class Facade:
                     stale=stale,
                     missed=missed,
                     arg_digest=arg_digest,
+                    replaces_chars=saved_chars,
                 )
             )
         except Exception:
             pass
+
+    def _saved_chars(self, data: dict, limit: int = 200) -> int:
+        """Сколько символов агент не прочитал благодаря этому ответу (шаг 0.6).
+
+        Считается по ФАКТИЧЕСКИ выданным путям: уникальные `path`/`file` из
+        ответа, размер каждого файла. Это нижняя оценка экономии — файл целиком
+        обычно больше процитированного фрагмента, поэтому завышения здесь быть
+        не может, только занижение.
+
+        Оценка намеренно грубая и помечена как оценка: размер берётся в байтах
+        (для UTF-8 кириллица даёт больше байт, чем символов). Выдавать её за
+        точное число символов нельзя, и в отчёте она названа «символы (по
+        размеру файла)».
+        """
+        if not data:
+            return 0
+        paths: list[str] = []
+        seen: set[str] = set()
+
+        def walk(node, depth: int = 0) -> None:
+            if depth > 6 or len(seen) >= limit:
+                return
+            if isinstance(node, dict):
+                for key in ("path", "file", "source_path", "doc_path"):
+                    value = node.get(key)
+                    if isinstance(value, str) and value and value not in seen:
+                        seen.add(value)
+                        paths.append(value)
+                for value in node.values():
+                    walk(value, depth + 1)
+            elif isinstance(node, list):
+                for value in node[:limit]:
+                    walk(value, depth + 1)
+
+        try:
+            walk(data)
+        except Exception:  # noqa: BLE001 — оценка не имеет права ломать ответ
+            return 0
+        if not paths:
+            return 0
+        from pathlib import Path as _Path
+
+        root = _Path(self.cfg.root)
+        total = 0
+        for raw in paths:
+            candidate = _Path(raw)
+            if not candidate.is_absolute():
+                candidate = root / raw
+            try:
+                total += candidate.stat().st_size
+            except OSError:
+                continue
+        return int(total)
 
     def record_external_call(self, op: str, data: dict, duration_ms: float) -> None:
         """Записать в журнал операцию, выполненную ВНЕ фасада (никогда не ломает ответ).
@@ -1341,6 +1398,92 @@ class Facade:
             env.error = f"{type(exc).__name__}: {exc}"
         return env.to_dict()
 
+    def op_route(self, query: str, limit: int = 10, verify: bool = True) -> dict:
+        """39. Маршрут: где лежат материалы и какой локальный индекс отвечает.
+
+        Операция намеренно не читает содержимое файлов и не цитирует документы.
+        Её ответ — кандидаты с причиной выбора и сведениями о локальном индексе.
+        Провенанс `registry`, а не `index`: факты приходят из реестра разработок
+        и карты метаданных, и выдавать их за факты индекса нельзя.
+        """
+        env = self.make_env("route", provenance="registry")
+        from .route import route as build_route
+
+        data = build_route(query, limit=limit, verify=verify)
+        env.result = data
+        env.found = bool(data.get("candidates"))
+        env.freshness = self._freshness
+        if not env.found:
+            env.extra["suggest"] = ["sources", "map", "ensure"]
+            env.extra["note"] = (
+                "ни одного совпадения по имени/пути: карта может быть не построена, "
+                "а вопрос — требовать поиска по содержимому (`search`)"
+            )
+        return env.to_dict()
+
+    def op_neighbors(self, query: str = "", name: str = "", limit: int = 20,
+                     per_corpus: int = 5, stack: str | list[str] | None = None,
+                     min_shared: int = 1, with_text: bool = True,
+                     verify: bool = True,
+                     kinds: list[str] | None = None,
+                     answer: bool = False) -> dict:
+        """40. Соседние контуры: готовая реализация того же стека.
+
+        Зачем операция. `search` отвечает только по текущему корпусу, `route`
+        говорит «где лежит», не читая содержимого. Поэтому функция, уже
+        работающая в соседнем проекте на том же стеке, писалась заново: агент
+        не мог узнать о её существовании. Здесь поиск идёт по индексам
+        СОСЕДНИХ корпусов, отобранных по ФАКТИЧЕСКОМУ стеку.
+
+        Границы, которые нельзя размывать:
+          * чужой корпус только читается (`readonly`), не переиндексируется и
+            не меняется; отставший индекс помечается `stale` с причиной,
+            восстановление — отдельное действие `ensure <корень>`;
+          * у каждого хита СВОЯ `index_rev` — ревизия корпуса-источника;
+            `index_rev` конверта относится только к текущему корпусу;
+          * вектор применяется лишь там, где модель соседа совпадает с текущей:
+            на чужой геометрии ранжирование было бы ложным, хотя выглядело бы
+            работающим.
+        """
+        env = self.make_env("neighbors")
+        rev = self.current_rev()
+        if not rev:
+            return self._no_index(env)
+        from . import neighbors as neighbors_mod
+
+        text = str(query or "").strip()
+        vector = None
+        if text and self.embedder.available():
+            try:
+                vector = self.embedder.embed_one(text)
+            except Exception:  # noqa: BLE001 — без вектора остаётся лексика
+                vector = None
+        data = neighbors_mod.find(
+            self.cfg, rev, query=text, name=str(name or ""), limit=limit,
+            per_corpus=per_corpus, stack=stack, min_shared=min_shared,
+            with_text=with_text, verify=verify, vector=vector,
+            mine=neighbors_mod.lang_profile(self.graph, rev),
+            kinds=kinds,
+        )
+        limits = data.pop("limits", [])
+        env.limits.extend(limits)
+        env.result = data
+        env.found = bool(data.get("hits"))
+        if not env.found:
+            env.extra["suggest"] = ["search", "symbol", "route"]
+            env.extra["note"] = (
+                "готовой реализации в соседях не найдено: в skipped названо, "
+                "кого не спросили и почему; стек можно задать явно (`stack`)"
+            )
+        if answer:
+            items = [
+                {"path": h.get("file") or h.get("path"), "line": h.get("start_line"),
+                 "name": f"{h.get('corpus')}: {((h.get('symbol') or {}).get('fqn')) or h.get('source_kind')}"}
+                for h in data.get("hits") or []
+            ]
+            self._answer_mode(env, "Готовые реализации в соседних корпусах того же стека", items)
+        return env.to_dict()
+
     def op_catalog(self) -> dict:
         """21. Реестр разработок: что индексировано, когда, с какими суммами.
 
@@ -1352,33 +1495,76 @@ class Facade:
 
         env = self.make_env("catalog")
         catalog = Catalog()
+        cached = self._catalog_cache_read(catalog.path)
+        if cached is not None:
+            env.result = cached
+            env.freshness = self._freshness
+            env.found = bool(cached.get("entries"))
+            return env.to_dict()
         summary = catalog.summary()
-        # По каждой разработке дополнительно сверяется сумма: это отвечает,
-        # актуален ли её индекс, без запуска индексации.
-        for row in summary["entries"]:
-            row["hash_matches"] = None
+        # По каждой разработке дополнительно сверяется состояние её корпуса.
+        #
+        # Замер 23.10.2026: прежняя редакция звала `watch_hashes` (полная сверка
+        # контрольной суммы) по КАЖДОЙ из 36 записей, включая корпус AutoClaw на
+        # 54 235 файлов, — ответ стоил 242 255 мс. Здесь та же мысль, но по
+        # порядку цены: сначала отпечаток входа (путь+размер+mtime), и только
+        # если он разошёлся — полная сверка. Совпал — состояние названо
+        # `hash_matches=True` с пометкой `verified_by="fingerprint"`, потому что
+        # содержимое доказано отпечатком, а не хешем.
+        def _verify(row: dict) -> dict:
+            """Состояние одного корпуса: отпечаток, при расхождении — хеш."""
+            out: dict = {"hash_matches": None}
             entry = Entry.from_dict(row)
             if not entry.root or not entry.config:
-                continue
+                return out
+            # Сверять нечего: ревизии нет, значит индекс не строился. Прежняя
+            # редакция в этом случае считала полную сумму корпуса — для записи
+            # AutoClaw (54 235 файлов) это стоило минуты на каждый вызов.
+            if not entry.rev_id:
+                out["verified_by"] = "not_indexed"
+                return out
             try:
                 from pathlib import Path as _Path
 
+                from . import corpus as _corpus
+                from . import watch as _watch
                 from .config import load as _load
 
                 cfg_path = _Path(entry.config)
                 if not cfg_path.exists():
-                    row["check_error"] = "конфиг не найден"
-                    continue
+                    return {"check_error": "конфиг не найден"}
                 peer = _load(cfg_path)
-                now_hash, now_config, files_now, _ = watch_hashes(peer)
-                row["hash_matches"] = bool(entry.corpus_hash and now_hash == entry.corpus_hash)
-                row["files_now"] = files_now
-                row["config_matches"] = bool(
-                    not entry.config_hash or now_config == entry.config_hash
-                )
-            except Exception as exc:
-                row["check_error"] = type(exc).__name__
+                saved = _watch.read_fingerprint(peer)
+                fingerprint_now, files_now, _bytes = _corpus.stat_fingerprint(peer)
+                out["files_now"] = files_now
+                if saved and saved.get("fingerprint") and \
+                        fingerprint_now == saved.get("fingerprint") and entry.corpus_hash:
+                    out["hash_matches"] = True
+                    out["verified_by"] = "fingerprint"
+                else:
+                    # Отпечаток разошёлся — содержимое уже не то, что
+                    # проиндексировано. Полная сверка хешей здесь отвечала бы на
+                    # тот же вопрос за чтение всех файлов корпуса; она остаётся
+                    # в `drift` и `check`, где нужен ещё и перечень изменённых
+                    # файлов. Здесь достаточно констатации.
+                    out["hash_matches"] = bool(entry.corpus_hash) and False
+                    out["verified_by"] = "fingerprint_changed" 
+                if entry.config_hash:
+                    out["config_matches"] = bool(peer.config_hash == entry.config_hash)
+            except Exception as exc:  # noqa: BLE001
+                out["check_error"] = type(exc).__name__
+            return out
+
+        # Обход корпусов независим, поэтому идёт параллельно: обход дерева —
+        # ввод-вывод, и 36 последовательных обходов складывались в минуты.
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            verdicts = list(pool.map(_verify, summary["entries"]))
+        for row, verdict in zip(summary["entries"], verdicts):
+            row.update(verdict)
         env.result = summary
+        self._catalog_cache_write(catalog.path, summary)
         # Реестр тоже сообщает состояние своего индекса в том же поле — контракт
         # ответа единый для всех операций.
         env.freshness = self._freshness
@@ -1387,6 +1573,63 @@ class Facade:
             env.extra["suggest"] = ["index"]
             env.extra["note"] = "реестр пуст: ни одна разработка не зарегистрирована"
         return env.to_dict()
+
+    # ---------------- кэш ответа catalog (шаг 0.4) ----------------
+
+    def _catalog_cache_path(self) -> "object":
+        from pathlib import Path as _Path
+
+        return _Path(self.cfg.index_dir) / "catalog_snapshot.json"
+
+    def _catalog_cache_read(self, catalog_path) -> dict | None:
+        """Кэш ответа `catalog`, годный только для того же файла реестра.
+
+        Реестр правится тремя путями (CLI, сторож, ensure) — все они идут через
+        `Catalog.record_run`/`save`, а `save` обновляет `updated_at` и время
+        правки файла. Поэтому признак годности здесь двойной: TTL и неизменность
+        файла реестра. Правка реестра любым путём кэш обесценивает.
+        """
+        try:
+            from pathlib import Path as _Path
+
+            from . import util as _util
+
+            data = _util.read_json(self._catalog_cache_path(), default=None)
+            if not isinstance(data, dict):
+                return None
+            if (time.time() - float(data.get("ts") or 0)) > CATALOG_CACHE_TTL_SEC:
+                return None
+            try:
+                mtime = int(_Path(catalog_path).stat().st_mtime_ns)
+            except OSError:
+                return None
+            if int(data.get("catalog_mtime_ns") or 0) != mtime:
+                return None
+            entries = data.get("entries")
+            if not isinstance(entries, dict) or not isinstance(entries.get("entries"), list):
+                return None
+            out = dict(entries)
+            for row in out["entries"]:
+                row["cache"] = "catalog"
+            return out
+        except Exception:  # noqa: BLE001 — кэш не имеет права ломать ответ
+            return None
+
+    def _catalog_cache_write(self, catalog_path, summary: dict) -> None:
+        """Сохранить ответ для повторных вызовов. Ошибка записи не критична."""
+        try:
+            from pathlib import Path as _Path
+
+            from . import util as _util
+
+            mtime = int(_Path(catalog_path).stat().st_mtime_ns)
+            _util.write_json(self._catalog_cache_path(), {
+                "ts": time.time(),
+                "catalog_mtime_ns": mtime,
+                "entries": summary,
+            })
+        except Exception:  # noqa: BLE001
+            pass
 
     def _run_guard(self) -> None:
         """Сверить контрольные суммы и при необходимости переиндексировать.
@@ -1557,13 +1800,26 @@ class Facade:
     # ---------------- операции ----------------
 
     def op_index_status(self) -> dict:
-        """13. Состояние ревизии, покрытие, деградация, размер журнала."""
+        """13. Состояние ревизии, покрытие, деградация, размер журнала.
+
+        Быстрый путь (шаг 0.3 плана). Полный расчёт стоит измеренные 4 630 мс:
+        `graph_compute_state` поднимает torch (2 401 мс на импорт) и считает
+        PageRank по графу, `_quality` читает сэмпл векторов. Между тем состав
+        ответа меняется ТОЛЬКО при индексации, поэтому он записывается снимком
+        рядом с ревизией, а снимок признаётся годным лишь при совпадении
+        ревизии и времени правки обоих хранилищ. Не совпало — считается заново,
+        и снимок перезаписывается: устаревший статус не отдаётся никогда.
+        """
         env = self.make_env("index_status")
         rev = self.current_rev()
         if not rev:
             env.found = False
             env.error = "индекс не создан: выполните ragraf index"
             return env.to_dict()
+        cached = self._status_snapshot_read(rev)
+        if cached is not None:
+            cached["freshness"] = self._freshness
+            return cached
         cov = self._coverage(rev)
         row = self.graph.execute(
             "SELECT rev_id, parent_rev, created_at, state, capability, joern_used,"
@@ -1631,7 +1887,72 @@ class Facade:
             quality["healthy"] = False
             env.result["quality"] = quality
             env.limits.append(problems[-1])
-        return env.to_dict()
+        payload = env.to_dict()
+        self._status_snapshot_write(rev, payload)
+        return payload
+
+    # ---------------- снимок index_status (шаг 0.3) ----------------
+
+    def _status_storages_stamp(self) -> dict:
+        """Время правки хранилищ: по нему снимок признаётся годным."""
+        from pathlib import Path as _Path
+
+        stamp: dict = {}
+        for path in (self.cfg.graph_db, self.cfg.lexvec_db):
+            try:
+                stamp[_Path(path).name] = int(_Path(path).stat().st_mtime_ns)
+            except OSError:
+                stamp[_Path(path).name] = 0
+        return stamp
+
+    def _status_snapshot_read(self, rev: str) -> dict | None:
+        """Снимок статуса, если он относится к ТЕКУЩЕЙ ревизии и хранилищам.
+
+        Возвращает None при любом сомнении: снимок — ускорение, а не источник
+        правды. Молчаливая выдача снимка от прежней ревизии была бы тем самым
+        «зелёным отчётом, который ничего не осмотрел».
+        """
+        try:
+            from pathlib import Path as _Path
+
+            from . import util as _util
+
+            path = _Path(self.cfg.index_dir) / "index_status_snapshot.json"
+            data = _util.read_json(path, default=None)
+            if not isinstance(data, dict):
+                return None
+            if str(data.get("rev") or "") != str(rev or ""):
+                return None
+            if data.get("storages") != self._status_storages_stamp():
+                return None
+            payload = data.get("payload")
+            if not isinstance(payload, dict):
+                return None
+            payload = dict(payload)
+            payload["source"] = "snapshot"
+            payload["snapshot_at"] = data.get("written_at")
+            return payload
+        except Exception:  # noqa: BLE001 — снимок не имеет права ломать статус
+            return None
+
+    def _status_snapshot_write(self, rev: str, payload: dict) -> None:
+        """Записать снимок статуса. Ошибка записи не ломает ответ."""
+        try:
+            from pathlib import Path as _Path
+
+            from . import util as _util
+
+            clean = dict(payload)
+            clean.pop("freshness", None)
+            path = _Path(self.cfg.index_dir) / "index_status_snapshot.json"
+            _util.write_json(path, {
+                "rev": rev,
+                "storages": self._status_storages_stamp(),
+                "written_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                "payload": clean,
+            })
+        except Exception:  # noqa: BLE001
+            pass
 
     def _quality(self, rev: str, samples: int = 64) -> dict:
         """Показатели качества индекса — то, что отличает «пусто» от «сломано».
@@ -2386,9 +2707,15 @@ class Facade:
                 vector = self.embedder.embed_one(query)
             except Exception:
                 vector = None
-        hits = self.lexvec.search_hybrid(rev, query, vector, limit=limit)
+        # Фильтр по виду чанка применяется ДО обрезки лимитом. Иначе
+        # `--kind file` отбрасывал уже выбранную десятку (в неё попадали
+        # образцы баз), и документы выглядели ненайденными. Замерено на
+        # temp-корпусе: text.pdf был 40-м при limit=60 и нулём при limit=10.
+        fetch = limit if not kinds else max(int(limit) * 20, 200)
+        hits = self.lexvec.search_hybrid(rev, query, vector, limit=fetch)
         if kinds:
-            hits = [h for h in hits if h.source_kind in kinds]
+            wanted = set(kinds)
+            hits = [h for h in hits if h.source_kind in wanted][:max(1, int(limit))]
         out = []
         stale = self.stale_paths()
         for h in hits:
@@ -3113,6 +3440,24 @@ class Facade:
             sha_index = str(r["sha256"]) if r else None
 
         text = util.decode_text(data, path)
+        extract_kind = ""
+        # Документ читается тем же извлекателем, что и при индексации: иначе
+        # номера строк в `path:line` и в `live_read` разошлись бы, и сверка
+        # «изменился ли файл» показывала бы ложное расхождение.
+        try:
+            from . import documents as _documents
+
+            suffix = resolved.suffix.lower()
+            if suffix in _documents.SUPPORTED or suffix in _documents.LEGACY:
+                doc = _documents.extract(resolved)
+                extract_kind = doc.kind
+                if doc.status == "ok":
+                    text = doc.text
+                else:
+                    text = ""
+                    env.limits.append(f"текст документа не извлечён: {doc.reason}")
+        except Exception as exc:  # noqa: BLE001 — live_read не должен падать из-за извлекателя
+            env.limits.append(f"извлечение документа недоступно: {type(exc).__name__}: {exc}")
         lines = text.splitlines()
         if start is None:
             start = 1
@@ -3133,6 +3478,12 @@ class Facade:
             env.limits.append("файл отсутствует в индексе: вывод опирается только на текущее содержимое")
         else:
             env.extra["in_index"] = True
+        if extract_kind:
+            env.extra["extract_kind"] = extract_kind
+            env.extra["extract_note"] = (
+                "строки — извлечённый текст документа (маркеры страницы/листа/слайда), "
+                "а не строки двоичного файла"
+            )
         if env.result["changed_since_index"]:
             env.stale_warnings.append(
                 {"path": util.to_posix(path), "reason": f"файл изменён после {rev}",

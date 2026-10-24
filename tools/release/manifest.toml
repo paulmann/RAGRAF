@@ -1,0 +1,391 @@
+# RAGRAF — манифест поставки.
+#
+# Назначение: отобразить «путь в живом дереве» → «путь в публикуемом дереве».
+# Манифест — единственный источник истины о составе поставки: сборщик
+# (build_release.py) собирает по нему, проверяльщик (verify_release.py) сверяет
+# собранное с ним и с живым деревом. Пока манифеста не было, публикация
+# собиралась руками (.staging/release-v0.2, снимок 14.10), из-за чего обвязка
+# отставала от кода, а установщик существовал в трёх версиях (измерено в этапе 2).
+#
+# Правила этого файла:
+#   1. Каталоги перечисляются шаблоном, а не поштучно: 745 файлов списком — это
+#      не манифест, а копия дерева, и она расходится с деревом на первой правке.
+#   2. У каждого исключения есть причина строкой. Причина «так исторически
+#      сложилось» запрещена: проверка требует осмысленного текста, иначе
+#      исключение перестаёт быть решением и становится забывчивостью.
+#   3. Исключение либо действительно что-то отсекает (тогда оно active), либо
+#      ничего не отсекает сейчас, но страхует будущее изменение манифеста
+#      (тогда оно guard и обязано это сказать). Третьего не дано: «мёртвое»
+#      правило без пометки — провал проверки.
+
+[release]
+product = "RAGRAF"
+# Файлы, которые создаёт сам сборщик и которых поэтому нет в списке включений.
+# Проверяльщик считает их законными, но требует точного совпадения списка.
+artifacts = ["checksums.sha256"]
+
+# ---------------------------------------------------------------------------
+# 1. Обвязка поставки: 18 файлов из community/** — побайтовые копии публичного
+#    main (коммит 075caf86dc2f6274b9c48487e521915bcdfeaf2c, 2026-10-22).
+#    Перенесены в живое дерево этапом 2, сверены docs/03_implementation/
+#    RELEASE-SOURCES.md и 24-й проверкой чекера.
+# ---------------------------------------------------------------------------
+
+[[include]]
+from = "community/CHANGELOG.md"
+to = "CHANGELOG.md"
+kind = "wrapper"
+
+[[include]]
+from = "community/CITATION.cff"
+to = "CITATION.cff"
+kind = "wrapper"
+
+[[include]]
+from = "community/CODE_OF_CONDUCT.md"
+to = "CODE_OF_CONDUCT.md"
+kind = "wrapper"
+
+[[include]]
+from = "community/CONTRIBUTING.md"
+to = "CONTRIBUTING.md"
+kind = "wrapper"
+
+[[include]]
+from = "community/install.ps1"
+to = "install.ps1"
+kind = "wrapper"
+
+[[include]]
+from = "community/mkdocs.yml"
+to = "mkdocs.yml"
+kind = "wrapper"
+
+[[include]]
+from = "community/README.ru.md"
+to = "README.ru.md"
+kind = "wrapper"
+
+[[include]]
+from = "community/ROADMAP.md"
+to = "ROADMAP.md"
+kind = "wrapper"
+
+[[include]]
+from = "community/SECURITY.md"
+to = "SECURITY.md"
+kind = "wrapper"
+
+[[include]]
+from = "community/.github/dependabot.yml"
+to = ".github/dependabot.yml"
+kind = "wrapper"
+
+[[include]]
+from = "community/.github/PULL_REQUEST_TEMPLATE.md"
+to = ".github/PULL_REQUEST_TEMPLATE.md"
+kind = "wrapper"
+
+[[include]]
+from = "community/.github/release.yml"
+to = ".github/release.yml"
+kind = "wrapper"
+
+[[include]]
+from = "community/.github/ISSUE_TEMPLATE/config.yml"
+to = ".github/ISSUE_TEMPLATE/config.yml"
+kind = "wrapper"
+
+[[include]]
+from = "community/.github/ISSUE_TEMPLATE/defect-report.yml"
+to = ".github/ISSUE_TEMPLATE/defect-report.yml"
+kind = "wrapper"
+
+[[include]]
+from = "community/.github/ISSUE_TEMPLATE/doc-divergence.yml"
+to = ".github/ISSUE_TEMPLATE/doc-divergence.yml"
+kind = "wrapper"
+
+[[include]]
+from = "community/.github/workflows/ci.yml"
+to = ".github/workflows/ci.yml"
+kind = "wrapper"
+
+[[include]]
+from = "community/.github/workflows/codeql.yml"
+to = ".github/workflows/codeql.yml"
+kind = "wrapper"
+
+[[include]]
+from = "community/.github/workflows/pages.yml"
+to = ".github/workflows/pages.yml"
+kind = "wrapper"
+
+# ---------------------------------------------------------------------------
+# 2. Продукт: код, тесты, панель, измеритель, документация.
+# ---------------------------------------------------------------------------
+
+[[include]]
+from = "src"
+to = "src"
+kind = "tree"
+
+[[include]]
+from = "tools"
+to = "tools"
+kind = "tree"
+
+[[include]]
+from = "tests"
+to = "tests"
+kind = "tree"
+
+[[include]]
+from = "admin"
+to = "admin"
+kind = "tree"
+
+# bench входит в поставку потому, что его называет CI: шаг синтаксической
+# проверки обходит `src, tools, tests, bench`. Без каталога в публикуемом дереве
+# шаг красил бы CI чужого клона — ровно тот класс дефекта, из-за которого
+# появился этап 2 (CI требовал того, чего в дереве не было).
+[[include]]
+from = "bench"
+to = "bench"
+kind = "tree"
+
+[[include]]
+from = "docs"
+to = "docs"
+kind = "tree"
+
+# scripts/ тоже входит из-за CI, а не «на всякий случай»: ci.yml:125 вызывает
+# scripts/install.ps1, а шаги PSScriptAnalyzer и разбора ps1 обходят scripts
+# и tools. Каталог без этих файлов делает CI публикуемого репозитория красным.
+[[include]]
+from = "scripts"
+to = "scripts"
+kind = "tree"
+
+# Пример конфигурации корпуса. Здесь стоял ЖИВОЙ конфиг этой машины
+# (`config/ragraf.yaml`): он содержит `root: C:/AutoClaw/RAGRAF`, то есть
+# абсолютный путь автора, а .gitignore объявляет каталог `config/` непубликуемым.
+# Измерено 24.10.2026: сборка несла этот файл и теряла документированный пример.
+[[include]]
+from = "examples/ragraf.example.yaml"
+to = "examples/ragraf.example.yaml"
+kind = "file"
+
+[[include]]
+from = "pyproject.toml"
+to = "pyproject.toml"
+kind = "file"
+
+[[include]]
+from = "requirements.txt"
+to = "requirements.txt"
+kind = "file"
+
+[[include]]
+from = "README.md"
+to = "README.md"
+kind = "file"
+
+[[include]]
+from = "LICENSE"
+to = "LICENSE"
+kind = "file"
+
+[[include]]
+from = "NOTICE"
+to = "NOTICE"
+kind = "file"
+
+[[include]]
+from = "CLA.md"
+to = "CLA.md"
+kind = "file"
+
+[[include]]
+from = "SUPPORT.md"
+to = "SUPPORT.md"
+kind = "file"
+
+# Сборка оформления панели (Tailwind): без package.json и замка версий
+# admin/static/style.css нечем пересобрать, а версии зависимостей «на глаз»
+# расходятся с тем, чем собран лежащий файл.
+[[include]]
+from = "package.json"
+to = "package.json"
+kind = "file"
+
+[[include]]
+from = "package-lock.json"
+to = "package-lock.json"
+kind = "file"
+
+# Правила репозитория. `.gitignore` обязателен именно в публикуемой поставке:
+# правило `.ragraf/` в корне — требование §8.20 правил проекта, а без файла
+# машино-локальный индекс в чужом клоне окажется ничем не защищён.
+[[include]]
+from = ".gitignore"
+to = ".gitignore"
+kind = "file"
+
+[[include]]
+from = ".gitattributes"
+to = ".gitattributes"
+kind = "file"
+
+[[include]]
+from = ".editorconfig"
+to = ".editorconfig"
+kind = "file"
+
+# ---------------------------------------------------------------------------
+# 3. Исключения. Поле `state`:
+#      active — правило сейчас отсекает хотя бы один файл;
+#      guard  — сейчас не отсекает ничего, но страхует будущее расширение
+#               манифеста (например, если в него попадёт корень дерева).
+#    Число отсечённых файлов печатает сборщик; проверка сверяет пометку с фактом.
+# ---------------------------------------------------------------------------
+
+[[exclude]]
+pattern = "**/__pycache__/**"
+state = "active"
+why = "кеш байткода Python: пересобирается, к версии интерпретатора привязан, в поставке бесполезен"
+
+[[exclude]]
+pattern = "**/*.pyc"
+state = "guard"
+why = "скомпилированный байткод рядом с исходником: дублирует то, что и так есть текстом"
+
+[[exclude]]
+pattern = "**/*.bak"
+state = "guard"
+why = "резервная копия файла: история правок этой машины, а не содержимое версии"
+
+[[exclude]]
+pattern = "**/*.bak.*"
+state = "guard"
+why = "резервная копия с расширением исходного файла (так сохраняет правки инструмент очистки)"
+
+[[exclude]]
+pattern = "**/*.bak-*"
+state = "active"
+why = "резервная копия с меткой задачи в имени: имя вида file.md.bak-20261024-stage3"
+
+[[exclude]]
+pattern = "**/*.orig"
+state = "guard"
+why = "копия до слияния: содержит конфликтные маркеры и не является рабочим файлом"
+
+[[exclude]]
+pattern = "**/*.old"
+state = "guard"
+why = "прежняя версия файла: публиковать две версии одного документа значит раздвоить факт"
+
+[[exclude]]
+pattern = "**/*.save"
+state = "guard"
+why = "сохранённая копия: то же содержимое под нерабочим именем"
+
+[[exclude]]
+pattern = "**/*.rej"
+state = "guard"
+why = "отклонённая часть заплатки: рабочий мусор инструмента патчей"
+
+[[exclude]]
+pattern = "**/*.tmp"
+state = "active"
+why = "временный файл: содержимое недописано по определению"
+
+[[exclude]]
+pattern = "**/~$*"
+state = "guard"
+why = "временный файл офисного пакета: появляется при открытии документа в редакторе, к версии не относится"
+
+# Измеренный дефект 24.10.2026: tests/test_access_live_out.txt содержит
+# выданный токен доступа панели (значение не печатается ни в отчётах, ни здесь).
+# Файл — журнал прогона, а не исходник: в поставку он попадать не должен.
+# Общее правило по маске выбрано намеренно: таких журналов два, и следующий
+# прогон создаст третий с другим именем.
+[[exclude]]
+pattern = "tests/*_out.txt"
+state = "active"
+why = "журнал прогона теста: содержит выданный токен доступа панели и локальные пути машины"
+
+[[exclude]]
+pattern = "**/*.egg-info/**"
+state = "active"
+why = "метаданные сборки пакета (pip install -e): пересоздаются установкой, версию не описывают"
+
+[[exclude]]
+pattern = "docs/AGENTS-context.md"
+state = "active"
+why = "внутренний материал проекта: адресован агенту этой машины, а не читателю поставки"
+
+[[exclude]]
+pattern = "AGENTS.md"
+state = "guard"
+why = "внутренние правила проекта: в поставку не входят, правило страхует расширение манифеста до корня"
+
+[[exclude]]
+pattern = "AGENTS-TRAPS.md"
+state = "guard"
+why = "внутренний разбор ловушек проекта: адресован агенту, а не потребителю поставки"
+
+[[exclude]]
+pattern = "**/.ragraf/**"
+state = "active"
+why = "индекс корпуса: машино-локален, зависит от этой машины; шаблон с ** ловит и корневой индекс, и подготовленный индекс тестовой фикстуры"
+
+[[exclude]]
+pattern = ".staging/**"
+state = "guard"
+why = "старая сборочная копия .staging/release-v0.2: только читается, пересобирается конвейером релиза"
+
+[[exclude]]
+pattern = ".zwork/**"
+state = "guard"
+why = "служебный каталог агента: вложения и рабочие файлы сессии, к продукту не относятся"
+
+[[exclude]]
+pattern = ".venv/**"
+state = "guard"
+why = "виртуальное окружение: чужие пакеты, тысячи файлов, к исходникам продукта не относятся"
+
+[[exclude]]
+pattern = ".tools/**"
+state = "guard"
+why = "распакованный комплект инструментов (JDK, Joern): сторонние бинарники, не код проекта"
+
+[[exclude]]
+pattern = "harness/**"
+state = "guard"
+why = "внутренние материалы интеграции с HARNESS: по границам этапа в поставку не входят"
+
+[[exclude]]
+pattern = "catalog/db_access.json"
+state = "guard"
+why = "реквизиты доступа к базам: секретоносный файл, в поставке его быть не может ни при каком расширении манифеста"
+
+[[exclude]]
+pattern = "catalog/secrets.key"
+state = "guard"
+why = "мастер-ключ хранилища секретов: попадание в поставку обесценило бы всё хранилище"
+
+[[exclude]]
+pattern = "config/*.local.*"
+state = "guard"
+why = "локальные перекрытия настроек: содержат реквизиты машины (тот же класс, что SECRET_PATTERNS в init_corpus)"
+
+[[exclude]]
+pattern = ".interpreter"
+state = "guard"
+why = "маркер интерпретатора этой машины: абсолютный путь к .venv, в чужом клоне неверен"
+
+[[exclude]]
+pattern = "skills-lock.json"
+state = "guard"
+why = "замок навыков агентской среды: к продукту не относится, нужен только инструментам агента"

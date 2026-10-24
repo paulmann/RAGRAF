@@ -14,8 +14,9 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import formats as formats_mod
 from . import util
-from .config import ProjectConfig
+from .config import DOCUMENT_LANG, ProjectConfig
 
 SKIP_BINARY_EXT = {
     ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".webp", ".svgz",
@@ -24,6 +25,12 @@ SKIP_BINARY_EXT = {
     ".pdf", ".docx", ".xlsx", ".pptx", ".mo", ".so", ".dll", ".exe",
     ".lock", ".mo", ".pyc",
 }
+
+# Текстовые форматы, которые легко весят сотни мегабайт (журналы, выгрузки).
+# Для них действует предел, а не общий запрет: остальные корпуса не должны
+# менять поведение из-за одного большого `.log`.
+BULKY_TEXT_EXT = {".log", ".out", ".err"}
+MAX_BULKY_TEXT_BYTES = 20 * 1024 * 1024
 
 
 @dataclass
@@ -47,6 +54,10 @@ class CorpusScan:
     skipped_secrets: int = 0
     skipped_binary: int = 0
     skipped_included_off: int = 0
+    # Сколько файлов отсеклось настройкой форматов. Отдельный счётчик нужен,
+    # чтобы «в корпусе нет PDF» и «PDF выключен в настройках» не выглядели
+    # одинаково: причина пропуска должна быть названа, а не угадана.
+    skipped_formats: int = 0
     dirs_pruned: int = 0
     total_bytes: int = 0
     total_lines: int = 0
@@ -82,6 +93,7 @@ class CorpusScan:
             "skipped_secrets": self.skipped_secrets,
             "skipped_binary": self.skipped_binary,
             "skipped_not_included": self.skipped_included_off,
+            "skipped_formats": self.skipped_formats,
             "excluded": self.excluded,
             "dirs_pruned": self.dirs_pruned,
             "corpus_hash": self.corpus_hash,
@@ -161,6 +173,10 @@ def scan(cfg: ProjectConfig, *, digest: bool = True) -> CorpusScan:
     secrets = list(cfg.secrets_exclude)
     include = list(cfg.include)
     langs = set(cfg.languages)
+    # Набор включённых форматов приводится к множеству ОДИН раз: проверка на
+    # каждый файл с разворачиванием `*` стоила бы прохода по всем 84 форматам
+    # на файл. None означает «ограничения нет».
+    allowed_formats = cfg.formats
 
     for dirpath, dirnames, filenames in os.walk(root_real):
         dir_real = _real_dir(dirpath)
@@ -208,13 +224,28 @@ def scan(cfg: ProjectConfig, *, digest: bool = True) -> CorpusScan:
                 continue
 
             ext = abs_path.suffix.lower()
-            if ext in SKIP_BINARY_EXT:
-                result.skipped_binary += 1
-                continue
-
             lang = cfg.language_of(rel)
             if lang is None or lang not in langs:
                 result.skipped_included_off += 1
+                continue
+            # --- настройка «какие форматы индексировать» ---
+            # Проверяется ПОСЛЕ списка языков корпуса и объясняет другую
+            # причину: `languages` отвечает «нужен ли язык вообще», форматы —
+            # «какие из его разновидностей брать сейчас». Если поменять
+            # порядок, выключенный PDF выглядел бы как «языка document нет».
+            if allowed_formats is not None:
+                fmt_id = formats_mod.format_of_path(rel)
+                if fmt_id is not None and fmt_id not in allowed_formats:
+                    result.skipped_formats += 1
+                    result.excluded[f"format:{fmt_id}"] = (
+                        result.excluded.get(f"format:{fmt_id}", 0) + 1
+                    )
+                    continue
+            # Документы — двоичные контейнеры, но их читает извлекатель, а не
+            # проверка «бинарный или нет». Исключение только для языка
+            # `document`: остальные корпуса ведут себя как раньше.
+            if ext in SKIP_BINARY_EXT and lang != DOCUMENT_LANG:
+                result.skipped_binary += 1
                 continue
 
             try:
@@ -225,18 +256,26 @@ def scan(cfg: ProjectConfig, *, digest: bool = True) -> CorpusScan:
                 continue
             if size == 0:
                 continue
+            if ext in BULKY_TEXT_EXT and size > MAX_BULKY_TEXT_BYTES:
+                result.excluded["size:bulky_text"] = (
+                    result.excluded.get("size:bulky_text", 0) + 1
+                )
+                result.skipped_binary += 1
+                continue
 
             digest_hex = ""
             lines = 0
             mtime_ns = 0
             if digest:
-                if util.is_binary(abs_path):
+                if lang != DOCUMENT_LANG and util.is_binary(abs_path):
                     result.skipped_binary += 1
                     continue
 
                 try:
                     digest_hex = util.sha256_file(abs_path)
-                    lines = _count_lines_fast(abs_path, size)
+                    # У документа «строк» в двоичном файле нет: число строк
+                    # появляется при извлечении и записывается индексатором.
+                    lines = 0 if lang == DOCUMENT_LANG else _count_lines_fast(abs_path, size)
                 except OSError:
                     result.skipped_binary += 1
                     continue

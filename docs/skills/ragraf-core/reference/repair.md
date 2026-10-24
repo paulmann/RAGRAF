@@ -1,199 +1,203 @@
-# Recovery Recipes
+# Рецепты восстановления
 
-Reference for the `ragraf-core` skill. Every recipe addresses a state that has
-already occurred in this project or is described by the code. Order: diagnosis, then
-action, then verification of the result.
+Справочник к навыку `ragraf-core`. Каждый рецепт — для состояния, которое уже
+случалось в этом проекте или описано кодом. Порядок: диагностика, затем действие,
+затем проверка результата.
 
-> **Translation note:** recipes referencing author-internal tools
-> (`measure_safe_excludes.py`, `check_ragraf_config.py`, `check_service_excludes.py`,
-> `measure_dedupe_rules.py`, `tests/test_dedupe.py`, `tests/check_admin_*.py`) name
-> them as they are cited by the shipped source comments; those tools are **not
-> shipped** in the public repository. Where a recipe depends on them, an equivalent
-> manual check is given.
+## 1. Индекс устарел или «дрожит»
 
-## 1. The index is stale or «trembling»
+**Симптом.** Операция отвечает, но факты не совпадают с кодом; `freshness`
+сообщает о расхождении; `check` повторяет реиндексацию при каждом вызове.
 
-**Symptom.** Operations answer, but the facts do not match the code; `freshness`
-reports a divergence; `check` repeats reindexing on every call.
-
-**Diagnosis.**
+**Диагностика.**
 
 ```powershell
 python tools/ragraf.py -p config/ragraf.yaml check
 python tools/ragraf.py -p config/ragraf.yaml status
 ```
 
-`check` compares the corpus checksum with the one recorded in the revision. If the
-checksums match but `stale` does not clear, the problem is not the files but the
-revision record.
+`check` сравнивает сумму корпуса с записанной в ревизии. Если суммы совпадают, а
+`stale` не снимается, дело не в файлах, а в записи ревизии.
 
-**Action.**
+**Действие.**
 
 ```powershell
 python tools/ragraf.py -p config/ragraf.yaml reindex
 ```
 
-**The cause of looping, if it repeats.** The checksum must be computed over exactly
-the files that land in the index, and after duplicate collapsing
-(`src/ragraf/corpus.py:59-70`, `:242-253`). If collapsing is moved into the indexer
-or the guard, the checksum diverges from the index contents and reindexing never
-stops. The check for this case is `tools/Invoke-ProjectDoctrine.ps1`, the collapsing
-rule.
+**Причина зацикливания, если оно повторяется.** Контрольная сумма обязана
+считаться по тем же файлам, что попадают в индекс, и после схлопывания дублей
+(`src/ragraf/corpus.py:59-70`, `:242-253`). Если схлопывание вынести в индексатор
+или в сторож, сумма разойдётся с содержимым индекса и переиндексация не остановится.
+Проверка на этот случай — `tools/Invoke-ProjectDoctrine.ps1`, правило о схлопывании.
 
-## 2. The registry shows an empty revision and zeros
+## 2. Реестр показывает пустую ревизию и нули
 
-**Symptom.** `python tools/ragraf.py catalog` shows `rev-` «none», `nodes 0`,
-`edges 0` for a corpus, while `status` of the same corpus reports a revision and nodes.
+**Симптом.** `python tools/ragraf.py catalog` для корпуса показывает `rev-` «нет»,
+`nodes 0`, `edges 0`, хотя `status` того же корпуса сообщает ревизию и узлы.
 
-**Cause (measured, historical).** Registering a corpus via `ensure` used to register
-the development before indexing and did not write the run result into the registry
-(`src/ragraf/ensure.py:308-312`). The entry stayed with trigger `register` and zeros.
-**This is fixed in the shipped code**: on successful indexing `ensure` now calls
-`record_index_run(..., trigger="ensure:index")` (`src/ragraf/ensure.py:338-348`).
+**Причина (измерено).** Заведение корпуса через `ensure` регистрирует разработку до
+индексации и результат прогона в реестр не записывает
+(`src/ragraf/ensure.py:308-312`). Запись остаётся с триггером `register` и нулями.
 
-**Action — immediate workaround (still valid if you ever see zeros).**
+**Действие — немедленный обход.**
 
 ```powershell
 python tools/ragraf.py -p config/ragraf.yaml index
 ```
 
-This path writes the result into the registry (`src/ragraf/cli.py:247`). A second
-path is any call that makes the guard work: the guard records the result itself
-(`src/ragraf/watch.py:554`). Confirmation after the action — `catalog`: the entry
-gains a revision, node and edge counts and a trigger of the form `guard:fast`.
+Этот путь пишет результат в реестр (`src/ragraf/cli.py:247`). Второй путь — любое
+обращение, приводящее к работе сторожа: сторож записывает результат сам
+(`src/ragraf/watch.py:554`). Подтверждение после действия — `catalog`: у записи
+появляется ревизия, число узлов и рёбер и триггер вида `guard:fast`.
 
-**The proper fix (already applied).** Write the result in `ensure` after successful
-indexing by calling `catalog.record_run` (`src/ragraf/catalog.py:235`) with the
-numbers from the read revision — exactly as the guard does. After such a change:
-`python tests/test_ensure.py`, then re-run the checker: the registry-coverage rule
-must go green.
+**Правильное исправление.** Добавить запись результата в `ensure` после успешной
+индексации, вызывая `catalog.record_run` (`src/ragraf/catalog.py:235`) с числами из
+прочитанной ревизии — так же, как это делает сторож. После правки:
+`python tests/test_ensure.py`, затем повторный прогон чекера: правило о покрытии
+реестра обязано позеленеть.
 
 ## 3. `capability=degraded`
 
-**Symptom.** `index_status` reports `capability=degraded`; the slice operation refuses.
+**Симптом.** `index_status` сообщает `capability=degraded`, операция среза отказывает.
 
-**What it means.** The code-property layer was not built or its export failed; the
-other layers (lexicon, vector, parse graph) work. Silent degradation does not exist:
-`src/ragraf/cpg.py:9-11`.
+**Что это значит.** Слой свойств кода не построен или его экспорт не удался;
+остальные слои (лексика, вектор, граф разбора) работают. Молчаливой деградации не
+бывает: `src/ragraf/cpg.py:9-11`.
 
-**Diagnosis.**
+**Диагностика.**
 
 ```powershell
 python tools/ragraf.py -p config/ragraf.yaml status
 ```
 
-The `cpg` stage will hold the reason. A known case on our own corpus: the export
-returned code 1 with an error of the form «next on empty iterator», while the code
-property graph file was in fact built. The cause was not localized — that is a
-defect of the layer, not of the configuration.
+В стадии `cpg` будет записана причина. Известный случай на собственном корпусе:
+экспорт вернул код 1, ошибка вида «next on empty iterator», при этом файл графа
+свойств был построен. Причина не локализована — это дефект слоя, а не настройки.
 
-**Action.**
+**Действие.**
 
-1. Make sure Java and Joern are available and located where the code looks for them
+1. Убедиться, что Java и Joern доступны и расположены там, где их ищет код
    (`src/ragraf/cpg.py:82-93`, `:391`).
-2. Restart indexing: the layer is rebuilt from scratch.
-3. If the refusal repeats — work without the slice operations and record the finding
-   separately; do not present `degraded` as the whole index being broken.
+2. Перезапустить индексацию: слой строится заново.
+3. Если отказ повторяется — работать без операций среза и записать находку
+   отдельно; не выдавать `degraded` за поломку всего индекса.
 
-**Important.** The Joern server is stopped automatically when the indexer closes
-(`src/ragraf/indexer.py:1166-1183`). An unclosed server is a multi-gigabyte hanging
-process holding the port; check the process list after manual experiments.
+**Важно.** Сервер Joern останавливается автоматически при закрытии индексатора
+(`src/ragraf/indexer.py:1166-1183`). Незакрытый сервер — висящий процесс на гигабайты,
+который держит порт; проверять список процессов после ручных экспериментов.
 
-## 4. An exclusion edit threw out working code
+## 4. Правка исключений выбросила рабочий код
 
-**Symptom.** Files that were visible in search disappeared; no errors reported.
+**Симптом.** Файлы, которые были видны в поиске, исчезли; ошибок при этом нет.
 
-**Cause.** Pattern matching is case-sensitive and understands only «any directory
-tail» templates for cutting directories: `**/cache/**` catches `src/cache/` but not
-`src/Cache/` (`src/ragraf/util.py:72-158`).
+**Причина.** Сопоставление шаблонов регистрозависимо и понимает только шаблоны с
+хвостом «любой каталог» для отсечения каталогов: `**/cache/**` ловит `src/cache/`,
+но не `src/Cache/` (`src/ragraf/util.py:72-158`).
 
-**Action.**
-
-The author-internal measurement tools are not shipped; the equivalent manual check:
+**Действие.**
 
 ```powershell
-# 1. Count what the corpus scans to BEFORE the change
-python tools/ragraf.py -p config/ragraf.yaml status
-# 2. Apply the exclusion change, then:
-python tools/ragraf.py -p config/ragraf.yaml check
-python tools/ragraf.py -p config/ragraf.yaml reindex
-# 3. Compare the file count in status; investigate EVERY file that disappeared
-python tools/ragraf.py -p config/ragraf.yaml query search "<name of a vanished module>"
+python tools/measure_safe_excludes.py     # сколько файлов выпадет по каждому корпусу
+python tools/check_ragraf_config.py       # точность исключений собственного корпуса
+python tools/check_service_excludes.py    # служебные каталоги не попадают в скан
 ```
 
-The rule is simple: if extending the base exclusion list throws out zero files in
-every corpus — it is safe; if even one — the name goes into the specific corpus's
-config, where the directory's purpose is visible.
+Правило простое: если расширение базового списка выбрасывает ноль файлов во всех
+корпусах — можно; если хоть один — имя идёт в конфиг конкретного корпуса, где видно
+назначение каталога.
 
-## 5. Duplicate collapsing and its price
+## 5. Схлопывание дублей и его цена
 
-**Symptom.** The file count in the index is lower than the file count on disk.
+**Симптом.** Число файлов в индексе меньше числа файлов на диске.
 
-**What it is.** Copies with identical content collapse; one primary remains; files
-on disk are not deleted. By default collapsing is OFF (`src/ragraf/config.py:541`),
-and our own corpus config has no section for these settings — meaning it is not
-applied to that corpus. When enabled, the index state carries the discarded
-counters: how many copies, how many groups, bytes and lines
-(`src/ragraf/indexer.py:779-786`).
+**Что это.** Копии с одинаковым содержимым схлопываются, остаётся одна главная;
+файлы на диске не удаляются. По умолчанию схлопывание выключено
+(`src/ragraf/config.py:541`), и в конфиге собственного корпуса раздела с этими
+настройками нет — значит на этом корпусе оно не применяется. Когда оно включено,
+состояние индекса несёт счётчики отброшенного: сколько копий, сколько групп, байт и
+строк (`src/ragraf/indexer.py:779-786`).
 
-**What must not be done.** Changing the primary-copy selection rule to «the first
-one that comes along»: a tie must be resolved by path, otherwise the corpus
-checksum trembles and the guard loops (`src/ragraf/dedupe.py:165-223`).
+**Чего нельзя делать.** Менять правило выбора главной копии на «первую попавшуюся»:
+ничья обязана разрешаться путём, иначе сумма корпуса дрожит и сторож зацикливается
+(`src/ragraf/dedupe.py:165-223`).
 
-**Verification.** The author-internal `tools/measure_dedupe_rules.py` and
-`tests/test_dedupe.py` are not shipped; the portable check is the guard behavior:
-run `check` twice in a row — the second run must not trigger reindexing.
+**Проверка.**
 
-**Remember.** Enabling collapsing changes the corpus checksum: the guard reindexes
-the corpus once. That is a conscious consequence, not a defect.
+```powershell
+python tools/measure_dedupe_rules.py
+python tests/test_dedupe.py
+```
 
-## 6. The computer fell back to CPU
+**Помнить.** Включение схлопывания меняет контрольную сумму корпуса: сторож один раз
+переиндексирует корпус. Это осознанное следствие, а не дефект.
 
-**Symptom.** `index_status` reports the CPU computer; indexing time is higher than
-expected.
+## 6. Вычислитель ушёл на процессор
 
-**Causes (in check order).**
+**Симптом.** `index_status` сообщает процессорный вычислитель; время индексации выше
+ожидаемого.
 
-1. The GPU is disabled in the settings.
-2. The volume of work is below the break-even threshold: preparing the map takes
-   about a quarter of a minute one-time, so on a small number of texts it loses
+**Причины (по порядку проверки).**
+
+1. Видеокарта выключена в настройках.
+2. Объём работы ниже порога окупаемости: подготовка карты занимает около четверти
+   минуты разово, поэтому на малом числе текстов она проигрывает
    (`src/ragraf/config.py:276-301`).
-3. The package the GPU needs is not installed: `sentence-transformers` and `torch`
-   are not declared in the package description (`src/ragraf/compute.py:141-146`).
-4. Free GPU memory is below the threshold — fallback to CPU with a reason.
+3. Не установлен пакет, требующийся карте: `sentence-transformers` и `torch` не
+   объявлены в описании пакета (`src/ragraf/compute.py:141-146`).
+4. Свободной памяти карты меньше порога — переход на процессор с причиной.
 
-**Action.** Look at the `reason` field in the compute state: the reason is recorded
-there, not guessed. Do not lower the threshold «so the GPU works» — that slows the
-work down.
+**Действие.** Смотреть поле `reason` в состоянии вычислений: там записана причина,
+а не догадка. Понижать порог «чтобы карта работала» не нужно — это замедлит работу.
 
-## 7. The admin panel
+## 7. Панель администратора
 
 ```powershell
 python tools/ragraf-admin.py --no-browser
 ```
 
-Local access only, port 8777; the token is printed at startup and handed to the page
-by a separate request. Read requests need no token; any settings change requires it
-and is written with a backup copy plus key and bounds validation
-(`src/ragraf/settings.py:327-386` — project-config path; note that the *global*
-settings store writes without a backup — roadmap R-SEC-3). Live checks of the panel:
-`python tests/check_admin_agents.py` and `python tests/check_admin_dedupe.py`
-(*not shipped*; the panel must be running).
+Только локальный доступ, порт 8777, токен печатается при старте и выдаётся
+странице отдельным запросом. Читающие запросы токена не требуют; любая правка
+настроек — требует, пишется с резервной копией и проверкой ключей и границ
+(`src/ragraf/settings.py:327-386`). Живые проверки панели:
+`python tests/check_admin_agents.py` и `python tests/check_admin_dedupe.py`
+(панель должна быть запущена).
 
-> **Security note (added in the 2026-10 revision):** the panel's `GET /api/token`
-> endpoint returns the access token to any local client without authentication, and
-> the page fetches it automatically. Until roadmap R-SEC-1 is implemented, treat the
-> token as protection against *accidental* changes only — not against a malicious
-> local process or DNS-rebinding. Do not expose the port; keep the panel bound to
-> 127.0.0.1 (the default).
+## 8. Карта метаданных, маршрут и документы
 
-## 8. What to do in any of these states
+**`map scan` говорит `unavailable`.** Для сетевого корня проверьте, что он
+добавлен с `--network` и что хост отвечает: `probe_path` ждёт 4 секунды и не
+вешает панель. Для локального — что каталог существует и доступен на чтение.
 
-1. Write down the measurement: the command, the output, the revision, the checksum.
-2. Distinguish a pre-existing state from the consequence of your own edit. In the
-   published tree the checker ships **14 checks**: 11 pass, while 3 report files
-   deliberately absent from the public subset (roadmap `R-REL-1`). The author's full
-   tree records its own baseline in `AGENTS.md` §10 (*not shipped*).
-3. Do not report a green result without inspecting the object: every check in the
-   checker has a counter of inspected objects, and zero on success counts as a
-   false PASS.
+**`global_map.sqlite` занят.** База в WAL с `busy_timeout=10000`; при
+параллельном скане из панели и CLI подождите или повторите — удалять файл
+нельзя, он хранит отпечатки и `first_seen`.
+
+**`sources add` отклоняет путь.** Причина в тексте: корень диска, домашний
+каталог целиком, системный каталог Windows и `.ragraf` запрещены; выберите
+подкаталог. Сетевой путь — только с `--network` (в панели — флажок).
+
+**Маршрут рекомендует не тот корпус.** Смотрите `why` и `available`:
+`available=false` означает, что каталог записи исчез; такая запись не
+рекомендуется. Если корпус просто отстал — `ensure` его каталога.
+
+**Документ помечен `metadata_only`.** Установите необязательный набор:
+`pip install ".[documents]"`. Старые `.doc/.xls/.ppt` требуют конвертера;
+`.msg` — библиотеки `extract-msg`; OCR в проекте нет.
+
+**Документ в индексе есть, но поиск его не находит.** Добавьте
+`query search "..." --kind file`: без фильтра выдача может быть занята
+образцами слоя баз, а фильтр по виду применяется ДО лимита. Если и это не
+помогло — проверьте, что язык `document` есть в `languages` корпуса.
+
+**`/value` пуст.** Снимок состояния ещё собирается или в корпусах нет вызовов
+за 30 дней. Нажмите «Пересобрать снимок»; поле `last30` появляется после
+первого сбора деталей.
+
+## 9. Что делать при любом из состояний
+
+1. Записать измеренное: команду, вывод, ревизию, сумму.
+2. Отличить уже существующее состояние от последствия своей правки: baseline чекера
+   записан в `AGENTS.md`, раздел 10 — **0 ошибок, 0 предупреждений, 25 проверок**.
+3. Не выдавать зелёный результат, не осмотрев объект: у каждой проверки в чекере
+   есть счётчик осмотренных объектов, и ноль при успехе считается ложным PASS.

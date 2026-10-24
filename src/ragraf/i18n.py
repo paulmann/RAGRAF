@@ -336,6 +336,16 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "sentence-transformers не установлен",
         # --- настройки ------------------------------------------------------
         "Settings": "Настройки",
+        "Formats": "Форматы",
+        "Data formats": "Форматы данных",
+        "languages, documents and data — one registry": "языки, документы и данные — один реестр",
+        "Filter formats": "Фильтр форматов",
+        "formats enabled": "форматов включено",
+        "enable all": "включить все",
+        "disable all": "выключить все",
+        "Save formats": "Сохранить форматы",
+        "Pick at least one format: an empty list is not a valid setting.": "Отметьте хотя бы один формат: пустой список недопустим.",
+        "Turning a format off changes the corpus on the next freshness check and triggers reindexing.": "Выключение формата меняет состав корпуса при следующей проверке свежести и вызывает переиндексацию.",
         "auto-reindex thresholds and indexing parameters":
             "пороги авто-реиндексации и параметры индексации",
         "Defaults": "Значения по умолчанию",
@@ -923,6 +933,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "types, indexes, views and relations.":
             "RAGRAF индексирует СТРУКТУРУ баз: базы, таблицы, колонки, типы, "
             "индексы, представления и связи.",
+        # --- знания агентов -------------------------------------------------
+        "Agent knowledge": "Знания агентов",
+        "prompt, research and a checklist for launching the agent knowledge contour":
+            "промт, research и чек-лист запуска контура знаний агентов",
+        "Open in a new tab": "Открыть в новой вкладке",
     },
     "zh": {
         # --- 页面顶部 --------------------------------------------------------
@@ -1063,6 +1078,16 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "sentence-transformers is not installed": "未安装 sentence-transformers",
         # --- 设置 ------------------------------------------------------------
         "Settings": "设置",
+        "Formats": "格式",
+        "Data formats": "数据格式",
+        "languages, documents and data — one registry": "语言、文档与数据——统一注册表",
+        "Filter formats": "筛选格式",
+        "formats enabled": "已启用格式",
+        "enable all": "全部启用",
+        "disable all": "全部禁用",
+        "Save formats": "保存格式",
+        "Pick at least one format: an empty list is not a valid setting.": "请至少选择一个格式：空列表无效。",
+        "Turning a format off changes the corpus on the next freshness check and triggers reindexing.": "关闭格式会在下次新鲜度检查时改变语料库构成并触发重新索引。",
         "auto-reindex thresholds and indexing parameters":
             "自动重新索引阈值与索引参数",
         "Defaults": "默认值",
@@ -1611,6 +1636,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "RAGRAF indexes the STRUCTURE of databases: databases, tables, columns, "
         "types, indexes, views and relations.":
             "RAGRAF 只索引数据库的结构：数据库、表、列、类型、索引、视图和关系。",
+        # --- 智能体知识 -----------------------------------------------------
+        "Agent knowledge": "智能体知识",
+        "prompt, research and a checklist for launching the agent knowledge contour":
+            "智能体知识上线的提示词、调研与检查清单",
+        "Open in a new tab": "在新标签页中打开",
     },
 }
 

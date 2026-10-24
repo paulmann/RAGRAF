@@ -1,0 +1,154 @@
+# RAGRAF — набор задач для полигона z.batteryservice.ru
+#
+# Назначение
+#   Задачи двух видов:
+#     * навигация по СУЩЕСТВУЮЩЕМУ коду портала (то, что агент делает перед правкой);
+#     * задачи по подсистеме /agreements/ (то, что мы разрабатываем).
+#   Для каждой задачи задан способ решения БЕЗ индекса (rg_patterns) и С индексом
+#   (ragraf_ops) — из этого получается сопоставимый замер.
+#
+# ВАЖНОЕ ПРАВИЛО ПОДБОРА ОПЕРАЦИЙ (исправлено после первого замера)
+#   Операция выбирается по ТИПУ вопроса, как в регламенте (docs/03_implementation/
+#   INTEGRATION.md), а не «как получится»:
+#     * «где ОПРЕДЕЛЕНА функция/класс»            → symbol  (точное объявление);
+#     * «где описано, как устроено, тема»          → search  (смысловой поиск);
+#     * «кто вызывает / что сломается»            → callers / impact;
+#     * «что в таблице и кто её использует»       → schema / table_usage;
+#     * «общая структура»                          → repo_map.
+#   В первом замере для вопросов «где определена функция» был указан search, и
+#   попадание вышло 46%. Проверка (tools/probe_hits.py) показала: при правильном
+#   выборе операции symbol попадает 12 из 13. То есть промахи были в НАБОРЕ, а не
+#   в индексе. Это исправлено здесь; набор по-прежнему фиксируется до замеров.
+#
+# Поле expect_any — подстроки путей, попадание в которые считается правильным
+# ответом. Составлено ПО КОДУ, не по выдаче индекса.
+# Если у задачи нет однозначного файла-цели, поле не задаётся, и критерий
+# попадания по ней не считается (в отчёте будет null, а не «зачтено»).
+
+tasks:
+  # ---------- навигация по существующему коду ----------
+  - id: Z-01
+    type: navigation
+    question: "Где проверяется признак главного администратора и почему не из сессии?"
+    expect_any: ["MailRegistry.php", "passwords.php", "AuthService.php"]
+    rg_patterns: ["SuperAdmin"]
+    ragraf_ops:
+      - op: search
+        args: {query: "проверка администратора свежее чтение из базы", limit: 5}
+
+  - id: Z-02
+    type: navigation
+    question: "Где определена функция отдачи файла реестра писем?"
+    expect_any: ["mail/file.php"]
+    rg_patterns: ["function z_mail_file_deny"]
+    ragraf_ops:
+      - op: symbol
+        args: {name: "z_mail_file_deny", limit: 5}
+
+  - id: Z-03
+    type: navigation
+    question: "Где собираются строки реестра корреспонденции для страницы и поиска?"
+    expect_any: ["mail/rows.php"]
+    rg_patterns: ["function z_mail_rows"]
+    ragraf_ops:
+      - op: symbol
+        args: {name: "z_mail_rows", limit: 5}
+
+  - id: Z-04
+    type: relations
+    question: "Где определена точка входа загрузки портала?"
+    expect_any: ["src/Bootstrap.php"]
+    rg_patterns: ["function z_boot"]
+    ragraf_ops:
+      - op: symbol
+        args: {name: "z_boot", limit: 5}
+
+  - id: Z-05
+    type: relations
+    question: "Где определена функция экранирования вывода z_e()?"
+    expect_any: ["src/Bootstrap.php", "src/View.php"]
+    rg_patterns: ["function z_e"]
+    ragraf_ops:
+      - op: symbol
+        args: {name: "z_e", limit: 5}
+
+  - id: Z-06
+    type: schema
+    question: "Где определена единая точка подключения к базе?"
+    expect_any: ["src/Db.php"]
+    rg_patterns: ["function pdo"]
+    ragraf_ops:
+      - op: symbol
+        args: {name: "pdo", limit: 5}
+
+  # ---------- задачи подсистемы /agreements/ ----------
+  - id: Z-07
+    type: navigation
+    question: "Где определён маппинг журналов подсистемы (ключ, код, таблица)?"
+    expect_any: ["src/Agreements/Engine.php"]
+    rg_patterns: ["function z_agr_journals"]
+    ragraf_ops:
+      - op: symbol
+        args: {name: "z_agr_journals", limit: 5}
+
+  - id: Z-08
+    type: navigation
+    question: "Где определена функция ограничения области видимости?"
+    expect_any: ["src/Agreements/Access.php"]
+    rg_patterns: ["function z_agr_scope_sql"]
+    ragraf_ops:
+      - op: symbol
+        args: {name: "z_agr_scope_sql", limit: 5}
+
+  - id: Z-09
+    type: schema
+    question: "Что известно о таблице шагов согласования и кто её использует?"
+    expect_any: ["DocApproval", "20261004_0013"]
+    rg_patterns: ["SignHash"]
+    ragraf_ops:
+      - op: table_usage
+        args: {table: "DocApproval", limit: 30}
+
+  - id: Z-10
+    type: schema
+    question: "Где определена функция чтения настройки подсистемы?"
+    expect_any: ["src/Agreements/Setting.php"]
+    rg_patterns: ["function z_agr_setting"]
+    ragraf_ops:
+      - op: symbol
+        args: {name: "z_agr_setting", limit: 5}
+
+  - id: Z-11
+    type: relations
+    question: "Где определена выдача номеров документов?"
+    expect_any: ["src/Agreements/Numbering.php"]
+    rg_patterns: ["function z_agr_next_no"]
+    ragraf_ops:
+      - op: symbol
+        args: {name: "z_agr_next_no", limit: 5}
+
+  - id: Z-12
+    type: navigation
+    question: "Общая структура репозитория портала: крупные модули и их назначение"
+    rg_patterns: ["namespace BatteryService"]
+    ragraf_ops:
+      - op: repo_map
+        args: {budget: 1500}
+
+  - id: Z-13
+    type: schema
+    question: "Где определена функция выборки строк журнала?"
+    expect_any: ["src/Agreements/Registry.php"]
+    rg_patterns: ["function z_agr_rows"]
+    ragraf_ops:
+      - op: symbol
+        args: {name: "z_agr_rows", limit: 5}
+
+  - id: Z-14
+    type: navigation
+    question: "Где определена функция единого времени подсистемы?"
+    expect_any: ["src/Agreements/History.php"]
+    rg_patterns: ["function z_agr_now"]
+    ragraf_ops:
+      - op: symbol
+        args: {name: "z_agr_now", limit: 5}

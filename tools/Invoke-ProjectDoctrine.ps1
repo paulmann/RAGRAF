@@ -248,6 +248,10 @@ function Test-ProjectLayout {
         'tools/ragraf.py', 'tools/ragraf-mcp.py', 'tools/ragraf-admin.py',
         'config/ragraf.yaml',
         'scripts/ragraf.ps1', 'scripts/install-joern.ps1',
+        'src/ragraf/formats.py', 'src/ragraf/documents.py',
+        'src/ragraf/officebinary.py',
+        'tests/test_formats.py', 'tests/test_new_languages.py',
+        'tests/test_office_binary.py', 'tools/check_formats_panel.py',
         'tests/test_ensure.py', 'tests/test_dedupe.py', 'tests/test_lang_routing.py',
         'docs/02_architecture/TZ.md', 'docs/02_architecture/ACCEPTANCE.md'
     )
@@ -293,7 +297,11 @@ function Test-SecretHygiene {
     # проекта (src, tools, tests, config, docs, scripts) нет. Найдены лишь
     # материалы прогонов и выгрузки в исключённых служебных каталогах, а они
     # этой проверкой не осматриваются.
-    $baseline = @()
+    # Файл ключа хранилища секретов — ЕДИНСТВЕННОЕ законное исключение:
+    # он обязан существовать, лежит вне корпуса (`catalog/**`), права
+    # сужены до текущей учётной записи, в git не попадает. Значение ключа
+    # не читается ни этой проверкой, ни индексатором.
+    $baseline = @('catalog/secrets.key')
 
     $scan = Get-ProjectSourceFile
     $examined = $scan.Examined
@@ -336,6 +344,16 @@ function Test-RegistryCoverage {
         вынесения общей точки записи она объявила исправленный код дефектным.
         Проверка, зависящая от написания, — ложная проверка.
 
+        Второй измеренный дефект того же рода (13.10.2026): проверка считала
+        запись по ФАЙЛУ `cli.py` целиком, а в нём две команды, запускающие
+        индексатор — `index` и `reindex`. Первая записывала прогон, вторая —
+        нет, и одного упоминания в файле хватало, чтобы правило позеленело.
+        Замерено на собственном корпусе: в индексе rev-0046, в реестре rev-0045
+        со старой суммой; `check` из-за этого честно реиндексировал корпус
+        заново, а `catalog` показывал прошедшее состояние. Поэтому теперь
+        просматриваются все функции-обработчики команд, и в каждой, где
+        создаётся `Indexer`, требуется вызов общей точки записи.
+
         Дополнительно проверяется несущее свойство самой общей точки: пустая
         ревизия не должна затирать записанное состояние разработки.
         #>
@@ -377,7 +395,25 @@ function Test-RegistryCoverage {
         }
     }
 
-    # Модуль, запускающий индексатор, обязан записывать прогон.
+    # Модуль, запускающий индексатор, обязан записывать прогон. Проверка идёт
+    # ПО ФУНКЦИЯМ, а не по файлу: в cli.py таких функций две (`index` и
+    # `reindex`), и упоминание в одной из них прикрывало отсутствие в другой.
+    $cliPath = Join-Path $script:ProjectRoot 'src/ragraf/cli.py'
+    if (Test-Path -LiteralPath $cliPath) {
+        $examined++
+        $cliText = Get-ProjectText $cliPath
+        foreach ($match in [regex]::Matches($cliText, '(?ms)^def\s+([a-z_]+)\s*\(.*?(?=^def |\Z)')) {
+            $funcName = $match.Groups[1].Value
+            $body = $match.Value
+            if ($body -notmatch 'Indexer\s*\(') { continue }
+            $examined++
+            $writesRun = ($body -match 'record_run\s*\(') -or ($body -match 'record_index_run\s*\(')
+            if (-not $writesRun) {
+                $problems.Add("src/ragraf/cli.py: функция $funcName запускает Indexer, но не записывает прогон в реестр — реестр расходится с индексом (измерено: в индексе rev-0046, в реестре rev-0045)")
+            }
+        }
+    }
+
     $ensurePath = Join-Path $script:ProjectRoot 'src/ragraf/ensure.py'
     if (Test-Path -LiteralPath $ensurePath) {
         $examined++
@@ -737,8 +773,21 @@ function Test-LanguageRouting {
         }
         else {
             $members = [regex]::Matches($block.Groups[1].Value, '"([a-z]+)"') | ForEach-Object { $_.Groups[1].Value }
-            if ($members.Count -ne 16) {
-                $problems.Add("языков разбора деревом $($members.Count), в паспорте и в правилах окружения записано 16: список изменился, обновить документы")
+            $profileMembers = [regex]::Matches($genericText, '"([a-z]+)":\s*LangProfile\(') | ForEach-Object { $_.Groups[1].Value }
+            # Сравниваются МНОЖЕСТВА, а не число. Прежняя редакция требовала ровно
+            # 16 языков и падала при каждом осознанном расширении списка, хотя
+            # расхождения между списками не было: проверка ловила правку документа,
+            # а не дефект. Настоящий инвариант: каждый язык разбора имеет профиль
+            # (или свой извлекатель), и каждый профиль объявлен в наборе. Именно
+            # расхождение даёт тихую потерю разбора без единой ошибки.
+            $profiled = @($profileMembers) + @('php', 'css', 'html')
+            $withoutProfile = @($members | Where-Object { $profiled -notcontains $_ })
+            $withoutTree = @($profiled | Where-Object { $members -notcontains $_ })
+            if ($withoutProfile.Count -gt 0) {
+                $problems.Add("языки TREE_LANGS без профиля извлечения: $($withoutProfile -join ', ')")
+            }
+            if ($withoutTree.Count -gt 0) {
+                $problems.Add("у языков с профилем нет записи в TREE_LANGS: $($withoutTree -join ', ')")
             }
             if ($genericText -notmatch 'PROFILES') {
                 $problems.Add('в src/ragraf/extract/generic.py не найден набор профилей извлечения, с которым обязан совпадать список языков разбора')
@@ -860,19 +909,174 @@ function Test-LexvecSchemaContract {
     return New-CheckResult -Name 'lexvec schema matches the search code' -Ok ($problems.Count -eq 0) -Examined $examined -Details $problems
 }
 
+function Test-AccessHygiene {
+    <#
+    .SYNOPSIS
+        Значение доступа не отдаётся в ответах, файлы доступа лежат вне корпуса,
+        а использование выданного доступа видно в статистике.
+
+    .DESCRIPTION
+        Три свойства, каждое — из измеренного состояния этого проекта.
+
+        1. Панель раньше возвращала токен администратора в ответе `/api/token`.
+           Это не оплошность в тексте, а рабочая утечка: значение получал любой
+           локальный клиент, и проверка изменяющих запросов становилась
+           формальностью. Поэтому правило ищет ВОЗВРАТ значения в ответе, а не
+           конкретную строку: проверка через написание сломалась бы при первом
+           переименовании переменной и ничего не поймала бы.
+
+        2. Файлы доступа обязаны лежать в каталоге, исключённом из корпуса.
+           Иначе значение попадёт в индекс и в поисковую выдачу агента.
+           Проверяется связь: путь файла доступа и исключение каталога.
+
+        3. Телеметрия обязана хранить и показывать доступ, которым пришёл вызов.
+           Без подстановки доступа процесса метка терялась, и вся статистика
+           выглядела как «без доступа» (измерено на собственном корпусе).
+    #>
+    $problems = [System.Collections.Generic.List[string]]::new()
+    $examined = 0
+
+    $adminPath = Join-Path $script:ProjectRoot 'src/ragraf/admin_server.py'
+    $accessPath = Join-Path $script:ProjectRoot 'src/ragraf/access.py'
+    $telemetryPath = Join-Path $script:ProjectRoot 'src/ragraf/telemetry.py'
+    $configPath = Join-Path $script:ProjectRoot 'config/ragraf.yaml'
+
+    if (-not (Test-Path -LiteralPath $adminPath) -or -not (Test-Path -LiteralPath $accessPath)) {
+        return New-CheckResult -Name 'access hygiene: secrets out, usage attributed' -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: нет src/ragraf/admin_server.py или access.py — проверять нечего')
+    }
+
+    # 1. Значение доступа не возвращается в ответе панели.
+    $examined++
+    $adminText = Get-ProjectText $adminPath
+    $leak = [regex]::Match($adminText,
+        '"[a-z_]*token[a-z_]*"\s*:\s*ACCESS_TOKEN', 'IgnoreCase')
+    if ($leak.Success) {
+        $problems.Add('src/ragraf/admin_server.py возвращает значение доступа в ответе: локальный клиент получит его и защита станет формальностью')
+    }
+    if ($adminText -notmatch 'auth_state\s*\(') {
+        $problems.Add('в src/ragraf/admin_server.py нет состояния доступа без значений: точка состояния обязана отдавать только факт «пароль задан» и число токенов')
+    }
+
+    # 2. Файлы доступа — вне корпуса.
+    $examined++
+    if (Test-Path -LiteralPath $accessPath) {
+        $accessText = Get-ProjectText $accessPath
+        if ($accessText -notmatch 'CATALOG_DIR') {
+            $problems.Add('в src/ragraf/access.py не видно привязки файлов доступа к каталогу состояния')
+        }
+        if ((Test-Path -LiteralPath $configPath) -and
+            ((Get-ProjectText $configPath) -notmatch '\*\*/catalog/\*\*')) {
+            $problems.Add('config/ragraf.yaml больше не исключает catalog/**: файлы доступа попадут в корпус и в поисковую выдачу')
+        }
+    }
+
+    # 3. Статистика знает про доступ.
+    $examined++
+    if (Test-Path -LiteralPath $telemetryPath) {
+        $telemetryText = Get-ProjectText $telemetryPath
+        if ($telemetryText -notmatch 'by_access') {
+            $problems.Add('в src/ragraf/telemetry.py нет разреза by_access: использование выданного доступа не видно в статистике')
+        }
+        if ($telemetryText -notmatch 'token_label') {
+            $problems.Add('в src/ragraf/telemetry.py нет колонки метки доступа: записи не отличат выданный доступ от вызова без него')
+        }
+        # Подстановка доступа процесса: вызов её не называет, её знает процесс.
+        if ($telemetryText -notmatch 'or self\.') {
+            $problems.Add('в src/ragraf/telemetry.py нет подстановки доступа процесса: метка теряется, и статистика выглядит как «без доступа» (измерено)')
+        }
+    }
+
+    return New-CheckResult -Name 'access hygiene: secrets out, usage attributed' -Ok ($problems.Count -eq 0) -Examined $examined -Details $problems
+}
+
+
+function Test-ModeHasProbe {
+    <#
+    .SYNOPSIS
+        Заявленный канал работы RAGRAF подтверждается пробой, а не надписью.
+
+    .DESCRIPTION
+        Настройка `ragraf_mode` описывает ОЖИДАЕМЫЙ канал (cli, mcp-stdio,
+        mcp-http, both). Сам сервер MCP поднимает клиент, поэтому «включить
+        режим» панель не может — но обязана ПРОВЕРИТЬ факт и назвать
+        расхождение. Без этого настройка становится надписью, не связанной
+        с состоянием: именно так в этом проекте уже появлялся ложный `full`.
+
+        Проверяется механизм, а не текст:
+          * список режимов закрытый — опечатка не станет новым режимом;
+          * проба каналов существует и возвращает вердикт по режиму;
+          * проверка не подменяется осмотром файлов: для stdio проба поднимает
+            сервер и считает инструменты;
+          * второй канал остаётся доступен и показывается справочно, потому что
+            CLI и MCP не конфликтуют.
+    #>
+    $problems = [System.Collections.Generic.List[string]]::new()
+    $examined = 0
+
+    $probesPath = Join-Path $script:ProjectRoot 'src/ragraf/probes.py'
+    $settingsPath = Join-Path $script:ProjectRoot 'src/ragraf/settings.py'
+    $adminPath = Join-Path $script:ProjectRoot 'src/ragraf/admin_server.py'
+
+    if (-not (Test-Path -LiteralPath $probesPath)) {
+        return New-CheckResult -Name 'declared mode is confirmed by a probe' -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: нет src/ragraf/probes.py — режим нечем подтвердить')
+    }
+
+    # 1. Список режимов закрытый.
+    $examined++
+    if (Test-Path -LiteralPath $settingsPath) {
+        $settingsText = Get-ProjectText $settingsPath
+        if ($settingsText -notmatch 'ragraf_mode') {
+            $problems.Add('в src/ragraf/settings.py нет настройки ragraf_mode: режим нельзя выбрать')
+        }
+        elseif ($settingsText -notmatch '"ragraf_mode":\s*\(') {
+            $problems.Add('ragraf_mode объявлен без закрытого списка значений: опечатка станет новым режимом, который никто не проверяет')
+        }
+    }
+
+    # 2. Проба каналов: запускает канал, а не смотрит на файлы.
+    $examined++
+    $probesText = Get-ProjectText $probesPath
+    if ($probesText -notmatch 'def\s+probe_mcp_stdio') {
+        $problems.Add('в src/ragraf/probes.py нет пробы stdio-канала: наличие файла сервера не доказывает, что он отвечает')
+    }
+    if ($probesText -notmatch '(subprocess\.(Popen|run)|tools/list)') {
+        $problems.Add('проба stdio не запускает сервер: проверка обязана получить ответ, иначе это осмотр файлов, а не проба')
+    }
+    if ($probesText -notmatch 'def\s+probe_cli') {
+        $problems.Add('в src/ragraf/probes.py нет пробы CLI-канала')
+    }
+    if ($probesText -notmatch 'mode_ok') {
+        $problems.Add('проба не отдаёт вердикт по режиму (mode_ok): связь между настройкой и фактом отсутствует')
+    }
+    if ($probesText -notmatch 'reference') {
+        $problems.Add('нет пометки «справочно»: второй канал обязан показываться, но не входить в вердикт')
+    }
+
+    # 3. Панель показывает вердикт.
+    $examined++
+    if (Test-Path -LiteralPath $adminPath) {
+        $adminText = Get-ProjectText $adminPath
+        if ($adminText -notmatch '/api/probe') {
+            $problems.Add('в панели нет точки пробы (/api/probe): режим негде подтвердить')
+        }
+    }
+
+    return New-CheckResult -Name 'declared mode is confirmed by a probe' -Ok ($problems.Count -eq 0) -Examined $examined -Details $problems
+}
+
+
 function Test-DocumentedNumbers {
     <#
     .SYNOPSIS
         Числа, записанные в документах текущего состояния, совпадают с кодом.
 
     .DESCRIPTION
-        Измеренный дефект: документы называли 17, 18, 16 и 21 операцию там, где
-        код объявлял 22 операции фасада и 23 инструмента поверхности для агентов
-        (аудит 12.10.2026). Сегодняшнее состояние, пересчитанное 16.10.2026:
-        38 операций фасада и 40 инструментов — правило читает эти два числа из
-        кода и сверяет с документами текущего состояния. Исторические документы
-        (требования релиза 1) сохраняют свои числа намеренно, поэтому список
-        проверяемых документов задан явно.
+        Измеренный дефект: код объявляет 23 инструмента поверхности для агентов и
+        22 операции фасада, а документы называют 18 и 16 инструментов и 21 операцию.
+        Одно и то же число живёт в трёх редакциях, и читатель не может понять,
+        какое верно.
 
         Под намеренно оставлено открытым: оно описывает уже существующее
         расхождение и валит прогон до тех пор, пока его не устранят.
@@ -934,6 +1138,123 @@ function Test-DocumentedNumbers {
     return New-CheckResult -Name 'documented operation counts match the code' -Ok ($problems.Count -eq 0) -Examined $examined -Details $problems
 }
 
+function Test-McpClientCompatibility {
+    <#
+    .SYNOPSIS
+        MCP-сервер работает в УРЕЗАННОМ окружении внешнего клиента.
+
+    .DESCRIPTION
+        Измеренный дефект (13.10.2026): MCP-клиент запускает сервер как
+        дочерний процесс, передавая ему только APPDATA, HOMEDRIVE, HOMEPATH,
+        LOCALAPPDATA, PATH, PROCESSOR_ARCHITECTURE, SYSTEMDRIVE, SYSTEMROOT,
+        TEMP, USERNAME, USERPROFILE, PROGRAMFILES (официальный SDK,
+        `@modelcontextprotocol/client/dist/stdio.mjs`). Ни `PYTHONUTF8`,
+        ни `PYTHONIOENCODING` туда не попадают, а DeepSeek Harness
+        дополнительно вычищает имена с PASSWORD|SECRET|TOKEN|KEY и все
+        `DSH_*`. Оболочка AutoClaw ставит обе переменные, поэтому дефект был
+        невидим: сервер падал на ПЕРВОМ же ответе с русским текстом
+        (`UnicodeEncodeError: 'charmap' codec` на cp1252 в `send()`), и клиент
+        видел мёртвый процесс вместо инструментов.
+
+        Проверяется СВОЙСТВО, а не текст: сервер обязан сам приводить потоки
+        к UTF-8 в `main()` и не требовать обязательного `--project` (клиент
+        может держать один сервер на несколько проектов и выбирать корпус
+        операцией `use_project`).
+    #>
+    $problems = [System.Collections.Generic.List[string]]::new()
+    $examined = 0
+
+    $serverPath = Join-Path $script:ProjectRoot 'src/ragraf/mcp_server.py'
+    if (-not (Test-Path -LiteralPath $serverPath)) {
+        return New-CheckResult -Name 'MCP server survives a scrubbed client environment' -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: нет src/ragraf/mcp_server.py — совместимость проверить нечем')
+    }
+
+    $examined++
+    $text = Get-ProjectText $serverPath
+
+    # 1. Кодировка потоков ставится в самом модуле, а не в окружении.
+    if ($text -notmatch 'def\s+force_utf8_stdio\s*\(') {
+        $problems.Add('в src/ragraf/mcp_server.py нет настройки UTF-8 на потоках: при локальном окружении cp1252 сервер упадёт на первом русском ответе')
+    }
+    if ($text -notmatch 'encoding\s*=\s*["'']utf-8["'']') {
+        $problems.Add('в src/ragraf/mcp_server.py потоки не перенастраиваются на UTF-8')
+    }
+
+    # 2. Корпус не может быть обязательным аргументом запуска.
+    #    Ищем проверку на обязательность в описании ОПЦИИ, а не подстроку
+    #    с именем аргумента: иначе проверка ловила бы обычные упоминания.
+    $projectArg = [regex]::Match($text, 'add_argument\(\s*["'']--project["'']\s*,[^)]{0,400}?\)', 'Singleline')
+    if (-not $projectArg.Success) {
+        $problems.Add('в src/ragraf/mcp_server.py не найден разбор аргумента --project — форма запуска разошлась с проверкой')
+    }
+    elseif ($projectArg.Value -match 'required\s*=\s*True') {
+        $problems.Add('src/ragraf/mcp_server.py требует --project: клиент, держащий один сервер на несколько проектов, не сможет запустить его без корпуса')
+    }
+
+    # 3. Выбор корпуса обязан быть доступен как операция.
+    if ($text -notmatch '["'']ragraf_use_project["'']') {
+        $problems.Add('в src/ragraf/mcp_server.py нет инструмента ragraf_use_project: один сервер не сможет обслужить несколько проектов')
+    }
+
+    return New-CheckResult -Name 'MCP server survives a scrubbed client environment' -Ok ($problems.Count -eq 0) -Examined $examined -Details $problems
+}
+
+function Test-ExternalOpsAreRecorded {
+    <#
+    .SYNOPSIS
+        Операции, живущие вне фасада, тоже попадают в журнал статистики.
+
+    .DESCRIPTION
+        Измеренный дефект (13.10.2026): телеметрия навешивается обёрткой на
+        методы `op_*` фасада, а `ensure` и `use_project` реализованы в
+        MCP-сервере (первая умеет переиндексировать корпус, вторая меняет
+        конфиг сервера). В сводке `usage` они не появлялись вообще — на
+        собственном корпусе это было видно прямо: есть `index_status`
+        и `catalog`, а `ensure` нет, хотя агент вызывает именно `ensure`
+        первым шагом. Последствие не косметическое: нельзя ответить на вопрос
+        «соблюдают ли агенты правило первого шага», потому что первый шаг
+        невидим.
+
+        Проверяется свойство: у обеих операций есть вызов общей точки записи
+        со стороны MCP-сервера.
+    #>
+    $problems = [System.Collections.Generic.List[string]]::new()
+    $examined = 0
+
+    $serverPath = Join-Path $script:ProjectRoot 'src/ragraf/mcp_server.py'
+    $facadePath = Join-Path $script:ProjectRoot 'src/ragraf/facade.py'
+    if (-not (Test-Path -LiteralPath $serverPath)) {
+        return New-CheckResult -Name 'operations outside the facade are recorded' -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: нет src/ragraf/mcp_server.py')
+    }
+
+    $examined++
+    $serverText = Get-ProjectText $serverPath
+    if ($serverText -notmatch 'record_external_call\s*\(') {
+        $problems.Add('в src/ragraf/mcp_server.py нет записи в журнал для операций вне фасада: ensure и use_project останутся невидимыми в статистике')
+    }
+
+    $examined++
+    if (-not (Test-Path -LiteralPath $facadePath)) {
+        $problems.Add('NOT-IMPLEMENTED: нет src/ragraf/facade.py — точку записи проверить нечем')
+    }
+    else {
+        $facadeText = Get-ProjectText $facadePath
+        if ($facadeText -notmatch 'def\s+record_external_call\s*\(') {
+            $problems.Add('в src/ragraf/facade.py нет точки record_external_call: операции вне фасада не попадут в журнал')
+        }
+        # Точка обязана писать ТОЙ ЖЕ записью, что и фасадная обёртка:
+        # отдельный формат расколол бы сводку на две несводимые части.
+        $block = [regex]::Match($facadeText, '(?s)def\s+record_external_call\s*\(.*?(?=\n    def |\Z)')
+        if ($block.Success -and $block.Value -notmatch 'self\._record\s*\(') {
+            $problems.Add('record_external_call не использует общую запись self._record: сводка статистики станет несводимой')
+        }
+    }
+
+    return New-CheckResult -Name 'operations outside the facade are recorded' -Ok ($problems.Count -eq 0) -Examined $examined -Details $problems
+}
+
 function Test-PowerShellVintage {
     <#
     .SYNOPSIS
@@ -985,11 +1306,13 @@ function Get-ProjectSourceFile {
 
     .DESCRIPTION
         Отличие от общего обхода: осматриваются только деревья, которые проект
-        ведёт сам, плюс файлы корня. Каталог временных файлов, распакованный
+        ведёт сам, плюс файлы корня. `community` — опубликованная обвязка: без неё
+        новые файлы поставки остались бы вне проверки секретоносных имён.
+        Каталог временных файлов, распакованный
         комплект JDK и песочницы сторонних пакетов исключены явно: иначе проверка
         секретоносных имён читает чужие данные и печатает их как находки проекта.
     #>
-    $ownTrees = @('src', 'tools', 'tests', 'config', 'docs', 'scripts', 'admin', 'bench', 'catalog')
+    $ownTrees = @('src', 'tools', 'tests', 'config', 'docs', 'scripts', 'admin', 'bench', 'catalog', 'community')
     $result = [System.Collections.Generic.List[System.IO.FileInfo]]::new()
     $examined = 0
 
@@ -1052,7 +1375,480 @@ function Test-SourceMaterialHygiene {
     return New-CheckResult -Name 'source backup copies stayed within the baseline' -Ok ($problems.Count -eq 0) -Examined $examined -Details $problems -Warning:($problems.Count -gt 0)
 }
 
+function Test-DatabaseLayerHonesty {
+    <#
+    .SYNOPSIS
+        Слой живых баз: персональные данные не собираются, отпечаток детерминирован.
+
+    .DESCRIPTION
+        Проверка формулируется через СВОЙСТВО, а не через написание. Это не
+        придирка: в этом проекте уже дважды был ложный FAIL из-за правила,
+        искавшего буквальную строку (`record_run`, а затем
+        `capability = str(cpg_info...)`). Оба раза код был исправен.
+
+        Что проверяется:
+
+        * **Значения персональных колонок не собираются.** Моделируются колонки,
+          среди которых есть заведомо персональные в трёх формах написания
+          (`FirstName`, `first_name`, `E-Mail`), и проверяется, что классификация
+          отмечает их все. Формы взяты по факту: измерено на живой базе, что
+          проверка по подстроке НЕ ловила `FirstName` и `E-Mail`, и имя человека
+          попадало бы в индекс.
+        * **Колонка удаляется из запроса, а не фильтруется после.** В модели
+          запроса персональных колонок быть не должно вовсе — иначе значение
+          успевает попасть в память процесса сбора.
+        * **Скрытая колонка помечена, а не пуста.** Пустое значение агент прочитает
+          как «поля нет», и это неотличимо от данных.
+        * **Отпечаток структуры детерминирован.** Две модели с РАЗНЫМ порядком
+          добавления таблиц и колонок обязаны дать один отпечаток: иначе сторож
+          свежести будет переиндексировать корпус бесконечно.
+        * **Отпечаток не зависит от данных.** Изменение оценки числа строк не
+          должно менять отпечаток: иначе вставка строк пересобирала бы корпус.
+    #>
+    $problems = [System.Collections.Generic.List[string]]::new()
+    $examined = 0
+
+    $probe = Join-Path $script:ProjectRoot 'tools/check_db_layer.py'
+    if (-not (Test-Path -LiteralPath $probe)) {
+        return New-CheckResult -Name 'database layer keeps personal data out and fingerprints deterministically' `
+            -Ok $false -Examined 0 -Details @('NOT-IMPLEMENTED: нет tools/check_db_layer.py')
+    }
+
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $python) {
+        return New-CheckResult -Name 'database layer keeps personal data out and fingerprints deterministically' `
+            -Ok $false -Examined 0 -Details @('NOT-IMPLEMENTED: python не найден в PATH')
+    }
+
+    $output = & $python.Source $probe 2>&1
+    $code = $LASTEXITCODE
+    $text = ($output | Out-String).Trim()
+    Write-Host "    проверка слоя баз: $text"
+
+    # Разбираются ВЕРДИКТЫ, а не наличие строк: проверка сама сообщает, сколько
+    # свойств осмотрела и какие не выполняются.
+    $lines = $output | Where-Object { $_ -is [string] }
+    $examined = ([regex]::Match($text, 'осмотрено:\s*(\d+)')).Groups[1].Value
+    if (-not $examined) { $examined = 0 } else { $examined = [int]$examined }
+
+    if ($code -ne 0) {
+        foreach ($line in $lines) {
+            if ($line -match '^\s*FAIL:') { $problems.Add(($line -replace '^\s*FAIL:\s*', '')) }
+        }
+        if ($problems.Count -eq 0) {
+            $problems.Add("проверка слоя баз завершилась кодом $code без расшифровки")
+        }
+    }
+
+    return New-CheckResult -Name 'database layer keeps personal data out and fingerprints deterministically' `
+        -Ok ($problems.Count -eq 0) -Examined $examined -Details $problems
+}
+
+
 # ------------------------------------------------------------------- запуск
+
+function Test-GlobalMapIsolation {
+    <#
+    Свойство: карта метаданных не может влиять на свежесть корпуса и не хранит
+    содержимое.
+
+    Почему проверка именно такая. Сумма корпуса считается по файлам, которые
+    пойдут в индекс (`src/ragraf/corpus.py`). Если бы карта читалась сканером,
+    сторож пересобирал бы корпус бесконечно — это уже измеренный класс дефекта.
+    Поэтому проверяются три отношения, а не написание одного литерала:
+      1. хранилище карты лежит в `catalog/`, а не в `.ragraf`;
+      2. ни сканер, ни сторож, ни индексатор карту не импортируют;
+      3. в таблицах карты нет колонок под текст/фрагмент/хэш содержимого.
+    #>
+    $problems = [System.Collections.Generic.List[string]]::new()
+    $examined = 0
+    $mapPath = Join-Path $script:ProjectRoot 'src/ragraf/global_map.py'
+    if (-not (Test-Path -LiteralPath $mapPath)) {
+        return New-CheckResult -Name 'global map stays outside the corpus and holds no content' -Ok $false -Examined 0 -Details @('NOT-IMPLEMENTED: нет src/ragraf/global_map.py')
+    }
+    $examined++
+    $mapText = Get-ProjectText $mapPath
+    if ($mapText -notmatch 'CATALOG_DIR' -or $mapText -notmatch 'global_map\.sqlite') {
+        $problems.Add('хранилище карты не привязано к catalog/: оно не должно лежать внутри .ragraf')
+    }
+    foreach ($name in @('corpus.py', 'indexer.py', 'watch.py')) {
+        $path = Join-Path $script:ProjectRoot ("src/ragraf/" + $name)
+        if (-not (Test-Path -LiteralPath $path)) { continue }
+        $examined++
+        $text = Get-ProjectText $path
+        if ($text -match 'global_map|GlobalMap') {
+            $problems.Add("$name читает карту: тогда карта может попасть в сумму корпуса и зациклить сторожа")
+        }
+    }
+    $allowed = @{
+        'file_meta' = @('source_id', 'rel_path', 'name', 'ext', 'size', 'mtime', 'mime', 'availability', 'first_seen', 'last_seen')
+        'secret_place' = @('source_id', 'rel_path', 'rule', 'size', 'mtime')
+    }
+    foreach ($table in $allowed.Keys) {
+        $m = [regex]::Match($mapText, "CREATE TABLE IF NOT EXISTS $table\s*\((?<body>[\s\S]*?)\);")
+        if (-not $m.Success) {
+            $problems.Add("не найдено описание таблицы $table")
+            continue
+        }
+        $examined++
+        $columns = @([regex]::Matches($m.Groups['body'].Value, '(?m)^\s*([a-z_]+)\s+') | ForEach-Object { $_.Groups[1].Value })
+        $unknown = @($columns | Where-Object { $allowed[$table] -notcontains $_ })
+        if ($unknown.Count -gt 0) {
+            $problems.Add("$table содержит колонки вне разрешённого набора метаданных: " + ($unknown -join ', '))
+        }
+    }
+    return New-CheckResult -Name 'global map stays outside the corpus and holds no content' -Ok ($problems.Count -eq 0) -Examined $examined -Details $problems
+}
+
+function Test-RouteAndDocumentWiring {
+    <#
+    Свойства двух новых слоёв:
+      1. маршрут НЕ читает содержимое файлов (иначе он превращается в поиск,
+         который цитирует без провенанса);
+      2. документ извлекается одним и тем же кодом при индексации и при
+         `live_read` — иначе номера строк разойдутся;
+      3. маршрут объявляет провенанс `registry`, а не `index`.
+    #>
+    $problems = [System.Collections.Generic.List[string]]::new()
+    $examined = 0
+    $routePath = Join-Path $script:ProjectRoot 'src/ragraf/route.py'
+    $facadePath = Join-Path $script:ProjectRoot 'src/ragraf/facade.py'
+    $indexerPath = Join-Path $script:ProjectRoot 'src/ragraf/indexer.py'
+    foreach ($path in @($routePath, $facadePath, $indexerPath)) {
+        if (-not (Test-Path -LiteralPath $path)) {
+            return New-CheckResult -Name 'route and documents share one extraction contract' -Ok $false -Examined 0 -Details @("NOT-IMPLEMENTED: нет $path")
+        }
+    }
+    $examined++
+    $routeText = Get-ProjectText $routePath
+    if ($routeText -match 'read_bytes|read_text|documents\.extract') {
+        $problems.Add('route.py читает содержимое файлов: маршрут обязан отвечать «куда идти», не цитируя')
+    }
+    $examined++
+    $facadeText = Get-ProjectText $facadePath
+    $start = $facadeText.IndexOf('def op_route')
+    if ($start -lt 0) {
+        $problems.Add('в facade.py нет op_route')
+    } else {
+        $next = $facadeText.IndexOf('    def op_', $start + 10)
+        $body = if ($next -gt $start) { $facadeText.Substring($start, $next - $start) } else { $facadeText.Substring($start) }
+        if ($body -notmatch 'provenance="registry"') {
+            $problems.Add('op_route не объявляет provenance=registry: факты карты выдаются за факты индекса')
+        }
+    }
+    $examined++
+    $liveStart = $facadeText.IndexOf('def op_live_read')
+    if ($liveStart -lt 0) {
+        $problems.Add('в facade.py нет op_live_read')
+    } else {
+        $liveNext = $facadeText.IndexOf('    def op_', $liveStart + 10)
+        $liveBody = if ($liveNext -gt $liveStart) { $facadeText.Substring($liveStart, $liveNext - $liveStart) } else { $facadeText.Substring($liveStart) }
+        if ($liveBody -notmatch '_documents') {
+            $problems.Add('op_live_read не использует извлекатель документов: строки разойдутся с индексом')
+        }
+    }
+    $examined++
+    $indexerText = Get-ProjectText $indexerPath
+    if ($indexerText -notmatch 'documents\.extract') {
+        $problems.Add('indexer.py не извлекает текст документов: PDF/DOCX попадут в индекс байтами')
+    }
+    if ($indexerText -notmatch 'DOCUMENT_LANG') {
+        $problems.Add('indexer.py не различает язык document')
+    }
+    $corpusPath = Join-Path $script:ProjectRoot 'src/ragraf/corpus.py'
+    if (Test-Path -LiteralPath $corpusPath) {
+        $examined++
+        $corpusText = Get-ProjectText $corpusPath
+        if ($corpusText -notmatch 'DOCUMENT_LANG') {
+            $problems.Add('corpus.py отсекает документы как двоичные: язык document не учтён')
+        }
+    }
+    return New-CheckResult -Name 'route and documents share one extraction contract' -Ok ($problems.Count -eq 0) -Examined $examined -Details $problems
+}
+
+function Test-AnalyticsLocalOnly {
+    <#
+    Свойства аналитики:
+      1. ни экспорт, ни отчёт не открывают сеть (нет клиентов HTTP/Socket);
+      2. удаление журнала стоит ПОСЛЕ проверки резервной копии — иначе
+         «очистить для замера» означало бы потерять историю.
+    #>
+    $problems = [System.Collections.Generic.List[string]]::new()
+    $examined = 0
+    foreach ($name in @('src/ragraf/analytics.py', 'src/ragraf/feedback.py',
+                       'src/ragraf/sources.py', 'src/ragraf/global_map.py',
+                       'src/ragraf/route.py', 'src/ragraf/documents.py')) {
+        $path = Join-Path $script:ProjectRoot $name
+        if (-not (Test-Path -LiteralPath $path)) {
+            $problems.Add("нет $name")
+            continue
+        }
+        $examined++
+        $text = Get-ProjectText $path
+        if ($text -match 'urllib|requests\.|httpx|socket\.|http\.client|aiohttp') {
+            $problems.Add("$name содержит сетевой клиент: аналитика обязана оставаться локальной")
+        }
+    }
+    $analyticsPath = Join-Path $script:ProjectRoot 'src/ragraf/analytics.py'
+    if (Test-Path -LiteralPath $analyticsPath) {
+        $examined++
+        $text = Get-ProjectText $analyticsPath
+        $backupAt = $text.IndexOf('backup.exists()')
+        $deleteAt = $text.IndexOf('DELETE FROM usage_call')
+        if ($backupAt -lt 0 -or $deleteAt -lt 0 -or $backupAt -gt $deleteAt) {
+            $problems.Add('удаление журнала не проверяет резервную копию ДО удаления')
+        }
+    }
+    return New-CheckResult -Name 'new layers stay local (no outbound clients); analytics deletes only after a backup' -Ok ($problems.Count -eq 0) -Examined $examined -Details $problems
+}
+
+function Test-LicenseMetadataAgreement {
+    <#
+    .SYNOPSIS
+        Юридические метаданные говорят одно и то же во всех источниках.
+
+    .DESCRIPTION
+        Измеренный дефект (24.10.2026): в `LICENSE` лежал PolyForm Noncommercial,
+        `pyproject.toml` объявлял MIT, `README.md` утверждал, что в метаданных
+        стоит PolyForm, а строки правообладателя в `LICENSE` не было вовсе.
+        Три источника — три разных ответа, и ни один из них не был сверен
+        с другим: расхождение жило месяцами и не мешало ни сборке, ни тестам.
+
+        Проверка формулируется через СВОЙСТВО, а не через написание. Выражение
+        лицензии нормализуется тем же кодом, которым пользуется сборка пакета
+        (`packaging.licenses`), опознанная по ЗАГОЛОВКУ текста лицензия
+        сравнивается с ним, отдельно проверяются строка правообладателя,
+        заполненность параметров BSL и нижняя граница setuptools. Именно так
+        видны два дефекта, невидимых глазами: файл без правообладателя и
+        `setuptools>=69` при `license-files`, то есть PEP 639, поддержка
+        которого начинается с 77 — сборка проходила случайно.
+
+        Отдельно проверяется, что README ССЫЛАЕТСЯ на файлы лицензии, а не
+        пересказывает их: пересказ уже один раз разошёлся с фактом.
+    #>
+    $problems = [System.Collections.Generic.List[string]]::new()
+    $examined = 0
+
+    $probe = Join-Path $script:ProjectRoot 'tools/check_licensing.py'
+    if (-not (Test-Path -LiteralPath $probe)) {
+        return New-CheckResult -Name 'license metadata agrees across all sources' `
+            -Ok $false -Examined 0 -Details @('NOT-IMPLEMENTED: нет tools/check_licensing.py')
+    }
+
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $python) {
+        return New-CheckResult -Name 'license metadata agrees across all sources' `
+            -Ok $false -Examined 0 -Details @('NOT-IMPLEMENTED: python не найден в PATH')
+    }
+
+    $output = & $python.Source $probe 2>&1
+    $code = $LASTEXITCODE
+    $text = ($output | Out-String).Trim()
+    Write-Host "    проверка лицензии: $text"
+
+    # Разбираются ВЕРДИКТЫ, а не наличие строк: проверка сама сообщает, сколько
+    # свойств осмотрела и какие не выполняются.
+    $lines = $output | Where-Object { $_ -is [string] }
+    $examined = ([regex]::Match($text, 'осмотрено:\s*(\d+)')).Groups[1].Value
+    if (-not $examined) { $examined = 0 } else { $examined = [int]$examined }
+
+    if ($code -ne 0) {
+        foreach ($line in $lines) {
+            if ($line -match '^\s*FAIL:') { $problems.Add(($line -replace '^\s*FAIL:\s*', '')) }
+        }
+        if ($problems.Count -eq 0) {
+            $problems.Add("проверка лицензии завершилась кодом $code без расшифровки")
+        }
+    }
+
+    return New-CheckResult -Name 'license metadata agrees across all sources' `
+        -Ok ($problems.Count -eq 0) -Examined $examined -Details $problems
+}
+
+function Test-CommunityWrapper {
+    <#
+    .SYNOPSIS
+        Обвязка поставки лежит в живом дереве, названа в таблице источников
+        и установщик в дереве один.
+
+    .DESCRIPTION
+        Измеренный дефект (24.10.2026): продуктовая обвязка (`CHANGELOG`,
+        `CONTRIBUTING`, `SECURITY`, `ROADMAP`, `README.ru`, `CITATION`,
+        `CODE_OF_CONDUCT`, `mkdocs.yml`, `.github/**`) существовала ТОЛЬКО
+        в опубликованном репозитории, установщик — в двух разных версиях
+        (34 242 против 37 794 байт), а живой `ci.yml:125` вызывал
+        `-SummaryJson`, которого в живом установщике не было вовсе. Сборка
+        «из живого дерева» теряла обвязку целиком, и увидеть это можно было
+        только сверкой, которой никто не делал.
+
+        Проверка формулируется через СВОЙСТВО, а не через написание. Состав
+        файлов, согласие хэшей с таблицей источников, гигиена путей и
+        соответствие параметров установщика своему CI проверяются скриптом
+        `tools/check_community_wrapper.py`; здесь к ним добавляется то, что
+        умеет только PowerShell: единственность установщика в дереве и разбор
+        его текста парсером.
+
+        Молчаливый пропуск запрещён: нет скрипта или нет python — это провал,
+        а не «нечего проверять», иначе проверка зеленеет, ничего не осмотрев.
+    #>
+    $problems = [System.Collections.Generic.List[string]]::new()
+    $examined = 0
+
+    $probe = Join-Path $script:ProjectRoot 'tools/check_community_wrapper.py'
+    if (-not (Test-Path -LiteralPath $probe)) {
+        return New-CheckResult -Name 'publication wrapper is present, sourced and has one installer' `
+            -Ok $false -Examined 0 -Details @('NOT-IMPLEMENTED: нет tools/check_community_wrapper.py')
+    }
+
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $python) {
+        return New-CheckResult -Name 'publication wrapper is present, sourced and has one installer' `
+            -Ok $false -Examined 0 -Details @('NOT-IMPLEMENTED: python не найден в PATH')
+    }
+
+    $output = & $python.Source $probe 2>&1
+    $code = $LASTEXITCODE
+    $text = ($output | Out-String).Trim()
+    Write-Host "    проверка обвязки: $text"
+
+    $lines = $output | Where-Object { $_ -is [string] }
+    $examinedText = ([regex]::Match($text, 'осмотрено:\s*(\d+)')).Groups[1].Value
+    $examined = if ($examinedText) { [int]$examinedText } else { 0 }
+
+    if ($code -ne 0) {
+        foreach ($line in $lines) {
+            if ($line -match '^\s*FAIL:') { $problems.Add(($line -replace '^\s*FAIL:\s*', '')) }
+        }
+        if ($problems.Count -eq 0) {
+            $problems.Add("проверка обвязки завершилась кодом $code без расшифровки")
+        }
+    }
+
+    # Установщик в дереве один. Каталоги, которых в поставке нет по определению,
+    # исключаются явно; `community` не исключается: там лежит опубликованный
+    # установщик верхнего уровня, и его наличие — часть решения, а не помеха.
+    $installers = @(Get-ChildItem -LiteralPath $script:ProjectRoot -Recurse -File -Filter 'install.ps1' -Force -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -notmatch '\\(community|\.staging|\.venv|\.tools|\.zwork|\.ragraf|node_modules|\.git)\\' })
+    $examined++
+    if ($installers.Count -ne 1) {
+        $names = ($installers | ForEach-Object { Get-RelativePath $_.FullName }) -join ', '
+        $problems.Add("установщиков с именем install.ps1 вне community/ и служебных каталогов: $($installers.Count) ($names) — источник обязан быть один")
+    }
+    else {
+        $relative = Get-RelativePath $installers[0].FullName
+        $examined++
+        if ($relative -ne 'scripts/install.ps1') {
+            $problems.Add("единственный установщик — $relative, а не scripts/install.ps1")
+        }
+        $examined++
+        $parseErrors = $null
+        $null = [System.Management.Automation.Language.Parser]::ParseFile($installers[0].FullName, [ref]$null, [ref]$parseErrors)
+        if ($parseErrors.Count -gt 0) {
+            $problems.Add("scripts/install.ps1 не разбирается парсером: ошибок $($parseErrors.Count), первая — $($parseErrors[0].Message)")
+        }
+    }
+
+    if ($examined -eq 0) {
+        return New-CheckResult -Name 'publication wrapper is present, sourced and has one installer' `
+            -Ok $false -Examined 0 -Details @('NOT-IMPLEMENTED: ни одного объекта не осмотрено — это ложный PASS')
+    }
+
+    return New-CheckResult -Name 'publication wrapper is present, sourced and has one installer' `
+        -Ok ($problems.Count -eq 0) -Examined $examined -Details $problems
+}
+
+function Test-ReleaseManifest {
+    <#
+    .SYNOPSIS
+        Поставка собирается по манифесту, собранное дерево проходит проверяльщик,
+        а гейт ловит все четыре заведомые порчи.
+
+    .DESCRIPTION
+        Измеренный дефект (этапы 1-2, 24.10.2026): публикация собиралась руками
+        в `.staging/release-v0.2` и отстала от кода на десять дней — обвязки
+        (`CHANGELOG`, `CONTRIBUTING`, `SECURITY`, `CITATION`, `README.ru`,
+        `.github/**`) в живом дереве не было вовсе, установщик существовал
+        в трёх версиях. Манифест и сборщик решают это только вместе с проверкой:
+        манифест без проверки сам становится четвёртой версией правды, и
+        расхождение с деревом никто не заметит.
+
+        Проверка формулируется через СВОЙСТВО, а не через написание строк.
+        Состав манифеста, гигиена путей, осмысленность причин у исключений,
+        соответствие пометок `active`/`guard` факту, сборка в песочницу, восемь
+        правил проверяльщика и гейт на четырёх порчах проверяет
+        `tools/check_release_manifest.py`; здесь добавляется то, что видно только
+        из PowerShell: файлы конвейера на месте и проверка не оставляет мусора
+        в живом дереве.
+
+        Молчаливый пропуск запрещён: нет скрипта или нет python — это провал,
+        а не «нечего проверять», иначе проверка зеленеет, ничего не осмотрев.
+    #>
+    $problems = [System.Collections.Generic.List[string]]::new()
+    $examined = 0
+
+    $pipeline = @(
+        'tools/release/manifest.toml'
+        'tools/release/relcommon.py'
+        'tools/release/build_release.py'
+        'tools/release/verify_release.py'
+        'tools/release/gate_release.py'
+        'tools/check_release_manifest.py'
+    )
+    foreach ($relative in $pipeline) {
+        $examined++
+        if (-not (Test-Path -LiteralPath (Join-Path $script:ProjectRoot $relative) -PathType Leaf)) {
+            $problems.Add("NOT-IMPLEMENTED: нет $relative — конвейер поставки неполон")
+        }
+    }
+    if ($problems.Count -gt 0) {
+        return New-CheckResult -Name 'release tree is built from the manifest and survives the gate' `
+            -Ok $false -Examined $examined -Details $problems
+    }
+
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $python) {
+        return New-CheckResult -Name 'release tree is built from the manifest and survives the gate' `
+            -Ok $false -Examined 0 -Details @('NOT-IMPLEMENTED: python не найден в PATH')
+    }
+
+    $probe = Join-Path $script:ProjectRoot 'tools/check_release_manifest.py'
+    $output = & $python.Source $probe 2>&1
+    $code = $LASTEXITCODE
+    $text = ($output | Out-String).Trim()
+    Write-Host "    проверка поставки: $text"
+
+    $lines = $output | Where-Object { $_ -is [string] }
+    $examinedText = ([regex]::Match($text, 'осмотрено:\s*(\d+)')).Groups[1].Value
+    if ($examinedText) { $examined += [int]$examinedText }
+
+    if ($code -ne 0) {
+        foreach ($line in $lines) {
+            if ($line -match '^\s*FAIL:') { $problems.Add(($line -replace '^\s*FAIL:\s*', '')) }
+        }
+        if ($problems.Count -eq 0) {
+            $problems.Add("проверка поставки завершилась кодом $code без расшифровки")
+        }
+    }
+
+    # Проверка обязана убирать за собой: песочница сборки создаётся во временном
+    # каталоге, и её след в живом дереве означал бы, что сборка писала внутрь
+    # индексируемого корпуса.
+    $examined++
+    $leftovers = @(Get-ChildItem -LiteralPath $script:ProjectRoot -Recurse -Directory -Force -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -like 'ragraf-manifest-check-*' -or $_.Name -like 'ragraf-gate-*' -or $_.Name -like 'ragraf-release-*' })
+    if ($leftovers.Count -gt 0) {
+        $names = ($leftovers | ForEach-Object { Get-RelativePath $_.FullName }) -join ', '
+        $problems.Add("в живом дереве остались песочницы конвейера поставки: $names")
+    }
+
+    if ($examined -eq 0) {
+        return New-CheckResult -Name 'release tree is built from the manifest and survives the gate' `
+            -Ok $false -Examined 0 -Details @('NOT-IMPLEMENTED: ни одного объекта не осмотрено — это ложный PASS')
+    }
+
+    return New-CheckResult -Name 'release tree is built from the manifest and survives the gate' `
+        -Ok ($problems.Count -eq 0) -Examined $examined -Details $problems
+}
 
 $script:CheckFunctions = @(
     'Test-ProjectLayout'
@@ -1066,9 +1862,20 @@ $script:CheckFunctions = @(
     'Test-JvmHeapSource'
     'Test-LanguageRouting'
     'Test-LexvecSchemaContract'
+    'Test-McpClientCompatibility'
+    'Test-AccessHygiene'
+    'Test-ModeHasProbe'
+    'Test-ExternalOpsAreRecorded'
     'Test-DocumentedNumbers'
     'Test-PowerShellVintage'
     'Test-SourceMaterialHygiene'
+    'Test-DatabaseLayerHonesty'
+    'Test-GlobalMapIsolation'
+    'Test-RouteAndDocumentWiring'
+    'Test-AnalyticsLocalOnly'
+    'Test-LicenseMetadataAgreement'
+    'Test-CommunityWrapper'
+    'Test-ReleaseManifest'
 )
 
 $script:CheckNames = @()

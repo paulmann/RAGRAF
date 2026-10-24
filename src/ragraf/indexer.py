@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import textdec, util
-from .config import ProjectConfig
+from .config import DOCUMENT_LANG, ProjectConfig
 from .corpus import CorpusScan
 from .embeddings import Embedder, EmbeddingUnavailable, truncate_for_embedding
 from .extract.css_html import MultiExtractor
@@ -613,6 +613,34 @@ class Indexer:
             processed += 1
             if check_budget is not None and processed % 32 == 0:
                 check_budget("ast", processed)
+            if cf.lang == DOCUMENT_LANG:
+                # Документы читает извлекатель, а не голый `read_bytes`: PDF и
+                # Office — контейнеры. Нет библиотеки или формат старый — файл
+                # учитывается как `metadata_only` с причиной, а не теряется молча.
+                from . import documents
+
+                doc = documents.extract(cf.abs_path)
+                if doc.status != "ok":
+                    file_rows.append(
+                        (rev_id, cf.path, cf.lang, 0, cf.sha256, "metadata_only",
+                         doc.reason, "")
+                    )
+                    parse_status["metadata_only"] = (
+                        parse_status.get("metadata_only", 0) + 1
+                    )
+                    continue
+                body = doc.text.encode("utf-8")
+                note = f"extract:{doc.kind}"
+                if doc.reason:
+                    note += f"; {doc.reason}"
+                file_rows.append(
+                    (rev_id, cf.path, cf.lang, len(doc.text.splitlines()),
+                     cf.sha256, "text", note, "utf-8")
+                )
+                parse_status["text"] = parse_status.get("text", 0) + 1
+                chunks.extend(self._text_chunks(cf.path, body, cfg, cf.lang))
+                continue
+
             try:
                 data = cf.abs_path.read_bytes()
             except OSError as exc:

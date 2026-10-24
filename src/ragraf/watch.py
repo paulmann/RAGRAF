@@ -366,6 +366,26 @@ def check(
             fresh.from_cache = True
             return fresh
 
+    # Дешёвый путь (шаг 0.2 плана). Измерено на корпусе RAGRAF 23.10.2026:
+    # полная сверка `current_hashes` — 1111 мс на 713 файлах (каждый файл
+    # читается и хешируется), отпечаток входа `stat_fingerprint` — 173 мс
+    # (только путь, размер и mtime). При совпадении отпечатка содержимое
+    # доказуемо то же с точностью до правки, сохранившей и размер, и время;
+    # `quick_check` именно поэтому возвращает None, когда доказать не удалось,
+    # и тогда ниже идёт прежний полный путь.
+    #
+    # Почему при включённом сборе структуры БД быстрый путь НЕ применяется:
+    # `check` в этом случае дополнительно сверяет структуру живой базы
+    # (`db_structure_changed`), а отпечаток файлов о ней ничего не говорит.
+    # Пропустить эту сверку значило бы выдать «свежо» без проверки — то есть
+    # ровно тот дефект, ради которого сторож и заведён.
+    _db_enabled = bool(getattr(getattr(cfg, "db", None), "enabled", False))
+    if not force and not _db_enabled:
+        quick = quick_check(cfg, cat)
+        if quick is not None:
+            _CACHE[cat] = (now, quick)
+            return quick
+
     corpus_hash, config_hash, files_now, actual = current_hashes(cfg)
     expected_hash, expected_config, rev_id = indexed_hashes(cat, cfg)
 

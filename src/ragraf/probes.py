@@ -57,16 +57,8 @@ USER_HOME = Path(os.path.expanduser("~"))
 DSH_HOME = Path(os.environ.get("DSH_HOME") or (USER_HOME / ".dsh"))
 DSH_PROFILE_PATCH = DSH_HOME / "profiles" / "desktop" / "cordis.patch.yml"
 
-# Расположение инструмента SagaAI задаётся настройкой окружения: инструмент
-# живёт в ЧУЖОМ проекте, и угадывать локальный путь нельзя — на другой машине он
-# другой. Пустое значение означает «не заявлен», и состояние сообщается как
-# «не найден», а не выдумывается.
-_saga_env = os.environ.get("RAGRAF_SAGA_ROOT") or ""
-SAGA_ROOT: Path | None = Path(_saga_env) if _saga_env else None
-SAGA_TOOL: Path | None = (
-    SAGA_ROOT / "orchestrators" / "dev_agent" / "functions" / "ragraf.py"
-    if SAGA_ROOT else None
-)
+SAGA_ROOT = Path(r"C:\!.Tihon\sagaai_edit_github")
+SAGA_TOOL = SAGA_ROOT / "orchestrators" / "dev_agent" / "functions" / "ragraf.py"
 SAGA_CONFIG = REPO / "config" / "sagaai.yaml"
 
 MODE_HTTP_PORT = 8765
@@ -348,16 +340,14 @@ def probe_harness() -> dict[str, Any]:
 
 def probe_sagaai() -> dict[str, Any]:
     """SagaAI: есть ли инструмент и конфиг корпуса, на который он ссылается."""
-    if not (SAGA_TOOL and SAGA_TOOL.is_file()):
+    if not SAGA_TOOL.is_file():
         return {
             "ok": False, "kind": "sagaai", "title": "SagaAI",
-            "detail": ("инструмент не найден: "
-                       f"{SAGA_TOOL or 'путь не задан (RAGRAF_SAGA_ROOT)'}"),
+            "detail": f"инструмент не найден: {SAGA_TOOL}",
             "action": ("если проект SagaAI лежит в другом каталоге, инструмент "
                        "подключается в его own репозитории: панель чужой проект "
                        "не правит"),
         }
-    assert SAGA_TOOL is not None  # проверено выше: читаем только найденный
     text = SAGA_TOOL.read_text(encoding="utf-8", errors="replace")
     m = re.search(r'RAGRAF_CONFIG",\s*r?"([^"]+)"', text)
     config = str(m.group(1)) if m else ""

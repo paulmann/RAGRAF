@@ -55,7 +55,7 @@ const UI = {
   quality: { q: '', onlyIssues: false, sel: '' },
   usage: { sel: '', sort: { key: 'calls', dir: 'desc' } },
   storage: { q: '', open: '' },
-  settings: { tab: 'global', q: '', sel: '' },
+  settings: { tab: 'global', q: '', sel: '', fmtQ: '' },
   mode: { tab: 'autoclaw', transport: 'stdio' },
   access: { q: '', channel: 'all', result: 'all', page: 0, perPage: 12 },
   databases: {},
@@ -3031,6 +3031,15 @@ function collectGlobal() {
     const raw = el.value;
     values[key] = (raw === 'true' || raw === 'false') ? raw === 'true' : Number(raw);
   });
+  // Форматы — отдельным списком: у них не число и не перечисление.
+  // Полный набор уходит как «*» (см. saveFormats): иначе формат, добавленный
+  // в реестр позже, не попал бы в индекс без повторного сохранения.
+  const boxes = Array.prototype.slice.call(document.querySelectorAll('[data-format]'));
+  if (boxes.length) {
+    const on = boxes.filter(function (box) { return box.checked; })
+      .map(function (box) { return box.getAttribute('data-format'); });
+    values.index_formats = on.length === boxes.length ? ['*'] : on;
+  }
   return values;
 }
 
@@ -3101,6 +3110,204 @@ async function saveProject(name) {
   }
 }
 
+/** Строка формата: чекбокс, идентификатор, расширения, способ разбора. */
+function formatRowHtml(f) {
+  const exts = (f.exts && f.exts.length ? f.exts : (f.names || [])).join(' ');
+  const hay = [f.id, f.title, f.group_title, exts, f.structure_title, f.note]
+    .join(' ').toLowerCase();
+  return '<label class="fmt-row" data-format-row data-hay="' + esc(hay) + '">'
+    + '<input type="checkbox" data-action="format-toggle" data-format="' + esc(f.id) + '"'
+    + (f.enabled ? ' checked' : '') + '>'
+    + '<span class="fmt-body">'
+    + '<span class="fmt-title">' + esc(f.title)
+    + ' <span class="mono muted">' + esc(f.id) + '</span></span>'
+    + (exts ? '<span class="fmt-meta mono">' + esc(exts) + '</span>' : '')
+    + '<span class="fmt-tag">' + esc(f.structure_title || '') + '</span>'
+    + (f.note ? '<span class="fmt-note">' + esc(f.note) + '</span>' : '')
+    + '</span></label>';
+}
+
+/**
+ * Пересчитать «включено N из M» и подсказку о сохранении.
+ *
+ * Счётчик считается по ФАКТИЧЕСКИМ чекбоксам, а не по ответу сервера:
+ * иначе после снятия галочки число оставалось бы прежним до сохранения,
+ * и было бы непонятно, что именно уйдёт на сервер.
+ */
+function updateFormatCounter() {
+  const boxes = Array.prototype.slice.call(document.querySelectorAll('[data-format]'));
+  const out = document.getElementById('formats-count');
+  if (!out) return;
+  const on = boxes.filter(function (box) { return box.checked; }).length;
+  out.textContent = t('formats enabled') + ': ' + num(on) + ' / ' + num(boxes.length);
+  const none = on === 0;
+  const hint = document.getElementById('formats-empty-hint');
+  if (hint) hint.hidden = !none;
+  const save = document.getElementById('save-formats');
+  if (save) save.disabled = none || !writeAllowed();
+}
+
+/** Отметить все видимые форматы или снять все: кнопки «все» и «ничего». */
+function setAllFormats(value) {
+  document.querySelectorAll('[data-format]').forEach(function (box) {
+    if (box.offsetParent !== null || box.closest('[data-format-row]').hidden === false) {
+      box.checked = value;
+    }
+  });
+  updateFormatCounter();
+}
+
+/**
+ * Фильтр форматов: прячет строки, не совпавшие с запросом.
+ *
+ * Почему правкой DOM, а не перерисовкой всей страницы: перерисовка теряет
+ * фокус в поле ввода, и фильтр становится неудобным — после первого символа
+ * курсор уходит. Здесь скрываются уже нарисованные строки, фокус остаётся.
+ */
+function applyFormatFilter(raw) {
+  const q = String(raw || '').trim().toLowerCase();
+  UI.settings.fmtQ = q;
+  let shown = 0;
+  document.querySelectorAll('[data-format-row]').forEach(function (row) {
+    const hay = row.getAttribute('data-hay') || '';
+    const ok = !q || hay.indexOf(q) >= 0;
+    row.hidden = !ok;
+    if (ok) shown += 1;
+  });
+  document.querySelectorAll('[data-format-group]').forEach(function (group) {
+    const any = Array.prototype.slice
+      .call(group.querySelectorAll('[data-format-row]'))
+      .some(function (row) { return !row.hidden; });
+    group.hidden = !any;
+  });
+  const found = document.getElementById('formats-found');
+  if (found) found.textContent = num(shown);
+  const empty = document.getElementById('formats-nothing');
+  if (empty) empty.hidden = shown > 0;
+}
+
+async function saveFormats() {
+  const boxes = Array.prototype.slice.call(document.querySelectorAll('[data-format]'));
+  const on = boxes.filter(function (box) { return box.checked; })
+    .map(function (box) { return box.getAttribute('data-format'); });
+  if (!on.length) {
+    showMessage(t('Pick at least one format: an empty list is not a valid setting.'), 'bad');
+    return;
+  }
+  // Полный набор отправляется как «*»: так формат, добавленный в реестр
+  // позже, попадёт в индекс сам, без повторного сохранения настроек.
+  const value = on.length === boxes.length ? ['*'] : on;
+  const button = document.getElementById('save-formats');
+  if (button) button.disabled = true;
+  setStatus(t('saving…'));
+  const data = await api('/api/settings/global', {
+    method: 'POST', body: JSON.stringify({ values: { index_formats: value } }),
+  });
+  if (button) button.disabled = false;
+  if (data && data.ok) {
+    setStatus(t('settings saved'), 'ok');
+    const note = t('Global settings saved. {note}', { note: serverText(data.note || '') });
+    showMessage(note, 'ok');
+    toast({ tone: 'ok', title: t('settings saved'), desc: note });
+    await refresh();
+  } else {
+    setStatus(t('save error'), 'bad');
+    const reason = t('Could not save: {reason}',
+      { reason: serverText((data && data.error) || t('unknown reason')) });
+    showMessage(reason, 'bad');
+    toast({ tone: 'bad', title: t('save error'), desc: reason });
+  }
+}
+
+/** Карточка «Форматы данных»: группы, чекбоксы, фильтр, счётчик. */
+function renderFormats(meta, head, panelOpen, panelClose) {
+  const list = meta.formats || [];
+  const groupOrder = ['code', 'document', 'data', 'unsupported'];
+  const groups = {};
+  list.forEach(function (f) {
+    const key = groupOrder.indexOf(f.group) >= 0 ? f.group : 'data';
+    (groups[key] = groups[key] || []).push(f);
+  });
+
+  const sections = groupOrder.filter(function (key) { return groups[key]; })
+    .map(function (key) {
+      const items = groups[key];
+      const on = items.filter(function (f) { return f.enabled; }).length;
+      return '<div class="fmt-group" data-format-group>'
+        + '<div class="fmt-group__head">'
+        + '<span class="fmt-group__title">' + esc(items[0].group_title || key) + '</span>'
+        + '<span class="small muted">' + num(on) + ' / ' + num(items.length) + '</span>'
+        + '</div>' + items.map(formatRowHtml).join('') + '</div>';
+    }).join('');
+
+  return '<section class="section" data-section="settings">' + head
+    + panelOpen
+    + (writeAllowed() ? '' : deniedCallout())
+    + card({
+      icon: 'layers', title: t('Data formats'),
+      desc: t('languages, documents and data — one registry'),
+      actions: searchField({
+        action: 'formats-filter', value: UI.settings.fmtQ,
+        placeholder: t('Filter formats'), aria: t('Filter formats'),
+      }),
+      body: '<div class="stack">'
+        + '<div class="fmt-tools">'
+        + '<span class="mono" id="formats-count">' + esc(t('formats enabled')) + '</span>'
+        + '<span class="small muted">' + esc(t('Found')) + ': '
+        + '<span id="formats-found">' + num(list.length) + '</span></span>'
+        + button({ s: 'sm', icon: 'check', label: t('enable all'),
+          action: 'formats-all' })
+        + button({ s: 'sm', icon: 'x', label: t('disable all'),
+          action: 'formats-none' })
+        + '</div>'
+        + '<p class="notice notice--warn" id="formats-empty-hint" hidden>'
+        + esc(t('Pick at least one format: an empty list is not a valid setting.'))
+        + '</p>'
+        + (sections || emptyHtml({ icon: 'search',
+          title: t('Nothing found for the given conditions') }))
+        + '<p class="small muted" id="formats-nothing" hidden>'
+        + esc(t('Nothing found for the given conditions')) + '</p>'
+        + '</div>',
+      foot: button({
+        v: 'primary', s: 'md', icon: 'check', label: t('Save formats'),
+        action: 'save-formats', id: 'save-formats', disabled: !writeAllowed(),
+      }) + '<span class="small muted">'
+        + esc(t('Turning a format off changes the corpus on the next freshness check and triggers reindexing.'))
+        + '</span>',
+    })
+    + panelClose
+    + '</section>';
+}
+
+/**
+ * Вкладка «Знания агентов»: встроенная читалка промта и research.
+ *
+ * Почему iframe, а не разметка в этом файле: документы большие (≈80 КиБ),
+ * а состояние панели перерисовывается целиком. Отдельная страница `/knowledge`
+ * держит собственное оглавление, поиск и кнопки копирования, поэтому в панели
+ * остаётся только рамка. `?embed=1` убирает её шапку и подвал: снаружи уже
+ * есть заголовок «Настройки».
+ */
+function renderKnowledge(head, panelOpen, panelClose) {
+  return '<section class="section" data-section="settings">' + head
+    + panelOpen
+    + '<div class="stack">'
+    + card({
+      icon: 'file',
+      title: t('Agent knowledge'),
+      desc: t('prompt, research and a checklist for launching the agent knowledge contour'),
+      actions: '<a class="btn btn--ghost btn--sm" href="/knowledge" target="_blank"'
+        + ' rel="noopener">' + esc(t('Open in a new tab')) + '</a>',
+      flush: true,
+      body: '<iframe class="knowledge-frame" src="/knowledge?embed=1"'
+        + ' title="' + esc(t('Agent knowledge')) + '" loading="lazy"'
+        + ' allow="clipboard-write"'
+        + ' style="width:100%;height:calc(100vh - 205px);min-height:620px;'
+        + 'border:0;display:block;background:var(--background)"></iframe>',
+    })
+    + '</div>' + panelClose + '</section>';
+}
+
 function renderSettings() {
   const meta = (currentState && currentState.settings) || {};
   const global = meta.global_settings || {};
@@ -3115,7 +3322,10 @@ function renderSettings() {
     group: 'settings', value: tab, label: t('Settings'), panel: 'settings-panel',
     items: [
       { k: 'global', label: t('Defaults'), icon: 'sliders' },
+      { k: 'formats', label: t('Formats'), icon: 'layers',
+        count: num(((meta.formats_summary || {}).enabled) || 0) },
       { k: 'project', label: t('By development'), icon: 'folder', count: num(names.length) },
+      { k: 'knowledge', label: t('Agent knowledge'), icon: 'file' },
     ],
   });
 
@@ -3130,6 +3340,14 @@ function renderSettings() {
   const panelOpen = '<div class="stack" id="settings-panel" role="tabpanel" tabindex="0"'
     + ' aria-labelledby="tab-settings-' + esc(tab) + '">';
   const panelClose = '</div>';
+
+  if (tab === 'formats') {
+    return renderFormats(meta, head, panelOpen, panelClose);
+  }
+
+  if (tab === 'knowledge') {
+    return renderKnowledge(head, panelOpen, panelClose);
+  }
 
   if (tab === 'global') {
     const visible = editable.filter(function (key) {
@@ -4128,9 +4346,26 @@ let activeSection = 'catalog';
 
 function savedSection() {
   let value = '';
-  try { value = window.localStorage.getItem(SECTION_KEY) || ''; } catch (e) { value = ''; }
+  try {
+    // Ссылка из документов ведёт прямо на вкладку: `?section=settings&tab=knowledge`.
+    // Параметр важнее запомненного раздела, иначе ссылка открывала бы прошлый экран.
+    value = new URLSearchParams(window.location.search).get('section') || '';
+    if (!value) value = window.localStorage.getItem(SECTION_KEY) || '';
+  } catch (e) { value = ''; }
   const known = SECTIONS.some(function (section) { return section.id === value; });
   return known ? value : 'dashboard';
+}
+
+/** Вкладка настроек из ссылки: нужна для прямого перехода на «Знания агентов». */
+function applyRequestedSettingsTab() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab');
+    const known = ['global', 'formats', 'project', 'knowledge'];
+    if (params.get('section') === 'settings' && known.indexOf(tab) >= 0) {
+      UI.settings.tab = tab;
+    }
+  } catch (e) { /* приватный режим или старый браузер */ }
 }
 
 /** Счётчики рядом с разделами: они отвечают на вопрос «где смотреть». */
@@ -4708,6 +4943,9 @@ function installActions() {
       case 'storage-open': UI.storage.open = UI.storage.open === id ? '' : id; redraw(); break;
       case 'settings-select': UI.settings.sel = id; redraw(); break;
       case 'save-global': saveGlobal(); break;
+      case 'save-formats': saveFormats(); break;
+      case 'formats-all': setAllFormats(true); break;
+      case 'formats-none': setAllFormats(false); break;
       case 'save-project': saveProject(id); break;
       case 'mode-apply': modeApply(); break;
       case 'mode-probe': modeProbe(); break;
@@ -4762,6 +5000,7 @@ function installActions() {
         break;
       }
       case 'quality-only-issues': UI.quality.onlyIssues = el.checked; redraw(); break;
+      case 'format-toggle': updateFormatCounter(); break;
       case 'access-channel': UI.access.channel = el.value; UI.access.page = 0; redraw(); break;
       case 'access-result': UI.access.result = el.value; UI.access.page = 0; redraw(); break;
       case 'mode-select': {
@@ -4783,6 +5022,7 @@ function installActions() {
       case 'quality-search': UI.quality.q = el.value; render(); break;
       case 'storage-search': UI.storage.q = el.value; render(); break;
       case 'settings-search': UI.settings.q = el.value; render(); break;
+      case 'formats-filter': applyFormatFilter(el.value); break;
       case 'settings-project-search': UI.settings.q = el.value; render(); break;
       case 'access-search': UI.access.q = el.value; UI.access.page = 0; render(); break;
       default: break;
@@ -4972,6 +5212,7 @@ async function start() {
   installActions();
   installAccountListeners();
   activeSection = savedSection();
+  applyRequestedSettingsTab();
   renderThemeMenu();
   renderToasts();
   await refresh();

@@ -1,80 +1,121 @@
-# RAGRAF Operations: Choice and Boundaries
+# Операции RAGRAF: выбор и границы
 
-Reference for the `ragraf-core` skill. The task is to choose an operation instead of
-reading files — and to know what an operation does not show.
+Справочник к навыку `ragraf-core`. Задача — выбирать операцию вместо чтения файлов
+и знать, чего операция не показывает.
 
-## 1. The full set
+## 1. Полный набор
 
-The facade declares 38 operations of the form `op_*` (`src/ragraf/facade.py`). The
-agent tool surface is 40 tools with the `ragraf_` prefix (`src/ragraf/mcp_server.py`).
-The difference is not an error, and it is not one-to-one. Five tools have no facade
-operation of their own — `context`, `ensure`, `task`, `usage`, `use_project`: they
-manage the corpus and the session rather than operate on a repository. Three facade
-operations are not exposed as tools: `calibrate`, `gate`, `task_set`.
-(Counts measured against the sources on 2026-10-16.)
+Фасад объявляет 39 операций вида `op_*` (`src/ragraf/facade.py`). Поверхность
+инструментов агента — 41 инструмент с префиксом `ragraf_`
+(`src/ragraf/mcp_server.py`). Разница не ошибка: инструментов больше, потому что
+дополнительно выставлены приведение корпуса в актуальное состояние, выбор корпуса,
+сводка телеметрии и состояние индекса, а одна операция фасада наружу не выставляется.
 
-## 2. By question type
+## 2. По типу вопроса
 
-| Question | Operation | Shows | Does not show |
+| Вопрос | Операция | Что показывает | Чего не показывает |
 |---|---|---|---|
-| Where is a symbol defined | `symbol` | file, lines, kind, signature, parsed parameters | the function body |
-| Where else is it used | `references` | all sites with references | execution order |
-| Who calls it | `callers` | callers with evidence | calls through a string or a data reference |
-| What does it call | `callees` | callees | same |
-| What will an edit affect | `impact` | places reachable in the graph | branch conflicts and runtime |
-| Structural slice | `slice` | context without bodies, only on a full CPG build | nothing at `capability=degraded` |
-| A symbol's body | `code` | the exact text | the meaning of the places calling it |
-| Repository map | `repo_map` | files and volumes within a budget | the links between them |
-| Search by meaning and words | `search` | chunks with paths and lines | link evidence — this is search, not the graph |
-| What is in a table | `schema` | columns and relations parsed from migrations | the actual state of a live database |
-| Who reads or writes a table | `table_usage` | read and write sites | database access rights |
-| Is this write valid | `write_check` | the write plan checked against the schema before execution | value types and constraints |
-| Who gets a permission and why | `policy_trace` | decision branches, refusal points | the user's actual role |
-| Styling classes | `class_usage` | whether a rule exists, where the class is applied | the final look in the browser, the cascade |
-| Routes and handlers | `routes` | HTTP routes and their handlers | behavior behind the handler |
-| Index currency | `freshness` | checksum divergence, reindexing when needed | the quality of the facts themselves |
-| Index state | `index_status` | revision, parse completeness, coverage, stages | nothing beyond the state |
-| Divergence ledger | `drift_report` | what changed after the revision | the bodies of the changes |
-| Live reading | `live_read` | the file's current content with difference marks | links and the graph |
-| Call statistics | `usage` | calls, facts, savings | the meaning of the facts |
-| Development registry | `catalog` | what is registered and with which numbers | the index contents |
+| Где определён символ | `symbol` | файл, строки, вид, подпись, разобранные параметры | тела функции |
+| Где ещё используется | `references` | все места со ссылками | порядок выполнения |
+| Кто вызывает | `callers` | вызывающие с доказательством | вызовы через строку или ссылку из данных |
+| Что вызывает | `callees` | вызываемые | то же |
+| Что затронет правка | `impact` | достижимые места по графу | конфликты веток и время выполнения |
+| Структурный срез | `slice` | контекст без тел, только при полной сборке CPG | ничего при `capability=degraded` |
+| Тело символа | `code` | точный текст | смысл вызывающих его мест |
+| Карта репозитория | `repo_map` | файлы и объёмы в бюджете | связи между ними |
+| Поиск по смыслу и словам | `search` | чанки с путями и строками | доказательство связи, это поиск, а не граф |
+| Несколько строк сразу; где копии и какая рабочая | `search_multi` | все вхождения по каждому запросу, кодировка файла, группировка по семействам, роль файла (точка входа / активный / копия) с ссылкой `path:line` | смысл найденного кода |
+| Какие файлы — копии друг друга | `duplicates` | группы «одно имя с номерами» и байт-идентичные, главный файл и доказательство его активности | намерение автора: копия может быть веткой развития |
+| Точки входа | `entrypoints` | роуты, HTTP-обработчики, CLI-скрипты, endpoint'ы разметки; с `path` — достижим ли файл | порядок выполнения внутри обработчика |
+| Что не подключено | `dead_code` | файлы и подпрограммы без входящих ссылок И вне достижимости, с причиной и списком оправданных (`refuted`) | «удалять»: это находка, а не решение |
+| Что в таблице | `schema` | колонки, типы, PK/UNIQUE/AUTO_INCREMENT и генерируемые колонки из миграций | фактическое состояние живой базы |
+| Кто читает или пишет таблицу | `table_usage` | места чтения и записи, текст запроса и способ вызова (`prepared`/прямой) | права доступа базы данных |
+| Можно ли так записать | `write_check` | сверка плана записи со схемой до выполнения | типы значений и ограничения |
+| Кто и почему получает право | `policy_trace` | ветви решения, точки отказа | фактическую роль пользователя |
+| Что в ЖИВОЙ базе | `db_schema` | базы, таблицы, колонки, типы, индексы | схему из миграций |
+| Устройство одной таблицы | `db_table` | колонки, индексы, ключи, скрытые поля | связь `derived` как факт |
+| Связи таблицы | `db_relations` | `stated` (факт) и `derived` (вывод) раздельно | считать вывод структурой |
+| Как выглядят данные | `db_sample` | сборный пример, домены значений | текущее состояние данных |
+| Что изменилось в структуре | `db_drift` | изменения между ревизиями И расхождения «миграции ↔ живая база» | изменение данных |
+| Чего нет в базе из используемого кодом | `db_cross` | `used_missing` (с источником имени, видом доступа и доказательством `path:line`), `unused` (с размером и признаком «база используется кодом»), `write_paths`, `case_mismatch` и **слепые зоны** `dynamic_sql` | что удалять: это находка, а не решение |
+| Что изменилось между ревизиями | `diff` | файлы, символы, рёбра, а также регрессии: `callers_lost` (символ потерял всех вызывающих) и `writes_lost` (таблица перестала заполняться) | смысл изменения: «исчезло» при `capability=degraded` может означать «не было разобрано» |
+| Что мы уже знаем о проекте | `note` / `notes` | короткие заметки с автором, временем и задачей | проверку: заметка — знание агента, а не факт индекса (`source: note`) |
+| Можно ли искать по файлам, а не по индексу | `gate` | решение `allow`/`ask`/`deny`, правило, причина и ответ в формате хука DSH (отказ — код 2) | что гейт перепишет команду: он только разрешает, спрашивает или отказывает |
+| Чем подтверждена работа по задаче | `task_stats` | готовый отчёт: обращения, факты, заменённое чтение, ответы по устаревшей ревизии, решения гейта, заметки | смысл фактов: это сводка по журналу, а не проверка кода |
+| Классы оформления | `class_usage` | описано правило или нет, где применён | итоговый вид в браузере, каскад |
+| Маршруты и обработчики | `routes` | HTTP-маршруты и их обработчики | поведение за обработчиком |
+| Актуальность индекса | `freshness` | расхождение сумм, при необходимости реиндексация | качество самих фактов |
+| Состояние индекса | `index_status` | ревизия, полнота разбора, покрытие, стадии | ничего сверх состояния |
+| Журнал расхождений | `drift_report` | что изменилось после ревизии | тела изменений |
+| Живое чтение | `live_read` | текущее содержимое файла с пометкой отличий | связи и граф |
+| Статистика обращений | `usage` | вызовы, факты, экономия | смысл фактов |
+| Реестр разработок | `catalog` | что заведено и с какими числами | содержимое индекса |
+| Куда идти за ответом | `route` (CLI `route`, `ragraf_route`) | кандидаты, причина выбора, состояние локального индекса | содержимое файлов: маршрут не цитирует |
+| Какие корни разрешены карте | CLI `sources list/add/remove/enable/disable/priority/secrets`; страница `/sources` | корни, правила, число файлов и секретных мест | содержимое; значения секретов не хранятся |
+| Что в карте метаданных | CLI `map status/scan/find` | имена, размеры, даты, отпечаток | текст файлов |
+| Отчёт о пользе и аналитика | CLI `feedback`, `analytics export/delete`; страница `/value` | агрегаты, оценки, копия перед удалением | пути и запросы: их нет в журнале |
 
-## 3. Choice rules
+## 3. Правила выбора
 
-1. **Navigation is an operation; content is reading.** «Where» is answered by an
-   operation; «how exactly it works» requires reading the fragment the operation
-   pointed to.
-2. **A write plan is always `write_check`.** It is the only check that catches a
-   nonexistent column before the code runs.
-3. **Permission decisions are always `policy_trace`.** Reading a large branch set
-   with the eyes is useless: an unknown action left allowed by default is visible
-   only statically.
-4. **Before editing markup — `class_usage`.** A missing rule in the styles is not an
-   error: the page renders with browser defaults and works.
-5. **`slice` only on a full build.** Otherwise the operation refuses with code 3 —
-   that is expected behavior, not breakage.
-6. **`live_read` — when the file definitely changed after the revision.** Otherwise
-   the index suffices, and it is cheaper.
+1. **Навигация — операция, содержание — чтение.** «Где» отвечает операция; «как
+   именно работает» требует чтения того фрагмента, который операция указала.
+2. **План записи — всегда `write_check`.** Это единственная проверка, которая
+   ловит несуществующую колонку до запуска кода.
+3. **Решения о правах — всегда `policy_trace`.** Читать большой набор ветвей глазами
+   бесполезно: неизвестное действие, оставшееся разрешённым по умолчанию, видно
+   только статически.
+4. **Перед правкой разметки — `class_usage`.** Отсутствие правила в стилях не даёт
+   ошибки: страница отрисуется оформлением браузера и будет работать.
+5. **`slice` только при полной сборке.** Иначе операция откажет с кодом 3 —
+   это ожидаемое поведение, а не поломка.
+6. **`live_read` — когда файл точно изменился после ревизии.** В остальных случаях
+   достаточно индекса, и это дешевле.
 
-## 4. How to read an answer
+## 4. Готовые рецепты (десять типовых вопросов)
 
-Mandatory envelope fields: `op` (operation), `index_rev` (which revision answered),
-`capability` (`full` or `degraded`), `drift` (whether unclosed divergences exist),
-`provenance` (where the data came from: index, live read, or mixed), `limits`,
-`result`, `stale_warnings`, `found`. Additionally there may be `error` and
-`freshness`.
+| Вопрос агента | Вызов | Что считается ответом |
+|---|---|---|
+| Где выводится эта строка | `search` / `search_multi` (несколько строк через `|`) | пути и строки; в `search_multi` — кодировка файла и роль копии |
+| Все списки расширений в проекте | `search_multi` с массивом запросов | все вхождения сразу, сгруппированные по семействам |
+| Кто пишет в таблицу | `table_usage --mode write` | места записи, текст запроса, `via` (prepared или прямой вызов) |
+| Какие ключи перевода есть | `search` по ключу, затем `references("tpl:<ключ>")` | шаблон и код в одном узле графа |
+| Что затронет правка кнопки/функции | `impact` | достижимые места с разделением факт/вывод |
+| Какие файлы — копии | `duplicates` | группы, главный файл, чем доказана активность |
+| Какие файлы не подключены | `entrypoints`, затем `dead_code` | список с причиной и опровергнутыми кандидатами |
+| Генерируемые колонки таблицы | `schema` (миграции), `db_schema` (живая база), `write_check` до записи | `generated_columns`, `generated_kind`, `columns_marks` |
+| Поиск в CP1251 | `search_multi` | поле `encoding` у каждого хита подтверждает, что файл прочитан верно |
+| Что изменилось после правок | `diff` (код), `drift_report` (расхождения), `db_drift` (схема) | ревизии, что добавилось и исчезло, кто потерял вызывающих, какая таблица перестала заполняться |
+| Ответ, а не сырые хиты | любая из `search`, `search_multi`, `symbol`, `callers`, `impact` с `answer=true` | готовая фраза и ссылки `файл:строка` (≤ 1–2 КБ) вместо структурного JSON |
+| «Что мы уже знаем» | `notes` (по задаче или подстроке), запись — `note` | заметки агента с автором и временем; `source: note` отличает их от фактов |
 
-- `found=false` at exit code 0 is «not found», not a failure.
-- Non-empty `stale_warnings` means the fact may have been touched by edits after the
-  revision; such a fact must not be served as current without the mark.
-- `provenance=live` means the data was obtained by reading the file, not from the
-  index: its evidence is the file itself, not the revision.
+## 5. Как читать ответ
 
-## 5. What the project does not have
+Обязательные поля конверта: `op` (операция), `index_rev` (какая ревизия отвечала),
+`capability` (`full` или `degraded`), `drift` (есть ли незакрытые расхождения),
+`provenance` (откуда данные: индекс, живое чтение или смешанно), `limits`,
+`result`, `stale_warnings`, `found`. Дополнительно бывают `error` и `freshness`.
 
-- There is no graph query language. Fixed operations only; text resembling a graph
-  query is rejected with a call error.
-- There is no standard dependency version-check command, although
-  `requirements.txt` promises one.
-- There is no unified test runner: there is no pytest configuration, and the files
-  in the `tests` directory run individually.
+- `found=false` при коде 0 — это «не найдено», а не сбой.
+- Непустые `stale_warnings` означают, что факт мог быть затронут правками после
+  ревизии; такой факт нельзя выдавать за актуальный без пометки.
+- `provenance=live` означает, что данные получены чтением файла, а не из индекса:
+  их доказательство — сам файл, а не ревизия.
+
+## 6. Чего в проекте нет
+
+- Нет языка запросов к графу. Только фиксированные операции; текст, похожий на
+  запрос к графу, отвергается с ошибкой вызова.
+- Нет штатной команды проверки версий зависимостей, хотя `requirements.txt`
+  её обещает.
+- Нет единого раннера проверок: конфигурации pytest нет, файлы в каталоге `tests`
+  запускаются по отдельности. Есть обёртка `python tools/check_all.py`
+  (группа `core` — по умолчанию, `--list` показывает состав групп), но это запуск
+  существующих скриптов, а не pytest.
+- Маршрут (`route`) не цитирует содержимое: он отвечает «куда идти», а не «что
+  написано». Для текста — `search` по рекомендованному корпусу.
+- URL-коннекторы (`ssh://`, `s3://`, `webdav://`, `http://`) не реализованы:
+  `sources add` отклоняет их с причиной. Сетевой корень — UNC или смонтированный
+  путь, только с `--network`.
+- Документы (PDF/DOCX/XLSX/PPTX/EML/ODT/RTF) читаются извлекателем; `path:line`
+  для них — строка извлечённого текста с маркером страницы/листа/слайда. OCR нет;
+  `.msg` без библиотеки `extract-msg` даёт `unavailable`, а не текст.

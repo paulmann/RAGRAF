@@ -169,6 +169,117 @@ LANG_BY_EXT = {
     ".rs": "rust",
     ".rb": "ruby",
     ".lua": "lua",
+    # --- Наборы распространённых языков (расширение карты) ---
+    #
+    # Зачем это здесь. Карта покрывала 16 языков с разбором плюс разметку и
+    # конфигурацию. За её пределами оставались целые пласты кода, который
+    # лежит на пользовательских дисках и в рабочих репозиториях: мобильная
+    # разработка (Kotlin, Swift, Dart), анализ данных (R, Julia, MATLAB),
+    # инженерные расчёты (Fortran), JVM-периферия (Scala, Groovy), блокчейн
+    # (Solidity), функциональные языки (F#, OCaml, Erlang, Elixir, Haskell),
+    # а также то, что вообще не является «языком приложения», но описывает
+    # инфраструктуру (Terraform/HCL, Dockerfile, Makefile, CMake).
+    #
+    # Что это меняет для существующих корпусов: НИЧЕГО. Файл попадает в скан
+    # только если его язык перечислен в `languages` конфигурации корпуса
+    # (`corpus.py`: `lang not in langs`), а список языков сам не меняется.
+    # Поэтому расширение карты безопасно и включается осознанно — командой
+    # update_corpus_configs.py или правкой конфига.
+    #
+    # Разбор. У части этих языков имена узлов грамматики не совпадают с
+    # привычными (R: `binary_operator`, F#: `named_module`), поэтому профиль
+    # строится не по именам узлов, а по tags-запросу грамматики (см.
+    # `extract/generic.py`, поле `tags`). Остальные идут текстовыми чанками:
+    # файл виден поиску, но узлов и рёбер не даёт — это названо честно, а не
+    # замаскировано пустым результатом.
+    ".kt": "kotlin",
+    ".kts": "kotlin",
+    ".swift": "swift",
+    ".scala": "scala",
+    ".sc": "scala",
+    ".dart": "dart",
+    ".r": "r",
+    # R Markdown — это markdown с блоками кода на R. Язык — markdown, а не r:
+    # разбирать его грамматикой R значило бы получить дерево с ошибками на
+    # всём файле. Для поиска это разметка с кодом внутри, и так он и
+    # индексируется.
+    ".rmd": "markdown",
+    ".jl": "julia",
+    # .m делят MATLAB и Objective-C. Выбран MATLAB: на пользовательских дисках
+    # и в инженерных проектах он встречается заметно чаще, а Objective-C
+    # остаётся доступен через .mm.
+    ".m": "matlab",
+    ".f": "fortran",
+    ".for": "fortran",
+    ".f77": "fortran",
+    ".f90": "fortran",
+    ".f95": "fortran",
+    ".f03": "fortran",
+    ".f08": "fortran",
+    ".sol": "solidity",
+    ".ex": "elixir",
+    ".exs": "elixir",
+    ".erl": "erlang",
+    ".hrl": "erlang",
+    ".hs": "haskell",
+    ".lhs": "haskell",
+    ".clj": "clojure",
+    ".cljs": "clojure",
+    ".cljc": "clojure",
+    ".edn": "clojure",
+    ".groovy": "groovy",
+    ".gradle": "groovy",
+    ".ml": "ocaml",
+    ".mli": "ocaml",
+    ".fs": "fsharp",
+    ".fsi": "fsharp",
+    ".fsx": "fsharp",
+    ".vb": "vb",
+    ".pas": "pascal",
+    ".dpr": "pascal",
+    ".dpk": "pascal",
+    ".lpr": "pascal",
+    ".mm": "objc",
+    ".zig": "zig",
+    ".nim": "nim",
+    ".cr": "crystal",
+    ".tcl": "tcl",
+    # .pro намеренно НЕ отнесён к Prolog: это расширение массово занято
+    # проектами Qt (`app.pro`), и разбор их грамматикой Prolog дал бы дерево
+    # с ошибками. Файл индексируется текстом — он не теряется, но и не
+    # притворяется кодом на языке, которого в нём нет.
+    ".pro": "text",
+    ".prolog": "prolog",
+    ".lisp": "lisp",
+    ".lsp": "lisp",
+    ".cl": "lisp",
+    ".scm": "lisp",
+    ".rkt": "lisp",
+    ".adb": "ada",
+    ".ads": "ada",
+    ".v": "verilog",
+    ".sv": "verilog",
+    ".svh": "verilog",
+    ".vhd": "vhdl",
+    ".vhdl": "vhdl",
+    ".asm": "asm",
+    ".s": "asm",
+    ".nasm": "asm",
+    ".gd": "gdscript",
+    ".vala": "vala",
+    ".elm": "elm",
+    ".tf": "hcl",
+    ".tfvars": "hcl",
+    ".mk": "make",
+    ".mak": "make",
+    ".cmake": "cmake",
+    ".scss": "scss",
+    ".less": "less",
+    ".vue": "vue",
+    ".svelte": "svelte",
+    ".graphql": "graphql",
+    ".gql": "graphql",
+    ".proto": "proto",
     # --- Конфигурация и данные ---
     # Раньше эти типы не индексировались, и по настройкам проекта поиск
     # ничего не находил. Между тем именно в них лежат имена параметров
@@ -192,7 +303,81 @@ LANG_BY_EXT = {
     # в поиск — а раньше не попадали вовсе.
     ".bat": "batch",
     ".cmd": "batch",
+    # --- Текстовые форматы данных и обмена (G2) ---
+    # Они не дают структуры (грамматики нет), но обязаны попадать в поиск:
+    # именно в них лежат выгрузки, журналы и табличные ответы, по которым
+    # задают вопросы. Язык берётся из уже существующих текстовых, чтобы не
+    # плодить имена, которых нет в конфигурациях корпусов.
+    ".csv": "text",
+    ".tsv": "text",
+    ".psv": "text",
+    ".log": "text",
+    ".out": "text",
+    ".err": "text",
+    ".properties": "ini",
+    ".psql": "sql",
+    ".mysql": "sql",
+    ".ndjson": "json",
+    ".jsonl": "json",
+    ".geojson": "json",
+    ".mht": "text",
+    ".mhtml": "text",
+    # --- Документы (G5) ---
+    # Отдельный язык `document`: извлечение идёт не чтением байтов, а
+    # разбором формата (см. `src/ragraf/documents.py`). Пока языка нет в
+    # списке `languages` корпуса, такие файлы не индексируются — это
+    # осознанно: разбор документов дороже и включается по решению владельца.
+    ".pdf": "document",
+    # Word: современный OOXML во всех вариантах (документ, макросы, шаблон)
+    # и старый двоичный .doc (Word 6/95/97-2003) — разбор в officebinary.py.
+    ".docx": "document",
+    ".docm": "document",
+    ".dotx": "document",
+    ".dotm": "document",
+    ".doc": "document",
+    # Excel: книга, книга с макросами, шаблон и старый BIFF8 .xls.
+    ".xlsx": "document",
+    ".xlsm": "document",
+    ".xltx": "document",
+    ".xltm": "document",
+    ".xls": "document",
+    # PowerPoint: презентация, макросы, показ, шаблон и старый .ppt.
+    ".pptx": "document",
+    ".pptm": "document",
+    ".ppsx": "document",
+    ".potx": "document",
+    ".ppt": "document",
+    # OpenDocument: текст, таблицы, презентации, рисунок.
+    ".odt": "document",
+    ".ods": "document",
+    ".odp": "document",
+    ".odg": "document",
+    # Почта и книги.
+    ".eml": "document",
+    ".msg": "document",
+    ".epub": "document",
+    ".rtf": "document",
+    # WPS Office: форматы совместимы с Word/Excel/PowerPoint 97 и читаются
+    # теми же разборщиками, поэтому отдельной библиотеки не требуют.
+    ".wps": "document",
+    ".et": "document",
+    ".dps": "document",
+    # Форматы известны, разборщика нет: файл учитывается как metadata_only
+    # с причиной. Молча пропускать их нельзя — вопрос «а Pages вы видите?»
+    # должен иметь ответ в отчёте.
+    ".pages": "document",
+    ".numbers": "document",
+    ".key": "document",
+    ".one": "document",
+    ".chm": "document",
+    ".djvu": "document",
 }
+
+# Язык документов (PDF, DOCX, XLSX, PPTX, EML). Извлечение идёт не чтением
+# байтов, а разбором формата (`src/ragraf/documents.py`), поэтому двоичная
+# проверка для него отключена. Пока язык не добавлен в `languages` корпуса,
+# документы не индексируются — разбор дороже и включается осознанно.
+DOCUMENT_LANG = "document"
 
 # Языки, для которых есть разбор деревом.
 #
@@ -209,12 +394,39 @@ TREE_LANGS = frozenset({
     "php", "css", "html",
     "javascript", "typescript", "python", "csharp", "perl", "bash",
     "powershell", "ruby", "lua", "go", "java", "c", "cpp",
+    # --- добавлено вместе с набором распространённых языков ---
+    #
+    # Разбор идёт тем же путём, но карта узлов берётся из tags-запроса
+    # грамматики (`LangProfile.tags`), а не из списка имён узлов. Причина
+    # измерена: у Kotlin объявление функции — `function_declaration`, у R
+    # функция объявляется через `binary_operator` (f <- function(...)), у F#
+    # всё лежит внутри `named_module`. Писать профиль на каждый язык значило
+    # бы выдумывать имена узлов; tags-запрос — часть грамматики, и он
+    # проверяется вызовом на пробном файле (tests/test_new_languages.py).
+    "rust", "kotlin", "swift", "scala", "dart", "r", "fsharp",
+    "ocaml", "solidity", "fortran", "matlab", "elm", "lisp",
 })
 
 # Расширения, по которым будет разбор деревом. Выводятся из карты выше:
 # ошибка в одном месте больше невозможна.
 PARSE_LANGS_EXT: dict[str, str] = {
     ext: lang for ext, lang in LANG_BY_EXT.items() if lang in TREE_LANGS
+}
+
+
+# Языки, у которых нет расширения: имя файла и есть признак языка.
+# Без этой карты Dockerfile и Makefile не попадали в индекс вовсе — их
+# `suffix` пуст, и определение языка возвращало None. Для проекта, где
+# сборка описана именно ими, это означало «кода нет».
+#
+# Сравнение идёт по имени в нижнем регистре. Составные имена (Dockerfile.prod,
+# Makefile.am) разбираются по основе: `language_of` отрезает первый сегмент.
+NAME_LANG: dict[str, str] = {
+    "dockerfile": "dockerfile",
+    "containerfile": "dockerfile",
+    "makefile": "make",
+    "gnumakefile": "make",
+    "cmakelists.txt": "cmake",
 }
 
 
@@ -593,6 +805,14 @@ class ProjectConfig:
     chunking: ChunkingConfig
     index: IndexConfig
     config_path: Path
+    # Включённые форматы данных (идентификаторы из `formats.py`).
+    #
+    # None означает «не ограничивать»: так ведёт себя корпус, у которого
+    # настройка не задана, а глобальные настройки недоступны. Пустой набор
+    # сюда попасть не может: `formats.normalize` превращает пустое значение
+    # в «все включены» — иначе выключение последней галочки молча оставило бы
+    # корпус без индекса, и это выглядело бы как потеря файлов.
+    formats: set[str] | None = None
     raw: dict[str, Any] = field(default_factory=dict)
 
     # ---------------- производные ----------------
@@ -660,7 +880,7 @@ class ProjectConfig:
         )
 
     def language_of(self, rel_path: str) -> str | None:
-        return LANG_BY_EXT.get(Path(rel_path).suffix.lower())
+        return self.language_of_static(rel_path)
 
     @staticmethod
     def language_of_static(rel_path: str) -> str | None:
@@ -671,7 +891,21 @@ class ProjectConfig:
         всего непонятного подставлялся «sql» — из-за этого непонятные файлы
         помечались миграциями.
         """
-        return LANG_BY_EXT.get(Path(rel_path).suffix.lower())
+        posix = str(rel_path).replace("\\", "/")
+        name = posix.rsplit("/", 1)[-1].lower()
+        # Имя проверяется ПЕРВЫМ. Измерено на CMakeLists.txt: суффикс `.txt`
+        # давал «простой текст» раньше, чем имя успевало сказать «CMake», и
+        # файл сборки индексировался как обычный текст. Dockerfile и Makefile
+        # расширения не имеют вовсе — для них это единственный путь.
+        if name in NAME_LANG:
+            return NAME_LANG[name]
+        ext = Path(posix).suffix.lower()
+        if ext:
+            lang = LANG_BY_EXT.get(ext)
+            if lang is not None:
+                return lang
+        base = name.split(".", 1)[0]
+        return NAME_LANG.get(base)
 
     def ensure_dirs(self) -> None:
         for path in (
@@ -681,6 +915,30 @@ class ProjectConfig:
             self.logs_dir,
         ):
             path.mkdir(parents=True, exist_ok=True)
+
+
+def _formats_mod():
+    """Реестр форматов. Импорт внутри функции — чтобы не плодить цикл."""
+    from . import formats as formats_mod
+
+    return formats_mod
+
+
+def _global_formats() -> set[str] | None:
+    """Форматы из глобальных настроек.
+
+    None означает «настройки недоступны» — тогда ограничения нет. Ловится
+    ровно три класса: отсутствие модуля, недоступный файл настроек и битый
+    JSON. Всё остальное обязано всплывать: молчаливое «все включены» при
+    ошибке кода скрыло бы дефект, а не пережило его.
+    """
+    try:
+        from . import settings as settings_mod
+
+        value = settings_mod.SettingsStore().load().get("index_formats")
+    except (ImportError, OSError, ValueError):
+        return None
+    return _formats_mod().normalize(value)
 
 
 def _as_list(value: Any, default: list[str]) -> list[str]:
@@ -727,6 +985,27 @@ def load(config_path: str | Path) -> ProjectConfig:
     include = _as_list(data.get("include"), ["**/*.php"])
     exclude = list(DEFAULT_EXCLUDES) + _as_list(data.get("exclude"), [])
     secrets = list(DEFAULT_SECRETS) + _as_list(data.get("secrets_exclude"), [])
+
+    # --- форматы данных: что индексировать ---
+    # Источники по порядку: ключ `formats` в конфиге корпуса, затем глобальная
+    # настройка `index_formats` (панель → «Форматы»), затем «все».
+    #
+    # Настройка вынесена в глобальные значения, потому что вопрос «индексировать
+    # ли PDF» не зависит от проекта. Корпус, которому нужно иначе, задаёт
+    # `formats:` у себя — и тогда видно, что это осознанное исключение.
+    formats: set[str] | None
+    if "formats" in data:
+        formats = _formats_mod().normalize(_as_list(data.get("formats"), []))
+    elif (data.get("index") or {}).get("index_formats") is not None:
+        # Второй способ задать то же самое. Он существует потому, что панель
+        # пишет настройки разработки именно в секцию `index`, и без этой
+        # ветки сохранённое из панели значение молча не действовало бы:
+        # выглядело бы как «настройка есть, а поведение прежнее».
+        formats = _formats_mod().normalize(
+            _as_list((data.get("index") or {}).get("index_formats"), [])
+        )
+    else:
+        formats = _global_formats()
 
     db_raw = data.get("db") or {}
     db = DbConfig(
@@ -830,5 +1109,6 @@ def load(config_path: str | Path) -> ProjectConfig:
         chunking=chunking,
         index=index,
         config_path=path,
+        formats=formats,
         raw=data,
     )

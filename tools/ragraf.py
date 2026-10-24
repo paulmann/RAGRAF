@@ -34,5 +34,15 @@ if str(SRC) not in sys.path:
 
 from ragraf.cli import main  # noqa: E402
 
+# Атрибуция вызова (шаг 0.5 плана). Замер 23.10.2026: 731 запись из 912 в
+# журнале корпуса RAGRAF имела agent="unknown", потому что командный путь не
+# называл себя. Явное имя здесь честнее пустоты: это действительно вызов из
+# командной строки, а не агент с именем «unknown». Значение из окружения
+# сильнее: если вызывающий назвался сам, его имя и сохраняется.
+import os as _os  # noqa: E402
+
+_os.environ.setdefault("RAGRAF_AGENT", "ragraf-cli")
+_os.environ.setdefault("RAGRAF_AGENT_KIND", "internal")
+
 if __name__ == "__main__":
     raise SystemExit(main())

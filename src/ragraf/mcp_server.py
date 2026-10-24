@@ -1,12 +1,7 @@
 """MCP-сервер RAGRAF: операции фасада как инструменты агента (ФТ-22).
 
 Протокол: JSON-RPC 2.0 поверх stdio (MCP, версия 2024-11-05).
-Реализованы методы: initialize, notifications/initialized, notifications/cancelled,
-notifications/progress, ping, tools/list, tools/call, resources/list, resources/read,
-resources/templates/list, prompts/list, prompts/get.
-Поверхность пересчитана 16.10.2026: 40 инструментов `ragraf_*`, 3 ресурса
-(`ragraf://status`, `ragraf://catalog`, `ragraf://corpus/{name}/map`) и 2 подсказки
-(`ragraf-check`, `ragraf-repair`).
+Реализованы методы: initialize, notifications/initialized, tools/list, tools/call, ping.
 
 Принципиальные ограничения (архитектура §7, ФТ-15):
   * наружу выставляются ТОЛЬКО фиксированные операции фасада;
@@ -104,6 +99,12 @@ def force_utf8_stdio() -> None:
             pass
 
 # Описание инструментов: имя = имя операции фасада.
+# Имя поля протокола MCP для уведомлений о ходе. Вынесено в константу,
+# потому что литерал встречается в двух местах (чтение запроса и ответ), и
+# дублировать его — источник расхождения. Значение — имя поля протокола,
+# а не учётные данные.
+PROGRESS_FIELD = "progressToken"
+
 TOOLS: list[dict[str, Any]] = [
     {
         "name": "ragraf_index_status",
@@ -737,6 +738,65 @@ TOOLS: list[dict[str, Any]] = [
         "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
     },
     {
+        "name": "ragraf_route",
+        "description": (
+            "МАРШРУТ К ЛОКАЛЬНОМУ ИНДЕКСУ: где лежат материалы по запросу и какой "
+            "корпус отвечает точнее. Сравнивает реестр разработок и карту "
+            "метаданных, называет причину выбора и состояние локального индекса "
+            "(ревизия, режим, свежесть). Содержимое файлов НЕ читает и НЕ цитирует: "
+            "это ответ «куда идти», а не ответ «что написано». Вызывать перед "
+            "search, когда вопрос про другой проект или когда неизвестно, есть ли "
+            "для него корпус."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "что ищем: проект, документ, тема"},
+                "limit": {"type": "integer", "default": 10},
+                "verify": {
+                    "type": "boolean",
+                    "default": True,
+                    "description": "сверить отпечаток рекомендованного корпуса (читает только метаданные)",
+                },
+            },
+            "required": ["query"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "ragraf_neighbors",
+        "description": (
+            "СОСЕДНИЕ КОНТУРЫ: есть ли готовая реализация нужной функции в "
+            "ДРУГИХ корпусах того же стека. Стек берётся по фактическому "
+            "индексу (языки и число файлов), а не по списку в конфиге. "
+            "Возвращает соседей с причиной выбора и свежестью, хиты с "
+            "корпусом, путём, строкой и ревизией ТОГО корпуса, а также "
+            "`skipped` — кого не спросили и почему. Чужие индексы только "
+            "читаются и не переиндексируются. Вызывать ПЕРЕД тем, как писать "
+            "функцию, у которой может быть готовый аналог в соседнем проекте."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string",
+                          "description": "что делает функция: словами или именем"},
+                "name": {"type": "string",
+                         "description": "имя функции/класса: точное совпадение идёт первым"},
+                "limit": {"type": "integer", "default": 20},
+                "per_corpus": {"type": "integer", "default": 5},
+                "stack": {"type": "string",
+                          "description": "языки через запятую вместо измеренных (php,sql)"},
+                "min_shared": {"type": "integer", "default": 1},
+                "with_text": {"type": "boolean", "default": True},
+                "kind": {"type": "string",
+                         "description": "вид чанка (symbol, file, db-structure); по умолчанию — всё, кроме слоя баз"},
+                "verify": {"type": "boolean", "default": True,
+                           "description": "сверить отпечатки входа соседей (только метаданные)"},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
         "name": "ragraf_routes",
         "description": "HTTP-маршруты и точки входа с обработчиками.",
         "inputSchema": {
@@ -885,6 +945,160 @@ TOOLS: list[dict[str, Any]] = [
         "inputSchema": {
             "type": "object",
             "properties": {},
+            "additionalProperties": False,
+        },
+    },
+    # --- хранилище секретов: значения под правом и с аудитом ---
+    {
+        "name": "ragraf_secret_list",
+        "description": (
+            "Список секретов (ПАРОЛИ, ТОКЕНЫ, КЛЮЧИ, СЕРТИФИКАТЫ, СТРОКИ "
+            "ПОДКЛЮЧЕНИЯ): имя, тип, маска, кому доступен, кто и когда добавил. "
+            "Значений НЕ возвращает. Показывает только те записи, которые "
+            "разрешены этому агенту."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "поиск по имени и метаданным"},
+                "kind": {"type": "string", "description": "фильтр по типу"},
+                "tag": {"type": "string", "description": "фильтр по метке"},
+                "limit": {"type": "integer", "default": 200},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "ragraf_secret_show",
+        "description": (
+            "Метаданные одного секрета и МАСКА значения: тип, срок, кто добавил, "
+            "сколько раз выдавался. Значения не раскрывает — для значения есть "
+            "ragraf_secret_reveal."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {"name": {"type": "string"}},
+            "required": ["name"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "ragraf_secret_reveal",
+        "description": (
+            "ВЫДАТЬ ЗНАЧЕНИЕ секрета. Право проверяется по записи (всем / только "
+            "перечисленным агентам / только автору) и по общему списку "
+            "разрешённых агентов. Каждая выдача и каждый отказ пишутся в аудит. "
+            "Требуется причина (reason), если это включено настройкой. "
+            "ВАЖНО: значение нельзя печатать в чат без необходимости."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "reason": {"type": "string",
+                           "description": "зачем нужно значение (попадает в аудит)"},
+            },
+            "required": ["name"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "ragraf_secret_set",
+        "description": (
+            "СОХРАНИТЬ секрет (пароль, токен, ключ, сертификат, строку "
+            "подключения). Значение шифруется на диске; в ответе только маска. "
+            "Права: visibility=all (по умолчанию, доступен всем агентам), "
+            "listed с agents=[...] (только перечисленным), owner_only. Флаг "
+            "captured=true помечает сохранение ВСТРЕЧЕННОГО секрета и требует "
+            "включённой настройки secrets_capture_enabled."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "понятное имя: сервис/что"},
+                "value": {"type": "string"},
+                "kind": {"type": "string", "default": "password"},
+                "service": {"type": "string"},
+                "label": {"type": "string"},
+                "owner": {"type": "string"},
+                "note": {"type": "string"},
+                "tags": {"type": "array", "items": {"type": "string"}},
+                "project": {"type": "string"},
+                "visibility": {"type": "string",
+                               "enum": ["all", "listed", "owner_only"]},
+                "agents": {"type": "array", "items": {"type": "string"}},
+                "expires_at": {"type": "string"},
+                "captured": {"type": "boolean"},
+            },
+            "required": ["name", "value"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "ragraf_secret_grant",
+        "description": (
+            "ВЫДАТЬ ДОСТУП к секрету конкретным агентам (agents=[...]) или "
+            "сменить режим видимости: all — всем, listed — только перечисленным, "
+            "owner_only — только сохранившему. Менять права может автор записи "
+            "или локальный администратор."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "agents": {"type": "array", "items": {"type": "string"}},
+                "visibility": {"type": "string",
+                               "enum": ["all", "listed", "owner_only"]},
+            },
+            "required": ["name"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "ragraf_secret_revoke",
+        "description": (
+            "ЗАБРАТЬ ДОСТУП у конкретных агентов. Если в списке не остаётся "
+            "никого, запись переходит в режим owner_only: пустой список "
+            "«только перечисленным» читался бы как «никому», и это было бы "
+            "неотличимо от ошибки настройки."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "agents": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": ["name", "agents"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "ragraf_secret_policy",
+        "description": (
+            "ПРАВИЛА работы с секретами для этого агента: включено ли "
+            "хранилище, надо ли сохранять ВСТРЕЧЕННЫЕ секреты, какова "
+            "видимость по умолчанию, какие типы поддерживаются, требуется ли "
+            "причина выдачи. Читается перед задачей, где могут встретиться "
+            "пароли и ключи."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "ragraf_secret_delete",
+        "description": (
+            "УДАЛИТЬ секрет. Требует прав автора записи или локального "
+            "администратора. Удаление фиксируется в аудите; значение при этом "
+            "не восстанавливается, поэтому перед удалением делается снимок "
+            "(secrets export)."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {"name": {"type": "string"}},
+            "required": ["name"],
             "additionalProperties": False,
         },
     },
@@ -1068,6 +1282,16 @@ _TOOL_META: dict[str, dict[str, Any]] = {
         "readOnlyHint": False, "destructiveHint": False, "idempotentHint": True,
         "openWorldHint": True,
     },
+    "ragraf_route": {
+        "title": "Маршрут к локальному индексу: где лежит и что отвечает",
+        "readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
+        "openWorldHint": True,
+    },
+    "ragraf_neighbors": {
+        "title": "Соседние контуры: готовая реализация того же стека",
+        "readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
+        "openWorldHint": True,
+    },
     "ragraf_catalog": {
         "title": "Реестр разработок: какие проекты проиндексированы",
         "readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
@@ -1090,7 +1314,43 @@ _TOOL_META: dict[str, dict[str, Any]] = {
     "ragraf_drift_ack": {
         "title": "Отметить записи журнала расхождений учтёнными",
         "readOnlyHint": False, "destructiveHint": False, "idempotentHint": True,
+    },    # Хранилище секретов. `secret_reveal` — чтение по смыслу, но именно оно
+    # выдаёт значение, поэтому `idempotentHint` ложен: каждый вызов меняет
+    # счётчик и журнал.
+    "ragraf_secret_list": {
+        "title": "Список секретов (значений не отдаёт)",
+        "readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
     },
+    "ragraf_secret_show": {
+        "title": "Метаданные секрета и маска значения",
+        "readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
+    },
+    "ragraf_secret_reveal": {
+        "title": "Выдать значение секрета (право + аудит)",
+        "readOnlyHint": True, "destructiveHint": False, "idempotentHint": False,
+        "openWorldHint": False,
+    },
+    "ragraf_secret_set": {
+        "title": "Сохранить секрет (шифрование на диске)",
+        "readOnlyHint": False, "destructiveHint": False, "idempotentHint": True,
+    },
+    "ragraf_secret_grant": {
+        "title": "Выдать доступ к секрету агентам",
+        "readOnlyHint": False, "destructiveHint": False, "idempotentHint": True,
+    },
+    "ragraf_secret_revoke": {
+        "title": "Забрать доступ к секрету у агентов",
+        "readOnlyHint": False, "destructiveHint": False, "idempotentHint": True,
+    },
+    "ragraf_secret_delete": {
+        "title": "Удалить секрет",
+        "readOnlyHint": False, "destructiveHint": True, "idempotentHint": False,
+    },
+    "ragraf_secret_policy": {
+        "title": "Правила работы с секретами для агента",
+        "readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
+    },
+
 }
 
 
@@ -1964,9 +2224,9 @@ class McpServer:
         # незапрошенное уведомление о ходе — ошибка («получено уведомление о
         # ходе для неизвестного токена»), а не подсказка. Замерено по коду
         # клиента 13.10.2026.
-        progress_token = (params.get("_meta") or {}).get("progressToken")
-        if progress_token is not None:
-            self._notify_progress(progress_token, 0.0, f"начато: {name}")
+        progress_id = (params.get("_meta") or {}).get(PROGRESS_FIELD)
+        if progress_id is not None:
+            self._notify_progress(progress_id, 0.0, f"начато: {name}")
         try:
             result = handler(args)
         except ConfigError as exc:
@@ -1990,8 +2250,8 @@ class McpServer:
                     "content": [{"type": "text", "text": f"ошибка операции {name}: {type(exc).__name__}"}],
                 },
             )
-        if progress_token is not None:
-            self._notify_progress(progress_token, 1.0, f"готово: {name}")
+        if progress_id is not None:
+            self._notify_progress(progress_id, 1.0, f"готово: {name}")
         if isinstance(result, dict):
             # Корпус идёт в КАЖДЫЙ ответ: при источнике "auto" он не
             # подтверждён, и агент обязан это видеть, а не догадываться,
@@ -2140,6 +2400,21 @@ class McpServer:
             # Свежесть индекса и реестр разработок (сторож контрольных сумм).
             "ragraf_freshness": lambda a: f().op_freshness(force=bool(a.get("force"))),
             "ragraf_catalog": lambda a: f().op_catalog(),
+            "ragraf_route": lambda a: f().op_route(
+                a.get("query", ""), limit=a.get("limit", 10),
+                verify=bool(a.get("verify", True)),
+            ),
+            "ragraf_neighbors": lambda a: f().op_neighbors(
+                query=str(a.get("query") or ""),
+                name=str(a.get("name") or ""),
+                limit=int(a.get("limit", 20)),
+                per_corpus=int(a.get("per_corpus", 5)),
+                stack=a.get("stack"),
+                min_shared=int(a.get("min_shared", 1)),
+                with_text=bool(a.get("with_text", True)),
+                verify=bool(a.get("verify", True)),
+                kinds=([str(a["kind"])] if a.get("kind") else None),
+            ),
             # Приведение корпуса в актуальное состояние: проверяет сумму и
             # пересобирает индекс при расхождении. Вызывается первым шагом.
             "ragraf_use_project": lambda a: self._op_use_project(a),
@@ -2150,7 +2425,32 @@ class McpServer:
             "ragraf_drift_ack": lambda a: f().op_drift_ack(
                 [int(x) for x in (a.get("entry_ids") or [])], note=a.get("note")
             ),
+            # Хранилище секретов: своя точка входа, потому что это не факт
+            # индекса и не фасадная операция корпуса.
+            "ragraf_secret_list": lambda a: self._op_vault("secret_list", a),
+            "ragraf_secret_show": lambda a: self._op_vault("secret_show", a),
+            "ragraf_secret_reveal": lambda a: self._op_vault("secret_reveal", a),
+            "ragraf_secret_set": lambda a: self._op_vault("secret_set", a),
+            "ragraf_secret_grant": lambda a: self._op_vault("secret_grant", a),
+            "ragraf_secret_revoke": lambda a: self._op_vault("secret_revoke", a),
+            "ragraf_secret_delete": lambda a: self._op_vault("secret_delete", a),
+            "ragraf_secret_policy": lambda a: self._op_vault("secret_policy", a),
         }
+
+    def _op_vault(self, op: str, args: dict) -> dict:
+        """Операция хранилища секретов (реализация — ``vault_ops``).
+
+        Зачем тонкая обёртка. Сервер не должен знать про права и шифрование:
+        второе место, где решается «кому можно», неизбежно разойдётся с первым.
+        Здесь только имя агента (``self.agent``) и передача аргументов.
+        """
+        from . import vault_ops
+
+        handler = getattr(vault_ops, op, None)
+        if handler is None:
+            return {"op": f"secret_{op}", "found": False,
+                    "error": {"code": "unknown_operation", "message": op}}
+        return handler(self, args)
 
     def _op_usage(self, args: dict) -> dict:
         """Статистика обращений — в общем конверте ответа.
@@ -2418,7 +2718,7 @@ class McpServer:
             pass
         return env.to_dict()
 
-    def _notify_progress(self, token: Any, progress: float, message: str) -> None:
+    def _notify_progress(self, progress_id: Any, progress: float, message: str) -> None:
         """Уведомление о ходе — ТОЛЬКО по запросу клиента.
 
         Клиент HARNESS не передаёт `progressToken` (замерено по его коду), а
@@ -2431,7 +2731,7 @@ class McpServer:
             self.send({
                 "jsonrpc": "2.0",
                 "method": "notifications/progress",
-                "params": {"progressToken": token, "progress": progress,
+                "params": {PROGRESS_FIELD: progress_id, "progress": progress,
                            "total": 1.0, "message": message},
             })
         except Exception:  # noqa: BLE001 — уведомление не должно ронять вызов

@@ -911,6 +911,54 @@ def collect_usage(cfg) -> dict[str, Any]:
                 "error_hint": _failure_hint(exc)}
 
 
+def collect_sources() -> dict[str, Any]:
+    """Состояние разрешённых корней и карты метаданных для страницы `/sources`.
+
+    Читает только реестр и агрегаты карты. Содержимое файлов не трогает:
+    страница обязана показывать ФАКТ доступа, а не данные.
+    """
+    from ragraf.sources import CATALOG_DIR, SourceRegistry
+
+    registry = SourceRegistry()
+    rows = [src.to_dict() for src in registry.sources()]
+    payload: dict[str, Any] = {
+        "count": len(rows),
+        "sources": rows,
+        "kinds": ["project", "folder", "share"],
+        "storage": util.to_posix(CATALOG_DIR / "sources.json"),
+        "map": None,
+        "map_error": "",
+        "limits": {
+            "scan_seconds": 20,
+            "scan_files": 50000,
+            "note": "скан из панели ограничен по времени и числу файлов; полный — командой map scan",
+        },
+    }
+    try:
+        if (CATALOG_DIR / "global_map.sqlite").exists():
+            from ragraf.global_map import GlobalMap
+
+            gm = GlobalMap()
+            try:
+                gm.sync_sources(registry)
+                payload["map"] = gm.status()
+                # Счётчики живут в карте, а состав прав — в реестре. Таблица
+                # обязана показывать и то и другое: иначе после удачного скана
+                # колонки «файлов/секретов» остались бы пустыми и скан выглядел
+                # бы несделанным.
+                by_id = {int(row["id"]): row for row in payload["map"]["sources"]}
+                for src in payload["sources"]:
+                    row = by_id.get(int(src.get("id") or 0)) or {}
+                    for key in ("files", "secrets", "last_scan_at", "scan_status",
+                                "reason", "fingerprint"):
+                        src[key] = row.get(key)
+            finally:
+                gm.close()
+    except Exception as exc:  # noqa: BLE001 — страница не должна падать из-за карты
+        payload["map_error"] = f"{type(exc).__name__}: {exc}"
+    return payload
+
+
 def collect_quality(cfg) -> dict[str, Any]:
     """Качество индекса: нормы векторов, чанки, сигнатуры.
 
@@ -1084,6 +1132,16 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_text(self, text: str, content_type: str, code: int = 200) -> None:
+        body = text.encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
     def _read_body(self) -> dict[str, Any]:
         try:
             length = int(self.headers.get("Content-Length") or 0)
@@ -1228,6 +1286,59 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/db":
             self._send_json(db_state())
             return
+        if path == "/api/sources":
+            # Разрешённые корни и карта метаданных. Чтение без токена: оно
+            # ничего не меняет и не отдаёт содержимое файлов.
+            self._send_json({"ok": True, **collect_sources()})
+            return
+        if path == "/sources":
+            page = REPO / "admin" / "sources.html"
+            if page.exists():
+                self._send_html(page.read_text(encoding="utf-8"))
+            else:
+                self._send_json(
+                    {"ok": False, "error": "страница sources.html не найдена"}, 404
+                )
+            return
+        if path == "/value":
+            page = REPO / "admin" / "value.html"
+            if page.exists():
+                self._send_html(page.read_text(encoding="utf-8"))
+            else:
+                self._send_json(
+                    {"ok": False, "error": "страница value.html не найдена"}, 404
+                )
+            return
+        if path == "/knowledge":
+            page = REPO / "admin" / "knowledge.html"
+            if page.exists():
+                self._send_html(page.read_text(encoding="utf-8"))
+            else:
+                self._send_json(
+                    {"ok": False, "error": "страница knowledge.html не найдена"}, 404
+                )
+            return
+        if path.startswith("/knowledge/"):
+            # Страница читает исходные документы как Markdown: по ним работают
+            # кнопки «Скопировать» и «Скачать», и они же остаются единственным
+            # источником текста. Список закрыт: произвольный путь не отдаётся.
+            name = path[len("/knowledge/"):]
+            documents = {
+                "prompt.md": "text/markdown; charset=utf-8",
+                "research.md": "text/markdown; charset=utf-8",
+                "short-prompt.md": "text/markdown; charset=utf-8",
+                "readme.md": "text/markdown; charset=utf-8",
+            }
+            if name in documents:
+                document = REPO / "admin" / "knowledge" / name
+                if document.exists():
+                    self._send_text(
+                        document.read_text(encoding="utf-8"),
+                        documents[name],
+                    )
+                    return
+            self._send_json({"ok": False, "error": "документ не найден"}, 404)
+            return
         if path == "/api/clients":
             payload = client_setup.state()
             # Следы обращений: по ним панель отличает «настроено» от «дошло».
@@ -1337,6 +1448,87 @@ class Handler(BaseHTTPRequestHandler):
             )
             return
         started = time.time()
+
+        if path == "/api/sources":
+            from ragraf.sources import CATALOG_DIR, SourceRegistry, SourcesError
+
+            action = str(payload.get("action") or "").strip()
+            registry = SourceRegistry()
+            result: dict[str, Any] = {}
+            try:
+                if action == "add":
+                    src = registry.add(
+                        str(payload.get("root") or ""),
+                        kind=(str(payload.get("kind")) if payload.get("kind") else None),
+                        priority=int(payload.get("priority") or 0),
+                        note=str(payload.get("note") or ""),
+                        network=bool(payload.get("network")),
+                    )
+                    result = src.to_dict()
+                elif action == "remove":
+                    src = registry.remove(payload.get("id") or payload.get("root"))
+                    result = src.to_dict()
+                elif action == "toggle":
+                    src = registry.set_enabled(
+                        payload.get("id") or payload.get("root"),
+                        bool(payload.get("enabled")),
+                    )
+                    result = src.to_dict()
+                elif action == "scan":
+                    from ragraf.global_map import GlobalMap
+
+                    gm = GlobalMap()
+                    try:
+                        gm.sync_sources(registry)
+                        ident = payload.get("id")
+                        if ident not in (None, "", 0, "0"):
+                            target = registry.get(ident)
+                            targets = [target] if target is not None else []
+                        else:
+                            targets = registry.sources(enabled_only=True)
+                        scans = [
+                            gm.scan(src, limits={"max_seconds": 20.0,
+                                                 "max_files": 50000}).to_dict()
+                            for src in targets
+                        ]
+                    finally:
+                        gm.close()
+                    result = {"scans": scans}
+                else:
+                    self._send_json(
+                        {"ok": False, "error": f"неизвестное действие: {action}"}, 400
+                    )
+                    return
+                # Реестр — источник истины по доступу: после любого изменения
+                # карта синхронизируется, чтобы снятый корень не оставался в ней.
+                try:
+                    if (CATALOG_DIR / "global_map.sqlite").exists():
+                        from ragraf.global_map import GlobalMap
+
+                        gm = GlobalMap()
+                        try:
+                            gm.sync_sources(registry)
+                        finally:
+                            gm.close()
+                except Exception:  # noqa: BLE001 — изменение доступа важнее чистки карты
+                    pass
+            except SourcesError as exc:
+                self.audit(surface="panel", operation=path, result="error",
+                           principal=principal, reason=str(exc))
+                self._send_json({"ok": False, "error": str(exc)}, 400)
+                return
+            except Exception as exc:  # noqa: BLE001
+                self.audit(surface="panel", operation=path, result="error",
+                           principal=principal, reason=f"{type(exc).__name__}: {exc}")
+                self._send_json(
+                    {"ok": False, "error": f"{type(exc).__name__}: {exc}"}, 500
+                )
+                return
+            self.audit(surface="panel", operation=path, result="ok",
+                       principal=principal, started=started,
+                       detail=f"sources: {action}")
+            self._send_json({"ok": True, "result": result, **collect_sources()})
+            return
 
         if path == "/api/settings/global":
             values = payload.get("values") or {}
@@ -1968,6 +2160,9 @@ PAGE_HTML = """<!doctype html>
             aria-haspopup="dialog" aria-label="Sections, developments and actions"
             style="margin-inline-start:1.5rem"></button>
     <div class="topbar__actions">
+      <a class="btn btn--ghost btn--sm" href="/sources" title="Разрешённые корни карты">источники</a>
+      <a class="btn btn--ghost btn--sm" href="/value" title="Польза за 30 дней">польза</a>
+      <a class="btn btn--ghost btn--sm" href="/knowledge" target="_blank" rel="noopener" title="Промт и research контура знаний">знания</a>
       <span class="status" id="status" data-i18n="loading…">loading…</span>
       <label class="lang" for="lang-select">
         <span data-i18n="language">language</span>

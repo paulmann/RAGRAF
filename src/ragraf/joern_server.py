@@ -156,6 +156,14 @@ class JoernServer:
         if self.java_home and self.java_home.exists():
             env["JAVA_HOME"] = str(self.java_home)
             env["PATH"] = f"{self.java_home / 'bin'}{os.pathsep}" + env.get("PATH", "")
+        # Тот же личный временный каталог, что у построения CPG (см.
+        # `cpg.joern_tmp`): zstd-jni распаковывает нативную библиотеку при
+        # старте КАЖДОЙ JVM, и общий `%TEMP%` уже отказывал в записи.
+        tmpdir = self.workdir / "tmp"
+        tmpdir.mkdir(parents=True, exist_ok=True)
+        flag = f"-Djava.io.tmpdir={tmpdir}"
+        existing = env.get("JAVA_TOOL_OPTIONS", "").strip()
+        env["JAVA_TOOL_OPTIONS"] = f"{existing} {flag}".strip()
         return env
 
     def start(self) -> None:

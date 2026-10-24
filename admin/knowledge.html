@@ -1,0 +1,721 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>RAGRAF — знания агентов</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  :root { color-scheme: light dark; }
+  html, body { height: auto; min-height: 100%; }
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans-stack);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .kp-shell { max-width: 1320px; margin: 0 auto; padding: 18px 22px 56px; }
+  .kp-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; flex-wrap: wrap; margin-bottom: 14px; }
+  .kp-head__left { display: flex; gap: 14px; align-items: flex-start; min-width: 0; }
+  .kp-back { color: var(--muted-foreground); text-decoration: none; font-size: 13px; white-space: nowrap; padding-top: 3px; }
+  .kp-back:hover { color: var(--foreground); }
+  .kp-kicker { margin: 0 0 3px; font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-foreground); }
+  .kp-title { margin: 0; font-size: 25px; line-height: 1.15; letter-spacing: -.02em; }
+  .kp-sub { margin: 5px 0 0; max-width: 820px; color: var(--muted-foreground); font-size: 13px; }
+  .kp-head__actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .kp-badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border: 1px solid var(--border); border-radius: 999px; background: var(--card-2); color: var(--muted-foreground); font-size: 12px; white-space: nowrap; }
+  .kp-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; padding: 5px 11px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--foreground); font: inherit; font-size: 13px; text-decoration: none; cursor: pointer; white-space: nowrap; }
+  .kp-btn:hover { background: var(--card-3); }
+  .kp-btn--primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .kp-btn--primary:hover { background: var(--primary-2); border-color: var(--primary-2); }
+  .kp-btn--sm { min-height: 27px; padding: 3px 8px; font-size: 12px; }
+  .kp-btn:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+  .kp-tabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--border); margin-bottom: 18px; }
+  .kp-tab { appearance: none; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted-foreground); font: inherit; font-size: 13px; padding: 9px 11px 8px; cursor: pointer; }
+  .kp-tab:hover { color: var(--foreground); }
+  .kp-tab[aria-selected="true"] { color: var(--foreground); border-bottom-color: var(--primary); font-weight: 600; }
+  .kp-panel[hidden] { display: none !important; }
+  .kp-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+  .kp-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+  .kp-card h2 { margin: 0 0 7px; font-size: 15px; }
+  .kp-card p { margin: 0 0 9px; color: var(--muted-foreground); font-size: 13px; }
+  .kp-card p:last-child { margin-bottom: 0; }
+  .kp-card__actions { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 12px; }
+  .kp-hero { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(260px, 1fr); gap: 14px; margin-bottom: 14px; }
+  .kp-hero .kp-card { padding: 20px; }
+  .kp-hero h1 { margin: 0 0 8px; font-size: 21px; letter-spacing: -.01em; }
+  .kp-hero p { font-size: 13.5px; }
+  .kp-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .kp-metric { border: 1px solid var(--border); border-radius: 9px; padding: 10px 12px; background: var(--card-2); }
+  .kp-metric b { display: block; font-size: 21px; font-variant-numeric: tabular-nums; line-height: 1.2; }
+  .kp-metric span { display: block; color: var(--muted-foreground); font-size: 11.5px; margin-top: 2px; }
+  .kp-note { border-left: 3px solid var(--primary); padding: 10px 13px; background: var(--card-2); border-radius: 0 8px 8px 0; color: var(--muted-foreground); font-size: 13px; margin: 14px 0; }
+  .kp-reader { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 18px; align-items: start; }
+  .kp-toc { position: sticky; top: 12px; max-height: calc(100vh - 150px); overflow: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); padding: 10px; }
+  .kp-toc__title { margin: 2px 4px 8px; font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted-foreground); }
+  .kp-toc__item { display: block; padding: 5px 7px; border-radius: 6px; color: var(--muted-foreground); text-decoration: none; font-size: 12.5px; line-height: 1.35; }
+  .kp-toc__item:hover { background: var(--card-3); color: var(--foreground); }
+  .kp-doc { min-width: 0; }
+  .kp-toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; position: sticky; top: 0; z-index: 4; padding: 9px 0 10px; background: var(--background); border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+  .kp-search { min-width: 210px; flex: 1 1 240px; height: 34px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--foreground); font: inherit; font-size: 13px; }
+  .kp-search::placeholder { color: var(--muted-foreground); }
+  .kp-meta { margin-left: auto; color: var(--muted-foreground); font-size: 11.5px; white-space: nowrap; }
+  .kp-section { border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); margin-bottom: 12px; overflow: hidden; }
+  .kp-section__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 13px; background: var(--card-2); border-bottom: 1px solid var(--border); }
+  .kp-section__head h2 { margin: 0; font-size: 13.5px; line-height: 1.3; }
+  .kp-section__actions { display: flex; gap: 5px; flex-shrink: 0; }
+  .kp-pre { margin: 0; padding: 13px 14px; overflow: auto; font-family: var(--font-mono-stack); font-size: 12.2px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--foreground); }
+  .kp-pre mark { background: color-mix(in srgb, var(--primary) 28%, transparent); color: inherit; border-radius: 2px; }
+  .kp-pre code { background: var(--card-3); padding: 1px 4px; border-radius: 4px; font-size: .94em; }
+  .kp-pre strong { color: var(--foreground); font-weight: 650; }
+  .kp-pre a { color: var(--primary); text-decoration: underline; }
+  .kp-pre .kp-h3 { display: block; margin-top: 6px; color: var(--foreground); }
+  .kp-section--intro .kp-pre { max-height: 340px; }
+  .kp-loading, .kp-empty { padding: 26px; text-align: center; color: var(--muted-foreground); border: 1px dashed var(--border); border-radius: var(--radius); }
+  .kp-how { display: grid; gap: 12px; }
+  .kp-step { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 12px; padding: 15px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
+  .kp-step__n { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--card-3); color: var(--primary); font-weight: 700; font-size: 13px; }
+  .kp-step h2 { margin: 0 0 5px; font-size: 14.5px; }
+  .kp-step p { margin: 0 0 8px; color: var(--muted-foreground); font-size: 13px; }
+  .kp-code { margin: 0; padding: 12px 13px; border: 1px solid var(--border); border-radius: 8px; background: var(--card-2); font-family: var(--font-mono-stack); font-size: 12.2px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .kp-list { margin: 0; padding-left: 18px; color: var(--muted-foreground); font-size: 13px; }
+  .kp-list li { margin: 4px 0; }
+  .kp-checks { display: grid; gap: 7px; }
+  .kp-check { display: flex; align-items: flex-start; gap: 9px; padding: 9px 11px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); cursor: pointer; font-size: 13px; }
+  .kp-check:hover { background: var(--card-2); }
+  .kp-check input { margin: 3px 0 0; accent-color: var(--primary); }
+  .kp-check span { min-width: 0; }
+  .kp-progress { display: flex; align-items: center; gap: 10px; margin: 12px 0 14px; }
+  .kp-progress__bar { flex: 1; height: 7px; border-radius: 999px; background: var(--card-3); overflow: hidden; }
+  .kp-progress__fill { height: 100%; width: 0; background: var(--primary); transition: width .18s ease; }
+  .kp-progress__text { color: var(--muted-foreground); font-size: 12px; white-space: nowrap; }
+  .kp-footer { margin-top: 26px; padding-top: 14px; border-top: 1px solid var(--border); color: var(--muted-foreground); font-size: 11.5px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .kp-toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%) translateY(12px); background: var(--foreground); color: var(--background); padding: 9px 14px; border-radius: 8px; font-size: 13px; box-shadow: 0 10px 30px rgba(0,0,0,.25); opacity: 0; pointer-events: none; transition: opacity .16s ease, transform .16s ease; z-index: 50; max-width: min(560px, calc(100vw - 32px)); }
+  .kp-toast--show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .kp-toast--bad { background: var(--bad); color: #fff; }
+  .kp-embed .kp-head { display: none; }
+  .kp-embed .kp-shell { padding-top: 4px; padding-bottom: 20px; }
+  .kp-embed .kp-footer { display: none; }
+  .kp-embed .kp-tabs { position: sticky; top: 0; z-index: 6; background: var(--background); }
+  @media (max-width: 900px) {
+    .kp-hero { grid-template-columns: 1fr; }
+    .kp-reader { grid-template-columns: 1fr; }
+    .kp-toc { position: static; max-height: none; display: flex; gap: 4px; overflow-x: auto; padding: 7px; }
+    .kp-toc__title { display: none; }
+    .kp-toc__item { white-space: nowrap; }
+    .kp-meta { width: 100%; margin-left: 0; }
+  }
+</style>
+<script>
+// Тема до первой отрисовки: та же пара ключей, что у панели.
+(function () {
+  try {
+    var mode = window.localStorage.getItem('ragraf-admin-theme') || 'system';
+    var dark = mode === 'dark' || (mode !== 'light' && window.matchMedia
+      && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+  } catch (e) { /* приватный режим: остаётся светлая схема */ }
+})();
+</script>
+</head>
+<body class="kp-page">
+<div class="kp-shell">
+
+  <header class="kp-head">
+    <div class="kp-head__left">
+      <a class="kp-back" href="/" target="_top">← панель</a>
+      <div>
+        <p class="kp-kicker">RAGRAF · контур знаний</p>
+        <h1 class="kp-title">Знания агентов</h1>
+        <p class="kp-sub">Мастер-промт, research и порядок запуска нового контура: поиск агента под конкретный вопрос, карточки навыков, диспетчеризация задач и приватность по умолчанию.</p>
+      </div>
+    </div>
+    <div class="kp-head__actions">
+      <span class="kp-badge">снимок · 23.10.2026</span>
+      <a class="kp-btn" href="/" target="_top">В панель</a>
+    </div>
+  </header>
+
+  <nav class="kp-tabs" role="tablist" aria-label="Разделы страницы знаний">
+    <button class="kp-tab" type="button" role="tab" data-tab="overview" aria-selected="true">Обзор</button>
+    <button class="kp-tab" type="button" role="tab" data-tab="prompt" aria-selected="false">Мастер-промт</button>
+    <button class="kp-tab" type="button" role="tab" data-tab="research" aria-selected="false">Research</button>
+    <button class="kp-tab" type="button" role="tab" data-tab="how" aria-selected="false">Как применять</button>
+    <button class="kp-tab" type="button" role="tab" data-tab="checklist" aria-selected="false">Чек-лист</button>
+  </nav>
+
+  <main class="kp-main">
+
+    <section class="kp-panel" data-panel="overview">
+      <div class="kp-hero">
+        <div class="kp-card">
+          <h1>Из истории работы — в находимые знания</h1>
+          <p>Контур отвечает на четыре вопроса: <b>кто</b> уже решал похожую задачу, <b>какие навыки и знания</b> для неё нужны, <b>чем это подтверждено</b> и <b>как передать задачу</b> подходящему агенту с полным контекстом.</p>
+          <p>Техническая основа уже есть в HARNESS и AutoClaw 2. Задача — включить выключенное, нормализовать акторов, извлечь эпизоды, собрать карточки навыков и дать руководителю диспетчеризацию.</p>
+          <div class="kp-card__actions">
+            <button class="kp-btn kp-btn--primary" type="button" data-open-tab="prompt">Открыть мастер-промт</button>
+            <button class="kp-btn" type="button" data-open-tab="how">Как применять</button>
+            <button class="kp-btn" type="button" data-open-tab="checklist">Критерии приёмки</button>
+          </div>
+        </div>
+        <div class="kp-card">
+          <div class="kp-metrics">
+            <div class="kp-metric"><b>2</b><span>документа: промт + research</span></div>
+            <div class="kp-metric"><b>900+</b><span>строк проверяемых требований</span></div>
+            <div class="kp-metric"><b>0</b><span>внешних зависимостей у страницы</span></div>
+            <div class="kp-metric"><b>4</b><span>шага запуска: ADR → P0 → P1 → P2</span></div>
+          </div>
+          <p style="margin-top:12px">Источники: <span class="kp-code" style="padding:2px 6px">C:\AutoClaw\AgentKnowledge</span></p>
+        </div>
+      </div>
+
+      <div class="kp-grid">
+        <div class="kp-card">
+          <h2>Главная находка</h2>
+          <p>В HARNESS уже есть полнотекстовый backend по истории сессий <span class="kp-code" style="padding:1px 5px">dsh-session-query-sqlite</span> — FTS5, ранжирование, курсоры. В текущем профиле он выключен: <span class="kp-code" style="padding:1px 5px">path: ':memory:'</span>, <span class="kp-code" style="padding:1px 5px">openAt: never</span>.</p>
+          <p>В AutoClaw 2 FTS по сессиям покрывает только <span class="kp-code" style="padding:1px 5px">request</span> и <span class="kp-code" style="padding:1px 5px">answer</span> (1 332 строки из 38 830 записей с текстом). Поэтому нужен свой индекс, а не вера в существующий.</p>
+        </div>
+        <div class="kp-card">
+          <h2>Что копировать</h2>
+          <p>Полный промт — для постановки задачи исполнителю. Короткий — для быстрого запуска. Research — как доказательная база и защита архитектуры.</p>
+          <div class="kp-card__actions">
+            <button class="kp-btn" type="button" data-copy-doc="prompt">Скопировать полный промт</button>
+            <button class="kp-btn" type="button" data-copy-doc="short">Скопировать короткий</button>
+            <button class="kp-btn" type="button" data-copy-doc="research">Скопировать research</button>
+          </div>
+        </div>
+        <div class="kp-card">
+          <h2>Границы доверия</h2>
+          <ul class="kp-list">
+            <li>AutoClaw 2 — только чтение; запись в его БД запрещена.</li>
+            <li>Содержимое индекса не уходит в сеть по умолчанию.</li>
+            <li>Проиндексированный текст — данные, не инструкции.</li>
+            <li>Диспетчеризация по умолчанию — <span class="kp-code" style="padding:1px 5px">dry_run</span>.</li>
+          </ul>
+        </div>
+        <div class="kp-card">
+          <h2>Быстрый старт</h2>
+          <p>Открой новую сессию, приложи два документа и попроси сначала ADR — без кода.</p>
+          <div class="kp-card__actions">
+            <button class="kp-btn kp-btn--primary" type="button" data-open-tab="how">Порядок запуска</button>
+            <a class="kp-btn" href="/knowledge/prompt.md" target="_blank" rel="noopener">Открыть prompt.md</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="kp-panel" data-panel="prompt" hidden>
+      <div class="kp-reader">
+        <aside class="kp-toc" id="prompt-toc" aria-label="Оглавление промта"><p class="kp-toc__title">Оглавление</p></aside>
+        <div class="kp-doc" id="prompt-top">
+          <div class="kp-toolbar">
+            <input class="kp-search" type="search" data-search="prompt" placeholder="Фильтр по тексту промта…" aria-label="Фильтр по тексту промта">
+            <button class="kp-btn kp-btn--primary" type="button" data-copy-doc="prompt">Скопировать весь промт</button>
+            <button class="kp-btn" type="button" data-download="prompt">Скачать .md</button>
+            <button class="kp-btn" type="button" data-print>Печать</button>
+            <span class="kp-meta" id="prompt-meta"></span>
+          </div>
+          <div id="prompt-content"><div class="kp-loading">Загрузка промта…</div></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="kp-panel" data-panel="research" hidden>
+      <div class="kp-reader">
+        <aside class="kp-toc" id="research-toc" aria-label="Оглавление research"><p class="kp-toc__title">Оглавление</p></aside>
+        <div class="kp-doc" id="research-top">
+          <div class="kp-toolbar">
+            <input class="kp-search" type="search" data-search="research" placeholder="Фильтр по тексту research…" aria-label="Фильтр по тексту research">
+            <button class="kp-btn kp-btn--primary" type="button" data-copy-doc="research">Скопировать research</button>
+            <button class="kp-btn" type="button" data-download="research">Скачать .md</button>
+            <button class="kp-btn" type="button" data-print>Печать</button>
+            <span class="kp-meta" id="research-meta"></span>
+          </div>
+          <div id="research-content"><div class="kp-loading">Загрузка research…</div></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="kp-panel" data-panel="how" hidden>
+      <div class="kp-how">
+        <div class="kp-step">
+          <div class="kp-step__n">1</div>
+          <div>
+            <h2>Прочитай факты, а не только промт</h2>
+            <p>Промт опирается на проверенные пути, схемы и числа. Перед ADR подтверди их в своей версии HARNESS и AutoClaw 2.</p>
+            <div class="kp-card__actions">
+              <button class="kp-btn" type="button" data-open-tab="research">Открыть research</button>
+            </div>
+          </div>
+        </div>
+        <div class="kp-step">
+          <div class="kp-step__n">2</div>
+          <div>
+            <h2>Сначала ADR, код — потом</h2>
+            <p>Согласуй архитектуру, модель данных, ранжирование, приватность и границы интеграции. Проверь главный рычаг: включён ли персистентный <span class="kp-code" style="padding:1px 5px">session-query-sqlite</span>.</p>
+            <div class="kp-card__actions">
+              <button class="kp-btn" type="button" data-copy-doc="start">Скопировать стартовую фразу</button>
+            </div>
+          </div>
+        </div>
+        <div class="kp-step">
+          <div class="kp-step__n">3</div>
+          <div>
+            <h2>P0: индекс, статус, поиск, reindex</h2>
+            <p>Сначала докажи пользу на DSH: акторы, эпизоды, навыки, FTS-поиск, настройки, расписание 2×/сутки. AutoClaw и диспетчеризация — P1.</p>
+          </div>
+        </div>
+        <div class="kp-step">
+          <div class="kp-step__n">4</div>
+          <div>
+            <h2>Проверяй критерии, а не ощущения</h2>
+            <p>Golden set, top-3 recall, покрытие, no-op инкремент, crash-тест, секрет-канарейка, неизменность AutoClaw БД. Всё — в чек-листе.</p>
+            <div class="kp-card__actions">
+              <button class="kp-btn" type="button" data-open-tab="checklist">Открыть чек-лист</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="kp-card" style="margin-top:14px">
+        <h2>Стартовая фраза для новой сессии</h2>
+        <p>Скопируй и отправь вместе с документами — это отсекает преждевременную реализацию.</p>
+        <pre class="kp-code" id="start-phrase">Прочитай PROMPT-agent-knowledge.md и RESEARCH-agent-knowledge.md.
+Сначала составь ADR и план P0, код не пиши. Проверь факты по пакетам
+dsh-session-query*, dsh-skill*, dsh-settings, dsh-schedule, agent-team.
+В ADR ответь: что переиспользуем, какая модель акторов/эпизодов,
+как устроена приватность, как работает диспетчеризация, какие метрики.</pre>
+        <div class="kp-card__actions">
+          <button class="kp-btn kp-btn--primary" type="button" data-copy-target="#start-phrase">Скопировать фразу</button>
+          <button class="kp-btn" type="button" data-copy-doc="short">Скопировать короткий промт</button>
+        </div>
+      </div>
+
+      <div class="kp-card" style="margin-top:14px">
+        <h2>Что проверить в ADR</h2>
+        <ul class="kp-list">
+          <li>Переиспользуется ли существующий <span class="kp-code" style="padding:1px 5px">session-query</span>, а не пишется новый поиск.</li>
+          <li>Есть ли модель <b>актор → эпизод → навык → артефакт</b> и provenance.</li>
+          <li>Учтены ли <span class="kp-code" style="padding:1px 5px">whenToUse</span> и факты использования навыков.</li>
+          <li>AutoClaw открыт только на чтение; исходные сессии не переписываются.</li>
+          <li>Приватность: редакция секретов, локальность, исключения, retention.</li>
+          <li>Расписание 2×/сутки, ручной reindex, статус, отмена.</li>
+          <li>Диспетчеризация: <span class="kp-code" style="padding:1px 5px">dry_run</span> по умолчанию и явное подтверждение.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="kp-panel" data-panel="checklist" hidden>
+      <div class="kp-card">
+        <h2>Критерии приёмки</h2>
+        <p>Отмечай по мере проверки. Прогресс хранится в этом браузере и не отправляется на сервер.</p>
+        <div class="kp-progress">
+          <div class="kp-progress__bar"><div class="kp-progress__fill" id="check-fill"></div></div>
+          <span class="kp-progress__text" id="check-text">0 / 0</span>
+        </div>
+        <div class="kp-checks" id="check-list">
+          <label class="kp-check"><input type="checkbox" data-check="c1"><span>Функция включена по умолчанию; выключение останавливает индексацию, инструменты отвечают <span class="kp-code" style="padding:1px 5px">KNOWLEDGE_DISABLED</span>, UI честен.</span></label>
+          <label class="kp-check"><input type="checkbox" data-check="c2"><span>Индексация запускается в настроенное время (2 раза в сутки по умолчанию), настраивается, не пересекается, догоняет последний пропуск.</span></label>
+          <label class="kp-check"><input type="checkbox" data-check="c3"><span>Ручной reindex в трёх режимах работает; прогресс, отмена, идемпотентность.</span></label>
+          <label class="kp-check"><input type="checkbox" data-check="c4"><span>Покрытие 100% доступных DSH-сессий/навыков и выбранных таблиц AutoClaw; дублей нет; есть отчёт покрытия.</span></label>
+          <label class="kp-check"><input type="checkbox" data-check="c5"><span>Golden set ≥ 30 запросов: top-3 recall ≥ 0.80, MRR ≥ 0.60, zero-result ≤ 10% на известных темах.</span></label>
+          <label class="kp-check"><input type="checkbox" data-check="c6"><span>Карточка навыка содержит тело, <span class="kp-code" style="padding:1px 5px">whenToUse</span>, ресурсы, версию/хэш, доказательства применения и применимость к задаче.</span></label>
+          <label class="kp-check"><input type="checkbox" data-check="c7"><span><span class="kp-code" style="padding:1px 5px">knowledge_dispatch</span> в <span class="kp-code" style="padding:1px 5px">dry_run</span> ничего не запускает; в <span class="kp-code" style="padding:1px 5px">commit</span> создаёт задачу/сообщение/реплику с provenance; повтор идемпотентен.</span></label>
+          <label class="kp-check"><input type="checkbox" data-check="c8"><span>Инкремент после изменения одной сессии индексирует только её; повторный прогон — no-op.</span></label>
+          <label class="kp-check"><input type="checkbox" data-check="c9"><span>Kill -9 во время индексации: предыдущий индекс цел, следующий запуск продолжает/пересобирает.</span></label>
+          <label class="kp-check"><input type="checkbox" data-check="c10"><span>Секрет-канарейка не попадает в БД, FTS, векторы, логи и выдачу; исключения и «забудь» удаляют без остатка.</span></label>
+          <label class="kp-check"><input type="checkbox" data-check="c11"><span>AutoClaw БД после прогона не изменилась (mtime/размер/хэш); исходные сессии не переписаны.</span></label>
+          <label class="kp-check"><input type="checkbox" data-check="c12"><span>P95 поиска ≤ 300 мс, incremental ≤ 60 с на целевом объёме; отчёт с числами.</span></label>
+          <label class="kp-check"><input type="checkbox" data-check="c13"><span>Одинаковый <span class="kp-code" style="padding:1px 5px">index_rev</span> + запрос → одинаковый порядок; tie-break стабилен.</span></label>
+          <label class="kp-check"><input type="checkbox" data-check="c14"><span>Документация обновлена: каталог инструментов, настройки, приватность, troubleshooting, changelog.</span></label>
+        </div>
+        <div class="kp-card__actions">
+          <button class="kp-btn" type="button" id="check-reset">Сбросить отметки</button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="kp-footer">
+    <span>Источник: <span class="kp-code" style="padding:1px 5px">C:\AutoClaw\AgentKnowledge</span> · снимок 23.10.2026</span>
+    <span>HARNESS 0.2.0-rc.2 · AutoClaw 2 (zwork) 2.2.2 · только локально</span>
+  </footer>
+</div>
+
+<div class="kp-toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  var DOCS = {
+    prompt: { url: '/knowledge/prompt.md', name: 'prompt.md', label: 'мастер-промт' },
+    research: { url: '/knowledge/research.md', name: 'research.md', label: 'research' },
+    short: { url: '/knowledge/short-prompt.md', name: 'short-prompt.md', label: 'короткий промт' }
+  };
+  var raw = {};
+  var parsed = {};
+  var query = { prompt: '', research: '' };
+  var loadPromise = {};
+  var toastTimer = null;
+  var searchTimer = null;
+
+  var $ = function (sel, root) { return (root || document).querySelector(sel); };
+  var $$ = function (sel, root) {
+    return Array.prototype.slice.call((root || document).querySelectorAll(sel));
+  };
+
+  function esc(text) {
+    return String(text == null ? '' : text)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function bytes(n) {
+    if (n < 1024) return n + ' Б';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' КиБ';
+    return (n / (1024 * 1024)).toFixed(1) + ' МиБ';
+  }
+
+  function toast(text, bad) {
+    var el = $('#toast');
+    if (!el) return;
+    el.textContent = text;
+    el.className = 'kp-toast kp-toast--show' + (bad ? ' kp-toast--bad' : '');
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { el.className = 'kp-toast'; }, 2600);
+  }
+
+  function copyText(text, label) {
+    function ok() { toast('Скопировано: ' + (label || 'текст')); }
+    function fallback() {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); ok(); }
+      catch (e) { toast('Не удалось скопировать в буфер', true); }
+      document.body.removeChild(ta);
+    }
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(ok, fallback);
+    } else {
+      fallback();
+    }
+  }
+
+  function download(name, text) {
+    var blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+  }
+
+  function loadDoc(name) {
+    if (raw[name]) return Promise.resolve(raw[name]);
+    if (loadPromise[name]) return loadPromise[name];
+    loadPromise[name] = fetch(DOCS[name].url, { cache: 'no-store' })
+      .then(function (res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.text();
+      })
+      .then(function (text) {
+        raw[name] = text;
+        parsed[name] = splitSections(text);
+        return text;
+      })
+      .catch(function (err) {
+        toast('Не удалось загрузить ' + DOCS[name].name + ': ' + err.message, true);
+        throw err;
+      });
+    return loadPromise[name];
+  }
+
+  function splitSections(md) {
+    var lines = String(md || '').replace(/\r\n/g, '\n').split('\n');
+    var intro = [];
+    var sections = [];
+    var current = null;
+    lines.forEach(function (line) {
+      if (/^##\s+/.test(line)) {
+        if (current) sections.push(current);
+        current = { title: line.replace(/^##\s+/, '').trim(), lines: [] };
+      } else if (current) {
+        current.lines.push(line);
+      } else {
+        intro.push(line);
+      }
+    });
+    if (current) sections.push(current);
+    return {
+      intro: intro.join('\n').trim(),
+      sections: sections.map(function (sec) {
+        return { title: sec.title, body: sec.lines.join('\n').trim() };
+      }).filter(function (sec) { return sec.title || sec.body; })
+    };
+  }
+
+  /**
+   * Лёгкая подсветка Markdown для чтения. Копирование берёт ИСХОДНЫЙ текст
+   * раздела, поэтому разметка остаётся точной; здесь меняется только вид.
+   * Полноценный Markdown-рендерер не нужен и был бы вторым источником правды.
+   */
+  function format(text) {
+    var safe = esc(text);
+    safe = safe.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+    safe = safe.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+    safe = safe.replace(/^### (.+)$/gm, '<strong class="kp-h3">$1</strong>');
+    safe = safe.replace(/^#### (.+)$/gm, '<strong class="kp-h4">$1</strong>');
+    safe = safe.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, function (match, label, href) {
+      if (!/^(https?:\/\/|\/|#|\.\/|\.\.\/)/i.test(href)) return match;
+      return '<a href="' + href + '" target="_blank" rel="noopener">' + label + '</a>';
+    });
+    return safe;
+  }
+
+  function renderDoc(name) {
+    var host = document.getElementById(name + '-content');
+    if (!host) return;
+    if (!parsed[name]) {
+      host.innerHTML = '<div class="kp-loading">Загрузка…</div>';
+      return;
+    }
+    var data = parsed[name];
+    var q = query[name] || '';
+    var html = '';
+    if (data.intro) {
+      html += '<article class="kp-section kp-section--intro" id="' + name + '-intro">'
+        + '<div class="kp-section__head"><h2>Начало</h2>'
+        + '<div class="kp-section__actions"><button class="kp-btn kp-btn--sm" type="button" data-copy-section="' + name + '" data-section-index="-1">Скопировать</button></div></div>'
+        + '<pre class="kp-pre">' + format(data.intro) + '</pre></article>';
+    }
+    var matched = 0;
+    data.sections.forEach(function (sec, idx) {
+      var text = sec.title + '\n' + sec.body;
+      var hit = !q || text.toLowerCase().indexOf(q.toLowerCase()) >= 0;
+      if (hit) matched += 1;
+      html += '<article class="kp-section" id="' + name + '-s' + idx + '" data-hit="' + (hit ? '1' : '0') + '">'
+        + '<div class="kp-section__head"><h2>' + esc(sec.title) + '</h2>'
+        + '<div class="kp-section__actions">'
+        + '<button class="kp-btn kp-btn--sm" type="button" data-copy-section="' + name + '" data-section-index="' + idx + '">Скопировать</button>'
+        + '<a class="kp-btn kp-btn--sm" href="#' + name + '-s' + idx + '">Ссылка</a>'
+        + '</div></div>'
+        + '<pre class="kp-pre">' + format(sec.body) + '</pre></article>';
+    });
+    host.innerHTML = html || '<div class="kp-empty">Нет содержимого</div>';
+
+    var toc = document.getElementById(name + '-toc');
+    if (toc) {
+      var links = '<p class="kp-toc__title">Оглавление</p>'
+        + '<a class="kp-toc__item" href="#' + name + '-top">Начало</a>';
+      data.sections.forEach(function (sec, idx) {
+        links += '<a class="kp-toc__item" href="#' + name + '-s' + idx + '">' + esc(sec.title) + '</a>';
+      });
+      toc.innerHTML = links;
+    }
+
+    var meta = document.getElementById(name + '-meta');
+    if (meta) {
+      meta.textContent = data.sections.length + ' разд. · '
+        + raw[name].split('\n').length + ' строк · ' + bytes(new Blob([raw[name]]).size)
+        + (q ? ' · найдено: ' + matched : '');
+    }
+
+    $$('.kp-section[data-hit="0"]', host).forEach(function (el) { el.style.display = 'none'; });
+  }
+
+  function setTab(name, updateHash) {
+    var known = ['overview', 'prompt', 'research', 'how', 'checklist'];
+    if (known.indexOf(name) < 0) name = 'overview';
+    $$('.kp-tab').forEach(function (tab) {
+      tab.setAttribute('aria-selected', tab.getAttribute('data-tab') === name ? 'true' : 'false');
+    });
+    $$('.kp-panel').forEach(function (panel) {
+      panel.hidden = panel.getAttribute('data-panel') !== name;
+    });
+    if (updateHash !== false) {
+      try { history.replaceState(null, '', '#' + name); } catch (e) { /* ignore */ }
+    }
+    if (name === 'prompt' || name === 'research') {
+      loadDoc(name).then(function () { renderDoc(name); }, function () {});
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function tabFromHash() {
+    var hash = String(location.hash || '').replace(/^#/, '');
+    if (!hash) return 'overview';
+    var base = hash.split('-')[0];
+    return ['overview', 'prompt', 'research', 'how', 'checklist'].indexOf(base) >= 0 ? base : 'overview';
+  }
+
+  document.addEventListener('click', function (event) {
+    var target = event.target;
+    if (!target || !target.closest) return;
+
+    var tab = target.closest('[data-tab]');
+    if (tab) { setTab(tab.getAttribute('data-tab')); return; }
+
+    var open = target.closest('[data-open-tab]');
+    if (open) { setTab(open.getAttribute('data-open-tab')); return; }
+
+    var copyDoc = target.closest('[data-copy-doc]');
+    if (copyDoc) {
+      var doc = copyDoc.getAttribute('data-copy-doc');
+      if (doc === 'start') {
+        var pre = $('#start-phrase');
+        copyText(pre ? pre.textContent : '', 'стартовая фраза');
+        return;
+      }
+      loadDoc(doc).then(function (text) {
+        copyText(text, DOCS[doc].label);
+      }, function () {});
+      return;
+    }
+
+    var copySection = target.closest('[data-copy-section]');
+    if (copySection) {
+      var name = copySection.getAttribute('data-copy-section');
+      var idx = Number(copySection.getAttribute('data-section-index'));
+      var data = parsed[name];
+      if (!data) return;
+      if (idx < 0) copyText(data.intro, 'вступление');
+      else if (data.sections[idx]) copyText(data.sections[idx].body, data.sections[idx].title);
+      return;
+    }
+
+    var copyTarget = target.closest('[data-copy-target]');
+    if (copyTarget) {
+      var el = $(copyTarget.getAttribute('data-copy-target'));
+      copyText(el ? el.textContent : '', 'текст');
+      return;
+    }
+
+    var dl = target.closest('[data-download]');
+    if (dl) {
+      var docName = dl.getAttribute('data-download');
+      loadDoc(docName).then(function (text) {
+        download(DOCS[docName].name, text);
+        toast('Скачано: ' + DOCS[docName].name);
+      }, function () {});
+      return;
+    }
+
+    if (target.closest('[data-print]')) {
+      window.print();
+      return;
+    }
+  });
+
+  document.addEventListener('input', function (event) {
+    var input = event.target;
+    if (!input || !input.getAttribute || !input.getAttribute('data-search')) return;
+    var name = input.getAttribute('data-search');
+    query[name] = input.value.trim();
+    if (searchTimer) clearTimeout(searchTimer);
+    searchTimer = setTimeout(function () { renderDoc(name); }, 140);
+  });
+
+  document.addEventListener('keydown', function (event) {
+    var meta = event.ctrlKey || event.metaKey;
+    if (meta && event.key.toLowerCase() === 'k') {
+      var input = $('.kp-panel:not([hidden]) .kp-search');
+      if (input) { event.preventDefault(); input.focus(); input.select(); }
+      return;
+    }
+    if (event.key === 'Escape') {
+      var active = $('.kp-panel:not([hidden]) .kp-search');
+      if (active && active.value) {
+        active.value = '';
+        var name = active.getAttribute('data-search');
+        query[name] = '';
+        renderDoc(name);
+      }
+    }
+  });
+
+  // Чек-лист: localStorage, без сервера.
+  var CHECK_KEY = 'ragraf-agent-knowledge-checklist-v1';
+  function loadChecks() {
+    var saved = {};
+    try { saved = JSON.parse(localStorage.getItem(CHECK_KEY) || '{}') || {}; } catch (e) { saved = {}; }
+    $$('.kp-check input').forEach(function (box) {
+      box.checked = !!saved[box.getAttribute('data-check')];
+    });
+    updateChecks();
+  }
+  function saveChecks() {
+    var out = {};
+    $$('.kp-check input').forEach(function (box) {
+      if (box.checked) out[box.getAttribute('data-check')] = 1;
+    });
+    try { localStorage.setItem(CHECK_KEY, JSON.stringify(out)); } catch (e) { /* приватный режим */ }
+  }
+  function updateChecks() {
+    var boxes = $$('.kp-check input');
+    var done = boxes.filter(function (box) { return box.checked; }).length;
+    var fill = $('#check-fill');
+    var text = $('#check-text');
+    if (fill) fill.style.width = (boxes.length ? Math.round(done * 100 / boxes.length) : 0) + '%';
+    if (text) text.textContent = done + ' / ' + boxes.length;
+  }
+  document.addEventListener('change', function (event) {
+    var box = event.target;
+    if (!box || !box.matches || !box.matches('.kp-check input')) return;
+    saveChecks();
+    updateChecks();
+  });
+  var reset = $('#check-reset');
+  if (reset) reset.addEventListener('click', function () {
+    $$('.kp-check input').forEach(function (box) { box.checked = false; });
+    saveChecks();
+    updateChecks();
+    toast('Отметки сброшены');
+  });
+
+  // Тема: реакция на переключение в родительской панели (same-origin storage).
+  function applyTheme() {
+    try {
+      var mode = localStorage.getItem('ragraf-admin-theme') || 'system';
+      var dark = mode === 'dark' || (mode !== 'light' && window.matchMedia
+        && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    } catch (e) { /* ignore */ }
+  }
+  window.addEventListener('storage', applyTheme);
+  try {
+    var media = window.matchMedia('(prefers-color-scheme: dark)');
+    if (media && media.addEventListener) media.addEventListener('change', applyTheme);
+  } catch (e) { /* ignore */ }
+
+  // Встроенный режим: страница живёт в iframe на вкладке настроек.
+  try {
+    if (new URLSearchParams(location.search).get('embed') === '1') {
+      document.body.classList.add('kp-embed');
+    }
+  } catch (e) { /* ignore */ }
+
+  loadChecks();
+  setTab(tabFromHash(), false);
+  window.addEventListener('hashchange', function () { setTab(tabFromHash(), false); });
+
+  // Заранее подгружаем оба документа: переключение вкладки должно быть мгновенным.
+  setTimeout(function () {
+    loadDoc('prompt').then(function () { if (tabFromHash() === 'prompt') renderDoc('prompt'); }, function () {});
+    loadDoc('research').then(function () { if (tabFromHash() === 'research') renderDoc('research'); }, function () {});
+  }, 200);
+})();
+</script>
+</body>
+</html>

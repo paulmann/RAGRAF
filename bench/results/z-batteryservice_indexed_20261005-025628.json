@@ -1,0 +1,507 @@
+{
+  "mode": "indexed",
+  "tasks": 14,
+  "total_tool_calls": 14,
+  "avg_tool_calls": 1.0,
+  "total_seconds": 1.401,
+  "facts_with_path": 69,
+  "facts_total": 110,
+  "verifiability": 0.6273,
+  "hit_tasks": 13,
+  "hit_expected": 6,
+  "hit_rate": 0.4615,
+  "details": [
+    {
+      "id": "Z-01",
+      "question": "Где проверяется признак главного администратора и почему не из сессии?",
+      "ops": [
+        {
+          "op": "search",
+          "args": {
+            "query": "проверка администратора SuperAdmin свежее чтение",
+            "limit": 5
+          },
+          "seconds": 1.336,
+          "found": true,
+          "items": 5,
+          "index_rev": "rev-0001",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 5,
+      "facts_with_path": 5,
+      "seconds": 1.336,
+      "found": true,
+      "hit_expected": true,
+      "expect_any": [
+        "MailRegistry.php",
+        "passwords.php",
+        "AuthService.php"
+      ],
+      "top_paths": [
+        "src/MailRegistry.php",
+        "profile.php",
+        "src/Sections.php",
+        "admin/systems.php",
+        "src/PasswordShares.php"
+      ],
+      "est_chars_read": 0
+    },
+    {
+      "id": "Z-02",
+      "question": "Как устроена отдача файла из реестра писем (проверки пути)?",
+      "ops": [
+        {
+          "op": "search",
+          "args": {
+            "query": "отдача файла проверка realpath каталог",
+            "limit": 5
+          },
+          "seconds": 0.006,
+          "found": true,
+          "items": 5,
+          "index_rev": "rev-0001",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 5,
+      "facts_with_path": 5,
+      "seconds": 0.006,
+      "found": true,
+      "hit_expected": false,
+      "expect_any": [
+        "mail/file.php"
+      ],
+      "top_paths": [
+        "config/config.local.example.php",
+        "config/config.php",
+        "lib/html.php",
+        "src/MailRegistry.php",
+        "tests/.z.config.example.php"
+      ],
+      "est_chars_read": 0
+    },
+    {
+      "id": "Z-03",
+      "question": "Где собираются строки реестра корреспонденции для страницы и поиска?",
+      "ops": [
+        {
+          "op": "search",
+          "args": {
+            "query": "сборка строк реестра корреспонденции сортировка пагинация",
+            "limit": 5
+          },
+          "seconds": 0.006,
+          "found": true,
+          "items": 5,
+          "index_rev": "rev-0001",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 5,
+      "facts_with_path": 5,
+      "seconds": 0.006,
+      "found": true,
+      "hit_expected": false,
+      "expect_any": [
+        "mail/rows.php"
+      ],
+      "top_paths": [
+        "mail/index.php",
+        "mail/edit.php",
+        "config/config.local.example.php",
+        "src/Agreements/Numbering.php",
+        "src/Agreements/Access.php"
+      ],
+      "est_chars_read": 0
+    },
+    {
+      "id": "Z-04",
+      "question": "Что подключает Bootstrap при загрузке портала?",
+      "ops": [
+        {
+          "op": "search",
+          "args": {
+            "query": "bootstrap загрузка конфигурации подключение модулей",
+            "limit": 6
+          },
+          "seconds": 0.005,
+          "found": true,
+          "items": 6,
+          "index_rev": "rev-0001",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 6,
+      "facts_with_path": 6,
+      "seconds": 0.005,
+      "found": true,
+      "hit_expected": false,
+      "expect_any": [
+        "src/Bootstrap.php"
+      ],
+      "top_paths": [
+        "mail/index.php",
+        "src/Auth/AuthService.php",
+        "logout.php",
+        "profile.php",
+        "passwords_share.php"
+      ],
+      "est_chars_read": 0
+    },
+    {
+      "id": "Z-05",
+      "question": "Где определена функция экранирования вывода z_e()?",
+      "ops": [
+        {
+          "op": "symbol",
+          "args": {
+            "name": "z_e"
+          },
+          "seconds": 0.0,
+          "found": true,
+          "items": 2,
+          "index_rev": "rev-0001",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 2,
+      "facts_with_path": 2,
+      "seconds": 0.0,
+      "found": true,
+      "hit_expected": true,
+      "expect_any": [
+        "src/Bootstrap.php",
+        "src/View.php"
+      ],
+      "top_paths": [
+        "src/Bootstrap.php",
+        "src/View.php"
+      ],
+      "est_chars_read": 0
+    },
+    {
+      "id": "Z-06",
+      "question": "Где описан доступ к базе и правила работы с PDO?",
+      "ops": [
+        {
+          "op": "search",
+          "args": {
+            "query": "подключение PDO единая точка ошибки кодировка",
+            "limit": 5
+          },
+          "seconds": 0.005,
+          "found": true,
+          "items": 5,
+          "index_rev": "rev-0001",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 5,
+      "facts_with_path": 5,
+      "seconds": 0.005,
+      "found": true,
+      "hit_expected": true,
+      "expect_any": [
+        "src/Db.php"
+      ],
+      "top_paths": [
+        "src/Db.php",
+        "src/Migrations/Migrator.php",
+        "src/Db.php",
+        "src/Auth/AuthService.php",
+        "src/Auth/AuthService.php"
+      ],
+      "est_chars_read": 0
+    },
+    {
+      "id": "Z-07",
+      "question": "Где определён маппинг журналов подсистемы (ключ, код, таблица)?",
+      "ops": [
+        {
+          "op": "search",
+          "args": {
+            "query": "маппинг журналов реестр код таблица префикс",
+            "limit": 5
+          },
+          "seconds": 0.007,
+          "found": true,
+          "items": 5,
+          "index_rev": "rev-0001",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 5,
+      "facts_with_path": 5,
+      "seconds": 0.007,
+      "found": true,
+      "hit_expected": true,
+      "expect_any": [
+        "src/Agreements/Engine.php"
+      ],
+      "top_paths": [
+        "mail/index.php",
+        "config/config.php",
+        "src/Agreements/Engine.php",
+        "config/config.local.example.php",
+        "src/Agreements/Access.php"
+      ],
+      "est_chars_read": 0
+    },
+    {
+      "id": "Z-08",
+      "question": "Где проверяются права и область видимости подсистемы?",
+      "ops": [
+        {
+          "op": "search",
+          "args": {
+            "query": "права fail-closed область видимости подразделение поддерево",
+            "limit": 6
+          },
+          "seconds": 0.007,
+          "found": true,
+          "items": 6,
+          "index_rev": "rev-0001",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 6,
+      "facts_with_path": 6,
+      "seconds": 0.007,
+      "found": true,
+      "hit_expected": true,
+      "expect_any": [
+        "src/Agreements/Access.php"
+      ],
+      "top_paths": [
+        "src/Agreements/Access.php",
+        "src/Agreements/Access.php",
+        "mail/index.php",
+        "src/Agreements/Access.php",
+        "mail/edit.php"
+      ],
+      "est_chars_read": 0
+    },
+    {
+      "id": "Z-09",
+      "question": "Где описаны шаги согласования и слепок решения?",
+      "ops": [
+        {
+          "op": "search",
+          "args": {
+            "query": "шаг согласования слепок решения SignHash раунд",
+            "limit": 6
+          },
+          "seconds": 0.005,
+          "found": true,
+          "items": 6,
+          "index_rev": "rev-0001",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 6,
+      "facts_with_path": 6,
+      "seconds": 0.005,
+      "found": true,
+      "hit_expected": false,
+      "expect_any": [
+        "DocApproval",
+        "20261004_0013"
+      ],
+      "top_paths": [
+        "src/Agreements/Access.php",
+        "mail/index.php",
+        "config/config.local.example.php",
+        "mail/edit.php",
+        "src/Agreements/Access.php"
+      ],
+      "est_chars_read": 0
+    },
+    {
+      "id": "Z-10",
+      "question": "Где хранятся секреты подсистемы и как они шифруются?",
+      "ops": [
+        {
+          "op": "search",
+          "args": {
+            "query": "реестр настроек шифрование секретов sodium",
+            "limit": 6
+          },
+          "seconds": 0.005,
+          "found": true,
+          "items": 6,
+          "index_rev": "rev-0001",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 6,
+      "facts_with_path": 6,
+      "seconds": 0.005,
+      "found": true,
+      "hit_expected": true,
+      "expect_any": [
+        "src/Agreements/Setting.php"
+      ],
+      "top_paths": [
+        "mail/index.php",
+        "config/config.php",
+        "src/Agreements/Setting.php",
+        "admin/systems.php",
+        "src/Agreements/Setting.php"
+      ],
+      "est_chars_read": 0
+    },
+    {
+      "id": "Z-11",
+      "question": "Где реализована выдача номеров документов?",
+      "ops": [
+        {
+          "op": "search",
+          "args": {
+            "query": "выдача номера документа транзакция блокировка счётчик",
+            "limit": 5
+          },
+          "seconds": 0.005,
+          "found": true,
+          "items": 5,
+          "index_rev": "rev-0001",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 5,
+      "facts_with_path": 5,
+      "seconds": 0.005,
+      "found": true,
+      "hit_expected": false,
+      "expect_any": [
+        "src/Agreements/Numbering.php"
+      ],
+      "top_paths": [
+        "mail/index.php",
+        "mail/edit.php",
+        "admin/systems.php",
+        "mail/rows.php",
+        "passwords_share.php"
+      ],
+      "est_chars_read": 0
+    },
+    {
+      "id": "Z-12",
+      "question": "Общая структура репозитория портала: крупные модули и их назначение",
+      "ops": [
+        {
+          "op": "repo_map",
+          "args": {
+            "budget": 1500
+          },
+          "seconds": 0.004,
+          "found": true,
+          "items": 41,
+          "index_rev": "rev-0001",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 41,
+      "facts_with_path": 0,
+      "seconds": 0.004,
+      "found": true,
+      "hit_expected": null,
+      "expect_any": [],
+      "top_paths": [
+        "lib/html.php",
+        "src/PasswordShares.php",
+        "src/Agreements/Access.php",
+        "src/Agreements/Setting.php",
+        "src/MailRegistry.php"
+      ],
+      "est_chars_read": 0
+    },
+    {
+      "id": "Z-13",
+      "question": "Какие таблицы создаёт миграция ядра подсистемы?",
+      "ops": [
+        {
+          "op": "search",
+          "args": {
+            "query": "миграция ядро подразделения сотрудники роли таблицы",
+            "limit": 8
+          },
+          "seconds": 0.005,
+          "found": true,
+          "items": 8,
+          "index_rev": "rev-0001",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 8,
+      "facts_with_path": 8,
+      "seconds": 0.005,
+      "found": true,
+      "hit_expected": false,
+      "expect_any": [
+        "20261004_0013",
+        "DocDepartment",
+        "DocApproval"
+      ],
+      "top_paths": [
+        "src/Migrations/Migrator.php",
+        "config/config.local.example.php",
+        "src/Sections.php",
+        "admin/users.php",
+        "src/Agreements/Access.php"
+      ],
+      "est_chars_read": 0
+    },
+    {
+      "id": "Z-14",
+      "question": "Где описаны правила проекта для агента (конвенции и инварианты)?",
+      "ops": [
+        {
+          "op": "search",
+          "args": {
+            "query": "правила проекта конвенции инварианты агент запреты",
+            "limit": 5
+          },
+          "seconds": 0.005,
+          "found": true,
+          "items": 5,
+          "index_rev": "rev-0001",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 5,
+      "facts_with_path": 5,
+      "seconds": 0.005,
+      "found": true,
+      "hit_expected": false,
+      "expect_any": [
+        "AGENTS"
+      ],
+      "top_paths": [
+        "mail/index.php",
+        "admin/visibility.php",
+        "src/Sections.php",
+        "admin/users.php",
+        "src/Agreements/History.php"
+      ],
+      "est_chars_read": 0
+    }
+  ],
+  "corpus": "z-batteryservice",
+  "generated_at": "2026-10-05T02:56:30+03:00",
+  "note": "С индексом: число вызовов = операции фасада. Возвращаемые факты содержат path:line, поэтому проверяемость считается по факту, а не оценивается."
+}

@@ -70,4 +70,4 @@ Accepted defect reports are recorded with the reporter's handle in [CHANGELOG.md
 
 ## License
 
-By contributing, you agree your contributions are licensed under the project's [PolyForm Noncommercial License 1.0.0](LICENSE) — the same terms the project ships under. Participation in issues, discussions and pull requests is covered by the [Code of Conduct](CODE_OF_CONDUCT.md).
+By contributing, you agree your contributions are licensed under the project's [Business Source License 1.1](LICENSE) — the same terms the project ships under — and that the maintainer may relicense them under the terms described in [CLA.md](CLA.md). Participation in issues, discussions and pull requests is covered by the [Code of Conduct](CODE_OF_CONDUCT.md).

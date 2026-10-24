@@ -148,6 +148,46 @@ except JoernServerUnavailable as exc:
 except Exception as exc:
     check(False, "отказ при отсутствующем скрипте", f"{type(exc).__name__}")
 
+print()
+print("=== 8. Личный временный каталог JVM (zstd-jni) ===")
+# Замер 23.10.2026: в общем `%TEMP%` накопилось 1532 файла `libzstd-jni-*.dll`
+# общим объёмом 1,73 ГБ — по одному на запуск JVM. С 21.10 распаковка перестала
+# работать («Access is denied»), и сборка CPG падала ЦЕЛИКОМ, а рёбра вызовов
+# тихо переносились из прошлой ревизии: capability остаётся `full`, связи нового
+# кода отсутствуют. Инвариант: у JVM Joern свой каталог внутри `.ragraf`, и он
+# чистится перед сборкой.
+import os as _os  # noqa: E402
+
+from ragraf import cpg as cpg_mod  # noqa: E402
+from ragraf.config import load as load_config  # noqa: E402
+
+cfg = load_config(REPO / "config" / "ragraf.yaml")
+_os.environ["JAVA_TOOL_OPTIONS"] = "-Dkeep.me=1"
+try:
+    env = cpg_mod.java_env(cfg)
+finally:
+    _os.environ.pop("JAVA_TOOL_OPTIONS", None)
+
+flag = env.get("JAVA_TOOL_OPTIONS", "")
+check("-Djava.io.tmpdir=" in flag,
+      "JAVA_TOOL_OPTIONS задаёт временный каталог JVM", flag[:160])
+check("-Dkeep.me=1" in flag,
+      "прежнее значение JAVA_TOOL_OPTIONS не затёрто", flag[:160])
+
+tmp_dir = cpg_mod.joern_tmp(cfg)
+check(tmp_dir.exists(), "каталог JVM создан", str(tmp_dir))
+check(str(tmp_dir).lower().startswith(str(cfg.ragraf_dir).lower()),
+      "каталог лежит внутри .ragraf (исключён из индексации)", str(tmp_dir))
+
+(tmp_dir / "libzstd-jni-1.5.6-test.dll").write_bytes(b"x" * 8)
+(tmp_dir / "keep-me.txt").write_text("x", encoding="utf-8")
+removed = cpg_mod.prune_joern_tmp(cfg)
+check(removed >= 1, "чистка убирает распакованные библиотеки", f"удалено {removed}")
+check(not (tmp_dir / "libzstd-jni-1.5.6-test.dll").exists(),
+      "файл библиотеки удалён")
+check((tmp_dir / "keep-me.txt").exists(), "посторонний файл не тронут")
+(tmp_dir / "keep-me.txt").unlink()
+
 print("\n=== ИТОГ ===")
 print(f"пройдено: {PASS}, провалено: {FAIL}")
 raise SystemExit(0 if FAIL == 0 else 1)

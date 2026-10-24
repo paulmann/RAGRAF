@@ -539,7 +539,13 @@ function Test-Deployed {
         return $false
     }
     $license = (Get-Content -LiteralPath (Join-Path $Dir 'LICENSE') -Raw)
-    $licenseName = if ($license -match 'PolyForm Noncommercial') { 'PolyForm Noncommercial 1.0.0' }
+    # Порядок проверок — от текущей лицензии к прежним: в тексте BUSL-1.1 нет
+    # слов «PolyForm» и «MIT License», поэтому без первой ветви установщик
+    # сообщал «лицензия: не опознана» на исправной поставке (измерено 24.10.2026
+    # на дереве после перехода на BUSL-1.1). Прежние ветви сохранены: установщик
+    # читает и поставки эпохи MIT/PolyForm.
+    $licenseName = if ($license -match 'Business Source License') { 'Business Source License 1.1' }
+                   elseif ($license -match 'PolyForm Noncommercial') { 'PolyForm Noncommercial 1.0.0' }
                    elseif ($license -match 'MIT License') { 'MIT' } else { 'не опознана' }
     Add-Result -Step 'Состав установки' -State 'OK' -Detail "обязательные файлы на месте, лицензия: $licenseName"
     return $true
