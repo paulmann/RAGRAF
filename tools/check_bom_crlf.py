@@ -93,6 +93,13 @@ FILES = [
     "tools/release/build_release.py",
     "tools/release/verify_release.py",
     "tools/release/gate_release.py",
+    "tools/release/editions_report.py",
+    "tools/release/replace_staging_tree.ps1",
+    "editions/editions.toml",
+    "editions/README.md",
+    "editions/EXCLUDED-FROM-COMMUNITY.md",
+    "pro/README.md",
+    "enterprise/README.md",
     "tools/check_release_manifest.py",
     "docs/03_implementation/RELEASE-PIPELINE.md",
 ]
