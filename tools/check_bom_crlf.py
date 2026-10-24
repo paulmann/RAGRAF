@@ -97,6 +97,7 @@ FILES = [
     "tools/release/replace_staging_tree.ps1",
     "editions/editions.toml",
     "editions/README.md",
+    "editions/legacy-v0.1.0/README.md",
     "editions/EXCLUDED-FROM-COMMUNITY.md",
     "pro/README.md",
     "enterprise/README.md",
