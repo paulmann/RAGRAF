@@ -1,0 +1,461 @@
+{
+  "mode": "indexed",
+  "tasks": 14,
+  "total_tool_calls": 14,
+  "avg_tool_calls": 1.0,
+  "total_seconds": 1.372,
+  "facts_with_path": 18,
+  "facts_total": 60,
+  "verifiability": 0.3,
+  "hit_tasks": 13,
+  "hit_expected": 12,
+  "hit_rate": 0.9231,
+  "details": [
+    {
+      "id": "Z-01",
+      "question": "Где проверяется признак главного администратора и почему не из сессии?",
+      "ops": [
+        {
+          "op": "search",
+          "args": {
+            "query": "проверка администратора свежее чтение из базы",
+            "limit": 5
+          },
+          "seconds": 1.367,
+          "found": true,
+          "items": 5,
+          "index_rev": "rev-0002",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 5,
+      "facts_with_path": 5,
+      "seconds": 1.367,
+      "found": true,
+      "hit_expected": true,
+      "expect_any": [
+        "MailRegistry.php",
+        "passwords.php",
+        "AuthService.php"
+      ],
+      "top_paths": [
+        "src/MailRegistry.php",
+        "src/PasswordShares.php",
+        "src/Agreements/Access.php",
+        "src/Agreements/Access.php",
+        "src/Passwords.php"
+      ],
+      "est_chars_read": 0
+    },
+    {
+      "id": "Z-02",
+      "question": "Где определена функция отдачи файла реестра писем?",
+      "ops": [
+        {
+          "op": "symbol",
+          "args": {
+            "name": "z_mail_file_deny",
+            "limit": 5
+          },
+          "seconds": 0.0,
+          "found": true,
+          "items": 1,
+          "index_rev": "rev-0002",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 1,
+      "facts_with_path": 1,
+      "seconds": 0.0,
+      "found": true,
+      "hit_expected": true,
+      "expect_any": [
+        "mail/file.php"
+      ],
+      "top_paths": [
+        "mail/file.php"
+      ],
+      "est_chars_read": 0
+    },
+    {
+      "id": "Z-03",
+      "question": "Где собираются строки реестра корреспонденции для страницы и поиска?",
+      "ops": [
+        {
+          "op": "symbol",
+          "args": {
+            "name": "z_mail_rows",
+            "limit": 5
+          },
+          "seconds": 0.0,
+          "found": true,
+          "items": 1,
+          "index_rev": "rev-0002",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 1,
+      "facts_with_path": 1,
+      "seconds": 0.0,
+      "found": true,
+      "hit_expected": true,
+      "expect_any": [
+        "mail/rows.php"
+      ],
+      "top_paths": [
+        "mail/rows.php"
+      ],
+      "est_chars_read": 0
+    },
+    {
+      "id": "Z-04",
+      "question": "Где определена точка входа загрузки портала?",
+      "ops": [
+        {
+          "op": "symbol",
+          "args": {
+            "name": "z_boot",
+            "limit": 5
+          },
+          "seconds": 0.0,
+          "found": true,
+          "items": 1,
+          "index_rev": "rev-0002",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 1,
+      "facts_with_path": 1,
+      "seconds": 0.0,
+      "found": true,
+      "hit_expected": true,
+      "expect_any": [
+        "src/Bootstrap.php"
+      ],
+      "top_paths": [
+        "src/Bootstrap.php"
+      ],
+      "est_chars_read": 0
+    },
+    {
+      "id": "Z-05",
+      "question": "Где определена функция экранирования вывода z_e()?",
+      "ops": [
+        {
+          "op": "symbol",
+          "args": {
+            "name": "z_e",
+            "limit": 5
+          },
+          "seconds": 0.0,
+          "found": true,
+          "items": 2,
+          "index_rev": "rev-0002",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 2,
+      "facts_with_path": 2,
+      "seconds": 0.0,
+      "found": true,
+      "hit_expected": true,
+      "expect_any": [
+        "src/Bootstrap.php",
+        "src/View.php"
+      ],
+      "top_paths": [
+        "src/Bootstrap.php",
+        "src/View.php"
+      ],
+      "est_chars_read": 0
+    },
+    {
+      "id": "Z-06",
+      "question": "Где определена единая точка подключения к базе?",
+      "ops": [
+        {
+          "op": "symbol",
+          "args": {
+            "name": "pdo",
+            "limit": 5
+          },
+          "seconds": 0.0,
+          "found": true,
+          "items": 2,
+          "index_rev": "rev-0002",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 2,
+      "facts_with_path": 2,
+      "seconds": 0.0,
+      "found": true,
+      "hit_expected": true,
+      "expect_any": [
+        "src/Db.php"
+      ],
+      "top_paths": [
+        "src/Db.php",
+        "src/Db.php"
+      ],
+      "est_chars_read": 0
+    },
+    {
+      "id": "Z-07",
+      "question": "Где определён маппинг журналов подсистемы (ключ, код, таблица)?",
+      "ops": [
+        {
+          "op": "symbol",
+          "args": {
+            "name": "z_agr_journals",
+            "limit": 5
+          },
+          "seconds": 0.0,
+          "found": true,
+          "items": 1,
+          "index_rev": "rev-0002",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 1,
+      "facts_with_path": 1,
+      "seconds": 0.0,
+      "found": true,
+      "hit_expected": true,
+      "expect_any": [
+        "src/Agreements/Engine.php"
+      ],
+      "top_paths": [
+        "src/Agreements/Engine.php"
+      ],
+      "est_chars_read": 0
+    },
+    {
+      "id": "Z-08",
+      "question": "Где определена функция ограничения области видимости?",
+      "ops": [
+        {
+          "op": "symbol",
+          "args": {
+            "name": "z_agr_scope_sql",
+            "limit": 5
+          },
+          "seconds": 0.0,
+          "found": true,
+          "items": 1,
+          "index_rev": "rev-0002",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 1,
+      "facts_with_path": 1,
+      "seconds": 0.0,
+      "found": true,
+      "hit_expected": true,
+      "expect_any": [
+        "src/Agreements/Access.php"
+      ],
+      "top_paths": [
+        "src/Agreements/Access.php"
+      ],
+      "est_chars_read": 0
+    },
+    {
+      "id": "Z-09",
+      "question": "Что известно о таблице шагов согласования и кто её использует?",
+      "ops": [
+        {
+          "op": "table_usage",
+          "args": {
+            "table": "DocApproval",
+            "limit": 30
+          },
+          "seconds": 0.001,
+          "found": true,
+          "items": 1,
+          "index_rev": "rev-0002",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 1,
+      "facts_with_path": 0,
+      "seconds": 0.001,
+      "found": true,
+      "hit_expected": false,
+      "expect_any": [
+        "DocApproval",
+        "20261004_0013"
+      ],
+      "top_paths": [],
+      "est_chars_read": 0
+    },
+    {
+      "id": "Z-10",
+      "question": "Где определена функция чтения настройки подсистемы?",
+      "ops": [
+        {
+          "op": "symbol",
+          "args": {
+            "name": "z_agr_setting",
+            "limit": 5
+          },
+          "seconds": 0.0,
+          "found": true,
+          "items": 1,
+          "index_rev": "rev-0002",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 1,
+      "facts_with_path": 1,
+      "seconds": 0.0,
+      "found": true,
+      "hit_expected": true,
+      "expect_any": [
+        "src/Agreements/Setting.php"
+      ],
+      "top_paths": [
+        "src/Agreements/Setting.php"
+      ],
+      "est_chars_read": 0
+    },
+    {
+      "id": "Z-11",
+      "question": "Где определена выдача номеров документов?",
+      "ops": [
+        {
+          "op": "symbol",
+          "args": {
+            "name": "z_agr_next_no",
+            "limit": 5
+          },
+          "seconds": 0.0,
+          "found": true,
+          "items": 1,
+          "index_rev": "rev-0002",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 1,
+      "facts_with_path": 1,
+      "seconds": 0.0,
+      "found": true,
+      "hit_expected": true,
+      "expect_any": [
+        "src/Agreements/Numbering.php"
+      ],
+      "top_paths": [
+        "src/Agreements/Numbering.php"
+      ],
+      "est_chars_read": 0
+    },
+    {
+      "id": "Z-12",
+      "question": "Общая структура репозитория портала: крупные модули и их назначение",
+      "ops": [
+        {
+          "op": "repo_map",
+          "args": {
+            "budget": 1500
+          },
+          "seconds": 0.004,
+          "found": true,
+          "items": 41,
+          "index_rev": "rev-0002",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 41,
+      "facts_with_path": 0,
+      "seconds": 0.004,
+      "found": true,
+      "hit_expected": null,
+      "expect_any": [],
+      "top_paths": [
+        "lib/html.php",
+        "src/PasswordShares.php",
+        "src/Agreements/Access.php",
+        "src/Agreements/Setting.php",
+        "src/MailRegistry.php"
+      ],
+      "est_chars_read": 0
+    },
+    {
+      "id": "Z-13",
+      "question": "Где определена функция выборки строк журнала?",
+      "ops": [
+        {
+          "op": "symbol",
+          "args": {
+            "name": "z_agr_rows",
+            "limit": 5
+          },
+          "seconds": 0.0,
+          "found": true,
+          "items": 1,
+          "index_rev": "rev-0002",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 1,
+      "facts_with_path": 1,
+      "seconds": 0.0,
+      "found": true,
+      "hit_expected": true,
+      "expect_any": [
+        "src/Agreements/Registry.php"
+      ],
+      "top_paths": [
+        "src/Agreements/Registry.php"
+      ],
+      "est_chars_read": 0
+    },
+    {
+      "id": "Z-14",
+      "question": "Где определена функция единого времени подсистемы?",
+      "ops": [
+        {
+          "op": "symbol",
+          "args": {
+            "name": "z_agr_now",
+            "limit": 5
+          },
+          "seconds": 0.0,
+          "found": true,
+          "items": 1,
+          "index_rev": "rev-0002",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 1,
+      "facts_with_path": 1,
+      "seconds": 0.0,
+      "found": true,
+      "hit_expected": true,
+      "expect_any": [
+        "src/Agreements/History.php"
+      ],
+      "top_paths": [
+        "src/Agreements/History.php"
+      ],
+      "est_chars_read": 0
+    }
+  ],
+  "corpus": "z-batteryservice",
+  "generated_at": "2026-10-05T03:01:24+03:00",
+  "note": "С индексом: число вызовов = операции фасада. Возвращаемые факты содержат path:line, поэтому проверяемость считается по факту, а не оценивается."
+}

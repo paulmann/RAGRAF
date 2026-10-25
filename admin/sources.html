@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RAGRAF — источники карты</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0; font: 14px/1.45 system-ui, sans-serif; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 28px 20px 60px; }
+  header { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
+  h1 { font-size: 22px; margin: 0; }
+  .muted { opacity: .7; }
+  .small { font-size: 12.5px; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+  .card { border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+          border-radius: 10px; padding: 16px; margin: 16px 0; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; }
+  input, select, button { font: inherit; padding: 7px 9px; border-radius: 7px;
+          border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+          background: transparent; color: inherit; }
+  input[type="text"], input[type="password"] { min-width: 260px; }
+  button { cursor: pointer; }
+  button.primary { font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+          vertical-align: top; }
+  th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .status { margin-top: 12px; min-height: 20px; }
+  .status.bad { color: #b42318; }
+  .status.ok { color: #067647; }
+  .pill { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11.5px;
+          border: 1px solid currentColor; opacity: .85; }
+  .empty { padding: 18px; text-align: center; opacity: .7; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Источники карты</h1>
+    <a href="/" class="small">← панель</a>
+    <span class="small muted">разрешённые корни для «Я это ты»</span>
+  </header>
+
+  <p class="small muted">
+    Карта хранит только метаданные: имя, путь, размер, дату и вид файла.
+    Содержимое не читается; секретоносные файлы попадают только в реестр мест
+    (путь и правило), значения не сохраняются никогда.
+  </p>
+
+  <div class="card">
+    <div class="row">
+      <label>Токен доступа
+        <input type="password" id="token" autocomplete="off"
+               placeholder="токен сессии из вывода панели">
+      </label>
+      <button type="button" id="save-token">Запомнить в браузере</button>
+      <button type="button" id="refresh">Обновить</button>
+    </div>
+    <p class="small muted" style="margin-bottom:0">
+      Токен нужен только для добавления, удаления и скана. Просмотр — без него.
+      Он хранится в localStorage этого браузера, как и в основной панели.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2 style="font-size:15px;margin:0 0 8px">Добавить корень</h2>
+    <div class="row">
+      <label>Путь
+        <input type="text" id="root" placeholder="AMD или \\server\share">
+      </label>
+      <label>Вид
+        <select id="kind">
+          <option value="">определить автоматически</option>
+          <option value="project">project</option>
+          <option value="folder">folder</option>
+          <option value="share">share</option>
+        </select>
+      </label>
+      <label>Приоритет
+        <input type="text" id="priority" value="0" style="min-width:80px">
+      </label>
+      <label>Заметка
+        <input type="text" id="note" placeholder="зачем добавлен">
+      </label>
+      <label style="flex-direction: row; align-items: center; gap: 6px">
+        <input type="checkbox" id="network" style="min-width:auto">
+        <span>сетевой путь (UNC)</span>
+      </label>
+      <button type="button" class="primary" id="add">Добавить</button>
+    </div>
+    <p class="small muted" style="margin-bottom:0">
+      Корень диска, домашний каталог целиком, системный каталог Windows и
+      каталог <span class="mono">.ragraf</span> отклоняются с причиной.
+    </p>
+  </div>
+
+  <div class="card">
+    <div class="row" style="justify-content: space-between">
+      <h2 style="font-size:15px;margin:0">Разрешённые корни</h2>
+      <button type="button" id="scan-all">Сканировать все включённые</button>
+    </div>
+    <div id="table"></div>
+    <div class="status small" id="status"></div>
+  </div>
+
+  <p class="small muted" id="storage"></p>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var STORAGE = 'ragraf-admin-token';
+  var tokenInput = document.getElementById('token');
+  var statusBox = document.getElementById('status');
+  var tableBox = document.getElementById('table');
+  var storageLine = document.getElementById('storage');
+
+  function token() {
+    try { return tokenInput.value || window.localStorage.getItem(STORAGE) || ''; }
+    catch (e) { return tokenInput.value || ''; }
+  }
+
+  function say(text, kind) {
+    statusBox.textContent = text || '';
+    statusBox.className = 'status small' + (kind ? ' ' + kind : '');
+  }
+
+  function call(path, options) {
+    options = options || {};
+    var headers = { 'Content-Type': 'application/json' };
+    var value = token();
+    if (value) headers['X-RAGRAF-Token'] = value;
+    return fetch(path, {
+      method: options.method || 'GET',
+      headers: headers,
+      body: options.body ? JSON.stringify(options.body) : undefined,
+      credentials: 'same-origin'
+    }).then(function (response) {
+      return response.json().catch(function () { return {}; })
+        .then(function (data) {
+          if (!response.ok || data.ok === false) {
+            throw new Error(data.error || ('HTTP ' + response.status));
+          }
+          return data;
+        });
+    });
+  }
+
+  function cell(row, text, className) {
+    var td = document.createElement('td');
+    if (className) td.className = className;
+    td.textContent = text == null ? '' : String(text);
+    row.appendChild(td);
+    return td;
+  }
+
+  function button(label, action, source, extra) {
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = label;
+    btn.dataset.action = action;
+    btn.dataset.id = String(source.id);
+    if (extra) Object.keys(extra).forEach(function (key) { btn.dataset[key] = extra[key]; });
+    return btn;
+  }
+
+  function render(data) {
+    var sources = data.sources || [];
+    storageLine.textContent = 'реестр: ' + (data.storage || '') +
+      (data.map && data.map.storage ? ' · карта: ' + data.map.storage : '') +
+      (data.map ? ' · файлов в карте: ' + data.map.files + ', секретных мест: ' + data.map.secrets : '');
+    tableBox.textContent = '';
+    if (!sources.length) {
+      var empty = document.createElement('div');
+      empty.className = 'empty';
+      empty.textContent = 'Источников нет. Добавьте корень выше.';
+      tableBox.appendChild(empty);
+      return;
+    }
+    var table = document.createElement('table');
+    var head = document.createElement('thead');
+    var hr = document.createElement('tr');
+    ['id', 'Корень', 'Вид', 'Вкл', 'Файлов', 'Секретов', 'Последний скан', ''].forEach(function (title, index) {
+      var th = document.createElement('th');
+      th.textContent = title;
+      if (index === 0 || index >= 4) th.className = 'num';
+      hr.appendChild(th);
+    });
+    head.appendChild(hr);
+    table.appendChild(head);
+    var body = document.createElement('tbody');
+    sources.forEach(function (src) {
+      var tr = document.createElement('tr');
+      cell(tr, src.id, 'num mono');
+      var rootCell = cell(tr, src.root, 'mono small');
+      if (src.note) {
+        var note = document.createElement('div');
+        note.className = 'small muted';
+        note.textContent = src.note;
+        rootCell.appendChild(note);
+      }
+      cell(tr, src.kind, 'small');
+      var enabled = document.createElement('td');
+      var pill = document.createElement('span');
+      pill.className = 'pill';
+      pill.textContent = src.enabled ? 'вкл' : 'выкл';
+      enabled.appendChild(pill);
+      tr.appendChild(enabled);
+      cell(tr, src.files == null ? '—' : src.files, 'num');
+      cell(tr, src.secrets == null ? '—' : src.secrets, 'num');
+      cell(tr, src.last_scan_at || '—', 'small');
+      var actions = document.createElement('td');
+      actions.appendChild(button('Скан', 'scan', src));
+      actions.appendChild(document.createTextNode(' '));
+      actions.appendChild(button(src.enabled ? 'Выключить' : 'Включить', 'toggle', src,
+        { enabled: src.enabled ? '0' : '1' }));
+      actions.appendChild(document.createTextNode(' '));
+      actions.appendChild(button('Удалить', 'remove', src));
+      tr.appendChild(actions);
+      body.appendChild(tr);
+    });
+    table.appendChild(body);
+    tableBox.appendChild(table);
+  }
+
+  function load() {
+    return call('/api/sources').then(function (data) {
+      render(data);
+      say('');
+    }).catch(function (error) {
+      say('Не удалось прочитать источники: ' + error.message, 'bad');
+    });
+  }
+
+  function afterAction(message) {
+    return load().then(function () { say(message, 'ok'); });
+  }
+
+  document.getElementById('save-token').addEventListener('click', function () {
+    try {
+      if (token()) window.localStorage.setItem(STORAGE, token());
+      else window.localStorage.removeItem(STORAGE);
+      say('Токен сохранён в браузере', 'ok');
+    } catch (e) {
+      say('Браузер запретил localStorage: токен будет действовать до перезагрузки', 'bad');
+    }
+  });
+
+  document.getElementById('refresh').addEventListener('click', load);
+
+  document.getElementById('add').addEventListener('click', function () {
+    var root = document.getElementById('root').value.trim();
+    if (!root) { say('Укажите путь к каталогу', 'bad'); return; }
+    var body = {
+      action: 'add',
+      root: root,
+      note: document.getElementById('note').value.trim(),
+      priority: parseInt(document.getElementById('priority').value || '0', 10) || 0,
+      network: document.getElementById('network').checked
+    };
+    var kind = document.getElementById('kind').value;
+    if (kind) body.kind = kind;
+    call('/api/sources', { method: 'POST', body: body })
+      .then(function () {
+        document.getElementById('root').value = '';
+        document.getElementById('note').value = '';
+        return afterAction('Источник добавлен');
+      })
+      .catch(function (error) { say('Не добавлено: ' + error.message, 'bad'); });
+  });
+
+  document.getElementById('scan-all').addEventListener('click', function () {
+    say('Скан идёт: до 20 секунд на корень', '');
+    call('/api/sources', { method: 'POST', body: { action: 'scan' } })
+      .then(function (data) {
+        var scans = (data.result && data.result.scans) || [];
+        var files = scans.reduce(function (sum, row) { return sum + (row.files || 0); }, 0);
+        return afterAction('Просканировано корней: ' + scans.length + ', файлов: ' + files);
+      })
+      .catch(function (error) { say('Скан не выполнен: ' + error.message, 'bad'); });
+  });
+
+  tableBox.addEventListener('click', function (event) {
+    var btn = event.target.closest('button[data-action]');
+    if (!btn) return;
+    var id = btn.dataset.id;
+    var action = btn.dataset.action;
+    if (action === 'remove') {
+      if (!window.confirm('Удалить источник id=' + id + '? Файлы на диске останутся.')) return;
+      call('/api/sources', { method: 'POST', body: { action: 'remove', id: id } })
+        .then(function () { return afterAction('Источник удалён; файлы на диске целы'); })
+        .catch(function (error) { say('Не удалено: ' + error.message, 'bad'); });
+      return;
+    }
+    if (action === 'toggle') {
+      call('/api/sources', { method: 'POST',
+        body: { action: 'toggle', id: id, enabled: btn.dataset.enabled === '1' } })
+        .then(function () { return afterAction('Состояние изменено'); })
+        .catch(function (error) { say('Не изменено: ' + error.message, 'bad'); });
+      return;
+    }
+    if (action === 'scan') {
+      say('Скан идёт: до 20 секунд', '');
+      call('/api/sources', { method: 'POST', body: { action: 'scan', id: id } })
+        .then(function (data) {
+          var scans = (data.result && data.result.scans) || [];
+          return afterAction(scans.length ? ('Файлов: ' + (scans[0].files || 0)) : 'Источник не найден');
+        })
+        .catch(function (error) { say('Скан не выполнен: ' + error.message, 'bad'); });
+    }
+  });
+
+  try { tokenInput.value = window.localStorage.getItem(STORAGE) || ''; } catch (e) { /* нет доступа */ }
+  load();
+})();
+</script>
+</body>
+</html>

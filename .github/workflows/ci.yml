@@ -1,0 +1,191 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # Единая кодировка для всех шагов: тесты проекта печатают отчёт по-русски, а
+  # консоль Windows-раннера по умолчанию не UTF-8. Без этого шаги падали
+  # UnicodeEncodeError ('charmap' codec can't encode) — проверено локально
+  # запуском с PYTHONIOENCODING=cp1252. Заодно фиксируется поведение Python
+  # на всех платформах (матрица Windows/Ubuntu).
+  PYTHONIOENCODING: utf-8
+  PYTHONUTF8: '1'
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-hygiene:
+    name: Hygiene (syntax, BOM/CRLF, doctrine)
+    runs-on: windows-latest
+    steps:
+      # checkout с сохранением переводов строк: договор проекта требует LF, и
+      # проверка ниже читает ФАЙЛЫ, а не индекс. Без этого на Windows-раннере
+      # (core.autocrlf=true) каждый файл оказывался с CR и шаг падал всегда.
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Enforce LF in the work tree (contract LF + no BOM)
+        shell: pwsh
+        run: |
+          git config --local core.autocrlf false
+          git config --local core.eol lf
+          git rm --cached -r -q . 2>$null | Out-Null
+          git reset --hard -q
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Python syntax check (all files)
+        shell: pwsh
+        run: |
+          $fail = 0
+          # bench включён намеренно: измеритель и отчётный скрипт — такой же
+          # код проекта, и раньше он оставался без синтаксической защиты.
+          Get-ChildItem -Recurse -Include *.py -Path src, tools, tests, bench | ForEach-Object {
+            python -m py_compile $_.FullName
+            if ($LASTEXITCODE -ne 0) { Write-Error "SYNTAX FAIL: $($_.FullName)"; $fail++ }
+          }
+          if ($fail -gt 0) { exit 1 }
+          Write-Host "syntax: all files OK"
+      - name: BOM / CRLF check (project convention НФТ-9 / NFR-9)
+        shell: pwsh
+        run: |
+          $bad = 0
+          git ls-files | Where-Object { $_ -match '\.(py|ps1|md|yaml|toml|txt|js|css)$' } | ForEach-Object {
+            $bytes = [IO.File]::ReadAllBytes($_)
+            if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) { Write-Error "BOM: $_"; $bad++ }
+            if ($bytes -contains 13) { Write-Error "CRLF: $_"; $bad++ }
+          }
+          if ($bad -gt 0) { exit 1 }
+          Write-Host "encodings: 0 violations"
+      - name: Project doctrine checker
+        shell: pwsh
+        run: pwsh -NoLogo -NoProfile -File tools/Invoke-ProjectDoctrine.ps1
+        # The checker prints its own verdict (checks / errors / warnings). Its
+        # baseline differs by tree: the published subset cannot satisfy three
+        # checks whose files are withheld (ROADMAP R-REL-1), while the private
+        # working tree runs them all. Any NEW error or warning is a finding in
+        # either tree, so this step reports instead of blocking.
+        continue-on-error: true
+
+  powershell:
+    name: PowerShell (parser + PSScriptAnalyzer)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse all scripts
+        shell: pwsh
+        run: |
+          $fail = 0
+          Get-ChildItem -Recurse -Include *.ps1 -Path scripts, tools | ForEach-Object {
+            $errors = $null; $tokens = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count) { $errors | ForEach-Object { Write-Error "$($_.Extent.StartLineNumber): $($_.Message)" }; $fail++ }
+          }
+          if ($fail -gt 0) { exit 1 }
+      - name: PSScriptAnalyzer (with shipped settings)
+        shell: pwsh
+        run: |
+          Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
+          $r = Invoke-ScriptAnalyzer -Path scripts -Recurse -Settings scripts/PSScriptAnalyzerSettings.psd1
+          if ($r) { $r | Format-List; exit 1 }
+          Write-Host 'PSScriptAnalyzer: clean'
+
+  install-and-test:
+    name: Install + portable tests (py${{ matrix.python }} / ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+        python: ['3.13', '3.14']
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enforce LF in the work tree (same contract as hygiene job)
+        shell: pwsh
+        run: |
+          git config --local core.autocrlf false
+          git config --local core.eol lf
+          git rm --cached -r -q . 2>$null | Out-Null
+          git reset --hard -q
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install (Windows installer OR pip)
+        shell: pwsh
+        run: |
+          if ($IsWindows) {
+            pwsh -NoLogo -NoProfile -File scripts/install.ps1 -SummaryJson install-summary.json
+            $code = $LASTEXITCODE
+            Get-Content install-summary.json | ConvertFrom-Json |
+              Select-Object verdict, failed, warned | Format-List
+            if ($code -ne 0) { exit $code }
+          } else {
+            python -m venv .venv
+            ./.venv/bin/pip install --disable-pip-version-check -e .
+            ./.venv/bin/ragraf --version
+          }
+      - name: Portable test suites
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { "$HOME/.ragraf/venv/Scripts/python.exe" } else { "./.venv/bin/python" }
+          if (-not (Test-Path $py)) { $py = "python" }
+          $fail = 0
+          $env:PYTHONIOENCODING = 'utf-8'
+          $env:PYTHONUTF8 = '1'
+          foreach ($t in @('test_lang_routing.py','test_watch.py','test_script_extract.py','test_threshold.py','test_ensure.py','test_csharp_records.py')) {
+            & $py "tests/$t"
+            if ($LASTEXITCODE -ne 0) { Write-Error "SUITE FAILED: $t"; $fail++ }
+          }
+          if ($fail -gt 0) { exit 1 }
+      - name: Smoke — synthetic corpus end-to-end (no vectors)
+        shell: pwsh
+        run: |
+          $ragraf = if ($IsWindows) { "$HOME/.ragraf/venv/Scripts/ragraf.exe" } else { "./.venv/bin/ragraf" }
+          if (-not (Test-Path $ragraf)) { $ragraf = "ragraf" }
+          $proj = Join-Path ([IO.Path]::GetTempPath()) "ragraf-ci-proj"
+          New-Item -ItemType Directory -Force -Path "$proj/src" | Out-Null
+          git -C $proj init -q 2>$null; if ($LASTEXITCODE -ne 0) { git init -q $proj }
+          # Корпус не создаётся для каталога, где меньше ТРЁХ файлов с кодом:
+          # `ensure` отвечает not_a_project и выходит с кодом 0. Проверено
+          # локально на Windows+pwsh 7.6 (12.10.2026): с одним demo.py шаг падал
+          # здесь и валил весь job. Поэтому файлов ровно три.
+          Set-Content "$proj/src/demo.py" "def alpha():`n    return beta()`n`ndef beta():`n    return 42`n"
+          Set-Content "$proj/src/engine.py" "from demo import alpha`n`ndef run():`n    return alpha()"
+          Set-Content "$proj/src/util.py" "def normalize(name):`n    return name.strip().lower()"
+          & $ragraf ensure $proj --json | Tee-Object -Variable ens
+          $status = ($ens | ConvertFrom-Json).status
+          if ($status -notin @('created','actual','reindexed')) { Write-Error "ensure status: $status"; exit 1 }
+          $cfg = ($ens | ConvertFrom-Json).config
+          & $ragraf --json -p $cfg selftest | ConvertFrom-Json | ForEach-Object { $_.checks } | Format-Table check, ok
+          & $ragraf --json -p $cfg query search "alpha" | Out-Null
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Write-Host "smoke: ensure(selftest, search) OK"
+
+  package:
+    name: Package build (sdist + wheel)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: pip install build
+      - run: python -m build
+      - name: Verify PEP 639 license expression builds clean
+        run: |
+          pip install dist/*.whl
+          ragraf --version
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/

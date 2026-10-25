@@ -1,0 +1,380 @@
+"""Скан корпуса: отбор файлов по конфигурации, хэши, языки, статистика (ФТ-37, ФТ-38).
+
+Правила:
+  * обход всего дерева, но каталоги из exclude отсекаются на входе (производительность);
+  * файл, попавший в secrets_exclude, НЕ индексируется и не попадает в graph.file;
+    он учитывается только счётчиком (ФТ-39);
+  * двоичные файлы и файлы вне include пропускаются;
+  * порядок обхода детерминирован (сортировка) — требование НФТ-5.
+"""
+
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from . import formats as formats_mod
+from . import util
+from .config import DOCUMENT_LANG, ProjectConfig
+
+SKIP_BINARY_EXT = {
+    ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".webp", ".svgz",
+    ".woff", ".woff2", ".ttf", ".eot", ".otf",
+    ".zip", ".gz", ".br", ".7z", ".rar", ".tar", ".phar",
+    ".pdf", ".docx", ".xlsx", ".pptx", ".mo", ".so", ".dll", ".exe",
+    ".lock", ".mo", ".pyc",
+}
+
+# Текстовые форматы, которые легко весят сотни мегабайт (журналы, выгрузки).
+# Для них действует предел, а не общий запрет: остальные корпуса не должны
+# менять поведение из-за одного большого `.log`.
+BULKY_TEXT_EXT = {".log", ".out", ".err"}
+MAX_BULKY_TEXT_BYTES = 20 * 1024 * 1024
+
+
+@dataclass
+class CorpusFile:
+    path: str          # POSIX-путь относительно корня
+    abs_path: Path
+    lang: str
+    sha256: str
+    bytes: int
+    lines: int
+    # Время правки (наносекунды) заполняется ТОЛЬКО в режиме без хэширования
+    # (`scan(digest=False)`) и служит дешёвому отпечатку входа: «менялся ли
+    # корпус» по пути, размеру и времени, без чтения файлов.
+    mtime_ns: int = 0
+
+
+@dataclass
+class CorpusScan:
+    files: list[CorpusFile] = field(default_factory=list)
+    excluded: dict[str, int] = field(default_factory=dict)
+    skipped_secrets: int = 0
+    skipped_binary: int = 0
+    skipped_included_off: int = 0
+    # Сколько файлов отсеклось настройкой форматов. Отдельный счётчик нужен,
+    # чтобы «в корпусе нет PDF» и «PDF выключен в настройках» не выглядели
+    # одинаково: причина пропуска должна быть названа, а не угадана.
+    skipped_formats: int = 0
+    dirs_pruned: int = 0
+    total_bytes: int = 0
+    total_lines: int = 0
+    by_lang: dict[str, dict[str, int]] = field(default_factory=dict)
+    # --- схлопывание дублей (заполняется, когда оно включено) ---
+    # Сколько файлов БЫЛО найдено на диске до схлопывания. Нужно для
+    # честного отчёта: иначе нельзя отличить «в корпусе мало файлов»
+    # от «много файлов, но они схлопнулись».
+    files_found: int = 0
+    # Сводка схлопывания: сколько групп и файлов отброшено и почему.
+    duplicates: dict = field(default_factory=dict)
+
+    @property
+    def corpus_hash(self) -> str:
+        """Хэш корпуса: отсортированный список (путь, sha256) — признак «вход не менялся».
+
+        Считается по файлам, которые ПОЙДУТ В ИНДЕКС (то есть после
+        схлопывания дублей, если оно включено). Это обязательное условие,
+        а не деталь: `watch.py` считает свежесть тем же способом. Если бы
+        хэш включал отброшенные копии, его значение никогда не совпало бы
+        с записанным в ревизии, и сторож запускал бы переиндексацию
+        бесконечно.
+        """
+        payload = "\n".join(f"{f.path}\t{f.sha256}" for f in self.files)
+        return util.sha256_text(payload)
+
+    def summary(self) -> dict:
+        out = {
+            "files": len(self.files),
+            "bytes": self.total_bytes,
+            "lines": self.total_lines,
+            "by_lang": self.by_lang,
+            "skipped_secrets": self.skipped_secrets,
+            "skipped_binary": self.skipped_binary,
+            "skipped_not_included": self.skipped_included_off,
+            "skipped_formats": self.skipped_formats,
+            "excluded": self.excluded,
+            "dirs_pruned": self.dirs_pruned,
+            "corpus_hash": self.corpus_hash,
+        }
+        # Числа по дублям попадают в отчёт только когда схлопывание было:
+        # иначе в отчёте появлялись бы нули, которые ничего не значат.
+        if self.duplicates:
+            out["files_found"] = self.files_found
+            out["duplicates"] = self.duplicates
+        return out
+
+
+def _real_dir(path: str | Path) -> str:
+    """Длинная форма пути к каталогу (без учёта коротких 8.3-имён Windows).
+
+    Нужна для сравнения путей: `TEMP` и профиль пользователя на Windows
+    возвращаются короткими именами, и без приведения к одной форме
+    сопоставление `relative_to` не срабатывает.
+    """
+    try:
+        return os.path.realpath(str(path))
+    except Exception:
+        return str(path)
+
+
+def _count_lines_fast(path: Path, size: int) -> int:
+    """Число строк: подсчёт переводов строки блоками (файлы бывают на 9 тыс. строк)."""
+    if size == 0:
+        return 0
+    total = 0
+    tail_nl = False
+    with open(path, "rb") as fh:
+        while True:
+            block = fh.read(1 << 20)
+            if not block:
+                break
+            total += block.count(b"\n")
+            tail_nl = block.endswith(b"\n")
+    return total if tail_nl else total + 1
+
+
+def scan(cfg: ProjectConfig, *, digest: bool = True) -> CorpusScan:
+    """Полный скан корпуса. Ничего не пишет — только читает.
+
+    Параметр `digest` управляет ЦЕНОЙ скана, а не его смыслом:
+
+      * `digest=True` (по умолчанию) — как было: sha256 каждого файла и подсчёт
+        строк. Из этого считается `corpus_hash`, это же нужно индексатору;
+      * `digest=False` — тот же обход и те же правила отбора (исключения,
+        секреты, языки, размер), но БЕЗ чтения содержимого: у файла берётся
+        только `stat`. Это нужно сторожу свежести, чтобы проверять «менялся ли
+        вход» на КАЖДОМ вызове операции, не перечитывая корпус целиком.
+
+    В режиме `digest=False` поле `sha256` пустое, `lines` равно нулю,
+    заполнено `mtime_ns`, а схлопывание дублей не выполняется (ему нужны хэши).
+    Это осознанно: отпечаток обязан быть дешёвым, и его задача — ЗАМЕТИТЬ
+    изменение, а не доказать неизменность файла при совпавших размере и времени.
+
+    ВАЖНО про пути (дефект, найденный на тестовом корпусе).
+    Корень корпуса может быть задан КОРОТКИМ 8.3-путём: на этой машине так
+    выглядит TEMP (`C:/Users/<пользователь>/AppData/Local/Temp`). При этом
+    `Path(dirpath).resolve()` возвращает ДЛИННЫЙ путь, и `relative_to(root)
+    выбрасывает ValueError — каталог молча пропускался, и корпус сканировался
+    как пустой (0 файлов) без единой ошибки. Это опасный класс: операция
+    «сработала не так», и отличить «в корпусе нет файлов» от «путь не совпал»
+    было невозможно.
+
+    Решение: и корень, и каждый каталог приводятся к одной (длинной) форме
+    через `os.path.realpath`, а сравнение идёт по ней. Если всё равно не
+    совпало — это регистрируется как пропущенный каталог, а не молча теряется.
+    """
+    result = CorpusScan()
+    # Корень и его «длинная» форма: сравнение должно идти по одной форме пути.
+    root_real = _real_dir(cfg.root)
+    root = root_real
+    exclude = list(cfg.exclude)
+    secrets = list(cfg.secrets_exclude)
+    include = list(cfg.include)
+    langs = set(cfg.languages)
+    # Набор включённых форматов приводится к множеству ОДИН раз: проверка на
+    # каждый файл с разворачиванием `*` стоила бы прохода по всем 84 форматам
+    # на файл. None означает «ограничения нет».
+    allowed_formats = cfg.formats
+
+    for dirpath, dirnames, filenames in os.walk(root_real):
+        dir_real = _real_dir(dirpath)
+        try:
+            rel = Path(dir_real).relative_to(root_real)
+        except ValueError:
+            # Каталог вне корня (например, символическая ссылка наружу).
+            # Это не «пустой корпус»: учитываем как пропущенный, чтобы случай
+            # не выглядел как отсутствие файлов.
+            result.dirs_pruned += 1
+            continue
+        dir_rel = util.to_posix(rel)
+        dir_rel = "" if dir_rel == "." else dir_rel
+
+        pruned: list[str] = []
+        for name in list(dirnames):
+            child_rel = f"{dir_rel}/{name}" if dir_rel else name
+            hit = util.prune_dir(child_rel, exclude)
+            if hit:
+                pruned.append(name)
+                result.excluded[hit] = result.excluded.get(hit, 0) + 1
+                result.dirs_pruned += 1
+        for name in pruned:
+            dirnames.remove(name)
+
+        for name in sorted(filenames):
+            rel = f"{dir_rel}/{name}" if dir_rel else name
+            abs_path = Path(dirpath) / name
+
+            hit_secret = util.matches_any(rel, secrets)
+            if hit_secret:
+                result.skipped_secrets += 1
+                result.excluded[f"secrets:{hit_secret}"] = (
+                    result.excluded.get(f"secrets:{hit_secret}", 0) + 1
+                )
+                continue
+
+            hit_exc = util.matches_any(rel, exclude)
+            if hit_exc:
+                result.excluded[hit_exc] = result.excluded.get(hit_exc, 0) + 1
+                continue
+
+            if not util.matches_any(rel, include):
+                result.skipped_included_off += 1
+                continue
+
+            ext = abs_path.suffix.lower()
+            lang = cfg.language_of(rel)
+            if lang is None or lang not in langs:
+                result.skipped_included_off += 1
+                continue
+            # --- настройка «какие форматы индексировать» ---
+            # Проверяется ПОСЛЕ списка языков корпуса и объясняет другую
+            # причину: `languages` отвечает «нужен ли язык вообще», форматы —
+            # «какие из его разновидностей брать сейчас». Если поменять
+            # порядок, выключенный PDF выглядел бы как «языка document нет».
+            if allowed_formats is not None:
+                fmt_id = formats_mod.format_of_path(rel)
+                if fmt_id is not None and fmt_id not in allowed_formats:
+                    result.skipped_formats += 1
+                    result.excluded[f"format:{fmt_id}"] = (
+                        result.excluded.get(f"format:{fmt_id}", 0) + 1
+                    )
+                    continue
+            # Документы — двоичные контейнеры, но их читает извлекатель, а не
+            # проверка «бинарный или нет». Исключение только для языка
+            # `document`: остальные корпуса ведут себя как раньше.
+            if ext in SKIP_BINARY_EXT and lang != DOCUMENT_LANG:
+                result.skipped_binary += 1
+                continue
+
+            try:
+                st = abs_path.stat()
+                size = st.st_size
+            except OSError:
+                result.skipped_binary += 1
+                continue
+            if size == 0:
+                continue
+            if ext in BULKY_TEXT_EXT and size > MAX_BULKY_TEXT_BYTES:
+                result.excluded["size:bulky_text"] = (
+                    result.excluded.get("size:bulky_text", 0) + 1
+                )
+                result.skipped_binary += 1
+                continue
+
+            digest_hex = ""
+            lines = 0
+            mtime_ns = 0
+            if digest:
+                if lang != DOCUMENT_LANG and util.is_binary(abs_path):
+                    result.skipped_binary += 1
+                    continue
+
+                try:
+                    digest_hex = util.sha256_file(abs_path)
+                    # У документа «строк» в двоичном файле нет: число строк
+                    # появляется при извлечении и записывается индексатором.
+                    lines = 0 if lang == DOCUMENT_LANG else _count_lines_fast(abs_path, size)
+                except OSError:
+                    result.skipped_binary += 1
+                    continue
+            else:
+                # Режим отпечатка: содержимое НЕ читается. Проверка «бинарный
+                # или нет» тоже читает файл, поэтому пропускается. Отпечаток
+                # нужен, чтобы заметить изменение, а не чтобы описать корпус;
+                # размер и время правки в него входят.
+                mtime_ns = int(st.st_mtime_ns)
+
+            cf = CorpusFile(
+                path=rel,
+                abs_path=abs_path,
+                lang=lang,
+                sha256=digest_hex,
+                bytes=size,
+                lines=lines,
+                mtime_ns=mtime_ns,
+            )
+            result.files.append(cf)
+            result.total_bytes += size
+            result.total_lines += lines
+            bucket = result.by_lang.setdefault(lang, {"files": 0, "lines": 0, "bytes": 0})
+            bucket["files"] += 1
+            bucket["lines"] += lines
+            bucket["bytes"] += size
+
+    result.files.sort(key=lambda f: f.path)
+
+    # --- схлопывание байт-идентичных копий ---
+    #
+    # ВЫЗЫВАЕТСЯ ЗДЕСЬ, а не в индексаторе, по двум причинам:
+    #
+    #   1. `corpus_hash` считается по полю `files`. Если схлопывать после
+    #      подсчёта суммы, она не совпадёт с содержимым индекса, и сторож
+    #      свежести будет запускать переиндексацию бесконечно.
+    #   2. `corpus.scan` — единственная точка, откуда файлы берут и индексатор
+    #      (`indexer.py`), и сторож (`watch.py`). Схлопывание в любом другом
+    #      месте привело бы к тому, что эти два места видели разный корпус.
+    result.files_found = len(result.files)
+    # Схлопывание дублей требует хэшей: в режиме отпечатка их нет, поэтому шаг
+    # пропускается. Для сторожа это безопасно и консервативно: лишняя копия в
+    # отпечатке даёт вывод «вход изменился» и полную сверку, а не ложное
+    # «всё свежо».
+    if digest and bool(getattr(cfg.index, "dedupe_enabled", False)):
+        from . import dedupe as _dedupe
+
+        decision = _dedupe.dedupe(result, cfg)
+        result.files = decision.kept_files
+        # Итоги пересчитываются по оставленным файлам: иначе в отчёте
+        # остались бы числа, включающие отброшенные копии.
+        result.total_bytes = sum(f.bytes for f in result.files)
+        result.total_lines = sum(f.lines for f in result.files)
+        result.by_lang = {}
+        for f in result.files:
+            bucket = result.by_lang.setdefault(
+                f.lang, {"files": 0, "lines": 0, "bytes": 0}
+            )
+            bucket["files"] += 1
+            bucket["lines"] += f.lines
+            bucket["bytes"] += f.bytes
+        result.duplicates = decision.summary()
+        # Детальные группы добавляются, если запрошен разбор.
+        if bool(getattr(cfg.index, "dedupe_report", True)):
+            result.duplicates["groups"] = [
+                g.as_dict() for g in decision.groups[:50]
+            ]
+    return result
+
+
+def stat_fingerprint(cfg: ProjectConfig) -> tuple[str, int, int]:
+    """Дешёвый отпечаток входа: путь, размер и время правки каждого файла.
+
+    Возвращает (отпечаток, число файлов, общий размер). Содержимое файлов НЕ
+    читается — берётся только метаинформация.
+
+    Зачем отдельно от `corpus_hash`. Полная сверка корпуса читает ВСЕ файлы
+    (sha256 каждого), и делать её перед каждым вызовом операции — значит платить
+    за неё на каждом шаге агента. Отпечаток отвечает на тот же вопрос «вход
+    менялся?» ценой обхода дерева, а к полной сверке сторож переходит только
+    тогда, когда отпечаток разошёлся.
+
+    Сортировка по пути обязательна: обход каталогов порядка не гарантирует, а
+    дрожащий отпечаток заставлял бы переиндексировать бесконечно — ровно тот
+    класс дефектов, ради которого детерминизм объявлен инвариантом проекта.
+    """
+    scanned = scan(cfg, digest=False)
+    payload = "\n".join(f"{f.path}\t{f.bytes}\t{f.mtime_ns}" for f in scanned.files)
+    return util.sha256_text(payload), len(scanned.files), scanned.total_bytes
+
+
+def resolve(cfg: ProjectConfig, rel_or_abs: str) -> Path | None:
+    """Привести путь к абсолютному внутри корня. Вне корня — None (защита от обхода)."""
+    p = Path(rel_or_abs)
+    if not p.is_absolute():
+        p = cfg.root / p
+    try:
+        p = p.resolve()
+        p.relative_to(cfg.root.resolve())
+    except (ValueError, OSError):
+        return None
+    return p

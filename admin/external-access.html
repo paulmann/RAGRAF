@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>RAGRAF — внешний доступ</title>
+<!--
+  Отдельная страница, а не карточка в общем экране настроек. Причина: у входа и
+  выгрузки своя семантика (провайдер, отображение групп, приёмник, курсоры), и в
+  списке порогов индексации эти поля утонули бы. Значение доступа к приёмнику на
+  странице НЕ вводится: оно берётся из переменной окружения, и страница
+  показывает только ИМЯ этой переменной.
+-->
+<style>
+  :root { --bg:#ffffff; --fg:#16181d; --muted:#5b6472; --line:#e3e6ea; --card:#f7f8fa;
+          --ok:#12693a; --bad:#a32222; --accent:#1f56c8; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#111317; --fg:#e8eaee; --muted:#9aa3b0; --line:#2a2f37; --card:#171a20;
+            --ok:#5fd08a; --bad:#ff8a8a; --accent:#7aa2ff; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+         font:14px/1.5 "Segoe UI", system-ui, -apple-system, sans-serif; }
+  main { max-width: 1000px; margin: 0 auto; padding: 24px 20px 60px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 0 0 12px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .card { background: var(--card); border:1px solid var(--line); border-radius:10px;
+          padding:16px; margin: 0 0 16px; }
+  .row { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; }
+  .field { display:flex; flex-direction:column; gap:4px; min-width:200px; flex:1 1 200px; }
+  label { font-size:12px; color:var(--muted); }
+  input[type=text], input[type=number], input[type=password], select, textarea {
+    font:inherit; padding:7px 9px; border:1px solid var(--line); border-radius:7px;
+    background: var(--bg); color: var(--fg); width:100%; }
+  textarea { min-height: 84px; font-family: "Cascadia Mono", Consolas, monospace; font-size:12px; }
+  button { font:inherit; padding:7px 14px; border-radius:7px; border:1px solid var(--line);
+           background:var(--bg); color:var(--fg); cursor:pointer; }
+  button.primary { border-color: var(--accent); color: var(--accent); }
+  button:disabled { opacity:.5; cursor:default; }
+  .badge { display:inline-block; padding:1px 8px; border-radius:999px; font-size:12px;
+           border:1px solid var(--line); }
+  .bad { color: var(--bad); font-weight:600; }
+  .good { color: var(--ok); font-weight:600; }
+  ul { margin: 8px 0 0 18px; padding:0; }
+  code, pre { font-family:"Cascadia Mono", Consolas, monospace; font-size:12px; }
+  pre { background: var(--bg); border:1px solid var(--line); border-radius:8px;
+        padding:10px; overflow:auto; max-height:320px; }
+  .hint { color: var(--muted); font-size:12px; margin-top:8px; }
+  a.back { color: var(--accent); text-decoration:none; font-size:13px; }
+</style>
+</head>
+<body>
+<main>
+  <a class="back" href="/">← панель</a>
+  <h1>Внешний доступ</h1>
+  <p class="sub">
+    Единый вход (OIDC) и выгрузка журналов во внешнюю SIEM. Обе возможности
+    относятся к изданию enterprise: без действующей лицензии операции отвечают
+    отказом с причиной, а не работают «наполовину».
+  </p>
+
+  <div class="card" id="editionCard">
+    <h2>Издание и возможности</h2>
+    <div id="edition">загрузка…</div>
+  </div>
+
+  <div class="card">
+    <h2>Единый вход (OIDC)</h2>
+    <div id="ssoState">загрузка…</div>
+    <div class="row" style="margin-top:12px">
+      <div class="field" style="flex:0 0 160px">
+        <label>вход включён</label>
+        <select id="sso_enabled"><option value="false">нет</option><option value="true">да</option></select>
+      </div>
+      <div class="field" style="flex:0 0 160px">
+        <label>провайдер</label>
+        <select id="sso_provider"><option value="oidc">oidc</option></select>
+      </div>
+      <div class="field"><label>издатель (iss)</label><input type="text" id="sso_issuer" placeholder="https://login.example.com"></div>
+      <div class="field"><label>идентификатор клиента (client_id)</label><input type="text" id="sso_client_id"></div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <div class="field"><label>адрес возврата (redirect_uri)</label><input type="text" id="sso_redirect_uri" placeholder="http://127.0.0.1:8777/sso/callback"></div>
+      <div class="field"><label>области через пробел</label><input type="text" id="sso_scopes" placeholder="openid profile email groups"></div>
+      <div class="field" style="flex:0 0 150px"><label>утверждение групп</label><input type="text" id="sso_role_claim" placeholder="groups"></div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <div class="field" style="flex: 1 1 100%">
+        <label>отображение групп на роли: по записи «группа:роль» в строке, роль из read, write, admin</label>
+        <textarea id="sso_group_roles" placeholder="domain admins:admin&#10;developers:write&#10;guests:read"></textarea>
+      </div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <div class="field" style="flex:0 0 180px"><label>допуск часов, с</label><input type="number" id="sso_clock_skew_seconds" min="0" max="600"></div>
+      <div class="field" style="flex:0 0 180px"><label>ожидание провайдера, с</label><input type="number" id="sso_http_timeout_seconds" min="1" max="120"></div>
+      <div class="field"><label>адрес авторизации (необязательно)</label><input type="text" id="sso_authorization_endpoint"></div>
+      <div class="field"><label>адрес обмена кода (необязательно)</label><input type="text" id="sso_token_endpoint"></div>
+      <div class="field"><label>адрес JWKS (необязательно)</label><input type="text" id="sso_jwks_uri"></div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button class="primary" onclick="save('sso')">Сохранить вход</button>
+      <button onclick="beginLogin()">Начать вход</button>
+      <button onclick="mapRoles()">Проверить отображение групп</button>
+    </div>
+    <p class="hint">
+      Начать вход можно без сохранения: адрес авторизации собирается из текущих
+      настроек, а state и nonce запоминаются в каталоге состояния.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>Выгрузка в SIEM</h2>
+    <div id="siemState">загрузка…</div>
+    <div class="row" style="margin-top:12px">
+      <div class="field" style="flex:0 0 160px">
+        <label>выгрузка включена</label>
+        <select id="siem_enabled"><option value="false">нет</option><option value="true">да</option></select>
+      </div>
+      <div class="field" style="flex:0 0 160px">
+        <label>вид приёмника</label>
+        <select id="siem_target"><option value="http">http</option><option value="syslog">syslog</option></select>
+      </div>
+      <div class="field"><label>адрес приёмника</label><input type="text" id="siem_endpoint" placeholder="https://siem.example.com/ingest или 192.0.2.10:514"></div>
+      <div class="field" style="flex:0 0 140px">
+        <label>протокол syslog</label>
+        <select id="siem_protocol"><option value="udp">udp</option><option value="tcp">tcp</option></select>
+      </div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <div class="field" style="flex:0 0 160px"><label>записей в наборе</label><input type="number" id="siem_batch" min="1" max="1000"></div>
+      <div class="field" style="flex:0 0 160px"><label>ожидание приёмника, с</label><input type="number" id="siem_timeout_seconds" min="1" max="120"></div>
+      <div class="field" style="flex:0 0 140px">
+        <label>подпись набора</label>
+        <select id="siem_sign"><option value="true">да</option><option value="false">нет</option></select>
+      </div>
+      <div class="field"><label>имя переменной со значением доступа</label><input type="text" id="siem_token_env" placeholder="RAGRAF_SIEM_TOKEN"></div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button class="primary" onclick="save('siem')">Сохранить выгрузку</button>
+      <button onclick="siemTest()">Пробная доставка</button>
+      <button onclick="siemExport(true)">Пробный набор</button>
+      <button onclick="siemExport(false)">Выгрузить</button>
+    </div>
+    <p class="hint">
+      Значение доступа не вводится на странице и не хранится в настройках: здесь
+      только ИМЯ переменной окружения. Уходят метаданные — кто, когда, операция,
+      результат, причина; значения секретов не выгружаются никогда.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>Изменяющие запросы</h2>
+    <div class="row">
+      <div class="field"><label>токен области admin</label><input type="password" id="token" placeholder="ragraf_…"></div>
+    </div>
+    <p class="hint">
+      Токен нужен только для изменений; чтение этой страницы открыто, потому что
+      в ней нет ни одного значения доступа.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>Ответ</h2>
+    <pre id="out">—</pre>
+  </div>
+</main>
+<script>
+const FIELDS = {
+  sso: ["sso_enabled", "sso_provider", "sso_issuer", "sso_client_id", "sso_redirect_uri",
+        "sso_scopes", "sso_role_claim", "sso_group_roles", "sso_clock_skew_seconds",
+        "sso_http_timeout_seconds", "sso_authorization_endpoint", "sso_token_endpoint",
+        "sso_jwks_uri"],
+  siem: ["siem_enabled", "siem_target", "siem_endpoint", "siem_protocol", "siem_batch",
+         "siem_timeout_seconds", "siem_sign", "siem_token_env"]
+};
+const NUMERIC = new Set(["sso_clock_skew_seconds", "sso_http_timeout_seconds",
+                         "siem_batch", "siem_timeout_seconds"]);
+const BOOLEAN = new Set(["sso_enabled", "siem_enabled", "siem_sign"]);
+const LIST = new Set(["sso_group_roles"]);
+
+function show(payload) {
+  document.getElementById("out").textContent = JSON.stringify(payload, null, 2);
+}
+
+function fill(values) {
+  for (const key of [...FIELDS.sso, ...FIELDS.siem]) {
+    const element = document.getElementById(key);
+    if (!element) continue;
+    let value = values[key];
+    if (LIST.has(key)) {
+      value = Array.isArray(value) ? value.join("\n") : (value || "");
+    } else if (BOOLEAN.has(key)) {
+      value = String(Boolean(value));
+    } else if (value === null || value === undefined) {
+      value = "";
+    }
+    element.value = String(value);
+  }
+}
+
+function readValues(group) {
+  const out = {};
+  for (const key of FIELDS[group]) {
+    const element = document.getElementById(key);
+    if (!element) continue;
+    const raw = element.value;
+    if (LIST.has(key)) {
+      out[key] = raw.split("\n").map(line => line.trim()).filter(Boolean);
+    } else if (BOOLEAN.has(key)) {
+      out[key] = raw === "true";
+    } else if (NUMERIC.has(key)) {
+      out[key] = Number(raw);
+    } else {
+      out[key] = raw;
+    }
+  }
+  return out;
+}
+
+async function load() {
+  const response = await fetch("/api/external-access", {cache: "no-store"});
+  const data = await response.json();
+  const edition = data.edition || {};
+  const blocked = edition.license ? `, лицензия: ${edition.license.state}` : "";
+  document.getElementById("edition").innerHTML =
+    `действующее издание: <b>${edition.edition || "?"}</b>${blocked}<br>` +
+    `возможности: ${(edition.features || []).join(", ") || "—"}<br>` +
+    ((edition.notes || []).length
+      ? `<ul>${edition.notes.map(note => `<li>${note}</li>`).join("")}</ul>`
+      : "");
+
+  const sso = data.sso || {};
+  document.getElementById("ssoState").innerHTML = sso.ready
+    ? `<span class="good">настроен</span> · групп в отображении: ${(sso.group_roles ? Object.keys(sso.group_roles).length : 0)} · начатых попыток: ${sso.pending_attempts}`
+    : `<span class="bad">вход невозможен</span><ul>${(sso.problems || []).map(p => `<li>${p}</li>`).join("")}</ul>`;
+
+  const siem = data.siem || {};
+  const last = (siem.last || [])[0];
+  document.getElementById("siemState").innerHTML =
+    (siem.ready ? `<span class="good">приёмник настроен</span>` :
+                  `<span class="bad">выгрузка невозможна</span><ul>${(siem.problems || []).map(p => `<li>${p}</li>`).join("")}</ul>`) +
+    (last ? `<div class="hint">последняя доставка: ${last.ts} · ${last.source} · ${last.records} записей · ${last.result}${last.reason ? " · " + last.reason : ""}</div>` : "");
+
+  fill(sso);
+  fill(siem);
+}
+
+async function post(payload) {
+  const token = document.getElementById("token").value.trim();
+  const response = await fetch("/api/external-access", {
+    method: "POST",
+    headers: Object.assign({"Content-Type": "application/json"},
+                           token ? {"X-RAGRAF-Token": token} : {}),
+    body: JSON.stringify(payload)
+  });
+  const data = await response.json();
+  show(data);
+  if (data && data.ok && payload.action === "save") await load();
+  return data;
+}
+
+function save(group) {
+  return post({action: "save", values: readValues(group)});
+}
+
+async function beginLogin() {
+  const data = await post({action: "sso_begin", values: readValues("sso")});
+  if (data && data.ok && data.result && data.result.authorize_url) {
+    document.getElementById("out").textContent +=
+      "\n\nОткройте адрес авторизации в браузере:\n" + data.result.authorize_url;
+  }
+}
+
+async function mapRoles() {
+  const lines = document.getElementById("sso_group_roles").value
+    .split("\n").map(line => line.trim()).filter(Boolean)
+    .map(line => line.split(":")[0].trim());
+  await post({action: "map_roles", groups: lines});
+}
+
+function siemTest() { return post({action: "siem_test"}); }
+
+function siemExport(dry) {
+  return post({action: "siem_export", dry_run: Boolean(dry)});
+}
+
+load().catch(error => show({ok: false, error: String(error)}));
+</script>
+</body>
+</html>

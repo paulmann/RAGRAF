@@ -1,0 +1,297 @@
+{
+  "mode": "baseline",
+  "tasks": 14,
+  "total_tool_calls": 68,
+  "avg_tool_calls": 4.86,
+  "total_seconds": 0.607,
+  "est_chars_read": 952000,
+  "details": [
+    {
+      "id": "Z-01",
+      "question": "Где проверяется признак главного администратора и почему не из сессии?",
+      "patterns": [
+        {
+          "pattern": "SuperAdmin",
+          "files": 34,
+          "seconds": 0.029
+        },
+        {
+          "pattern": "z_agr_is_admin|isAdmin",
+          "files": 8,
+          "seconds": 0.024
+        }
+      ],
+      "search_steps": 2,
+      "files_to_open": 3,
+      "total_tool_calls": 5,
+      "seconds": 0.053,
+      "est_chars_read": 70000
+    },
+    {
+      "id": "Z-02",
+      "question": "Как устроена отдача файла из реестра писем (проверки пути)?",
+      "patterns": [
+        {
+          "pattern": "realpath",
+          "files": 5,
+          "seconds": 0.024
+        },
+        {
+          "pattern": "z_mail_file_deny",
+          "files": 2,
+          "seconds": 0.024
+        }
+      ],
+      "search_steps": 2,
+      "files_to_open": 3,
+      "total_tool_calls": 5,
+      "seconds": 0.048,
+      "est_chars_read": 70000
+    },
+    {
+      "id": "Z-03",
+      "question": "Где собираются строки реестра корреспонденции для страницы и поиска?",
+      "patterns": [
+        {
+          "pattern": "z_mail_rows",
+          "files": 7,
+          "seconds": 0.024
+        },
+        {
+          "pattern": "function z_mail_",
+          "files": 6,
+          "seconds": 0.023
+        }
+      ],
+      "search_steps": 2,
+      "files_to_open": 3,
+      "total_tool_calls": 5,
+      "seconds": 0.048,
+      "est_chars_read": 70000
+    },
+    {
+      "id": "Z-04",
+      "question": "Какие модули использует Bootstrap и что он подключает?",
+      "patterns": [
+        {
+          "pattern": "require.*src/",
+          "files": 21,
+          "seconds": 0.024
+        },
+        {
+          "pattern": "function z_boot",
+          "files": 2,
+          "seconds": 0.022
+        }
+      ],
+      "search_steps": 2,
+      "files_to_open": 3,
+      "total_tool_calls": 5,
+      "seconds": 0.046,
+      "est_chars_read": 70000
+    },
+    {
+      "id": "Z-05",
+      "question": "Кто вызывает функцию экранирования вывода z_e()?",
+      "patterns": [
+        {
+          "pattern": "z_e\\(",
+          "files": 44,
+          "seconds": 0.023
+        },
+        {
+          "pattern": "function z_e",
+          "files": 4,
+          "seconds": 0.021
+        }
+      ],
+      "search_steps": 2,
+      "files_to_open": 3,
+      "total_tool_calls": 5,
+      "seconds": 0.044,
+      "est_chars_read": 70000
+    },
+    {
+      "id": "Z-06",
+      "question": "Какие таблицы портала связаны с письмами и где они читаются?",
+      "patterns": [
+        {
+          "pattern": "OutgoingLetters",
+          "files": 10,
+          "seconds": 0.021
+        },
+        {
+          "pattern": "FROM `?Files`?",
+          "files": 1,
+          "seconds": 0.023
+        }
+      ],
+      "search_steps": 2,
+      "files_to_open": 3,
+      "total_tool_calls": 5,
+      "seconds": 0.044,
+      "est_chars_read": 70000
+    },
+    {
+      "id": "Z-07",
+      "question": "Где определён маппинг журналов подсистемы (ключ, код, таблица)?",
+      "patterns": [
+        {
+          "pattern": "z_agr_journals",
+          "files": 3,
+          "seconds": 0.026
+        }
+      ],
+      "search_steps": 1,
+      "files_to_open": 3,
+      "total_tool_calls": 4,
+      "seconds": 0.026,
+      "est_chars_read": 56000
+    },
+    {
+      "id": "Z-08",
+      "question": "Что использует права подсистемы и от чего они зависят?",
+      "patterns": [
+        {
+          "pattern": "z_agr_scope_sql",
+          "files": 4,
+          "seconds": 0.022
+        },
+        {
+          "pattern": "z_agr_role_scope",
+          "files": 1,
+          "seconds": 0.024
+        }
+      ],
+      "search_steps": 2,
+      "files_to_open": 3,
+      "total_tool_calls": 5,
+      "seconds": 0.046,
+      "est_chars_read": 70000
+    },
+    {
+      "id": "Z-09",
+      "question": "Что известно о таблице DocApproval и кто её использует?",
+      "patterns": [
+        {
+          "pattern": "DocApproval",
+          "files": 7,
+          "seconds": 0.024
+        },
+        {
+          "pattern": "SignHash",
+          "files": 3,
+          "seconds": 0.023
+        }
+      ],
+      "search_steps": 2,
+      "files_to_open": 3,
+      "total_tool_calls": 5,
+      "seconds": 0.047,
+      "est_chars_read": 70000
+    },
+    {
+      "id": "Z-10",
+      "question": "Как устроен реестр настроек подсистемы и где хранятся секреты?",
+      "patterns": [
+        {
+          "pattern": "z_agr_setting",
+          "files": 3,
+          "seconds": 0.024
+        }
+      ],
+      "search_steps": 1,
+      "files_to_open": 3,
+      "total_tool_calls": 4,
+      "seconds": 0.024,
+      "est_chars_read": 56000
+    },
+    {
+      "id": "Z-11",
+      "question": "Что затронет изменение состава журналов (реестр §4.0)?",
+      "patterns": [
+        {
+          "pattern": "z_agr_journal\\(",
+          "files": 7,
+          "seconds": 0.022
+        },
+        {
+          "pattern": "z_agr_journal_codes",
+          "files": 1,
+          "seconds": 0.025
+        }
+      ],
+      "search_steps": 2,
+      "files_to_open": 3,
+      "total_tool_calls": 5,
+      "seconds": 0.047,
+      "est_chars_read": 70000
+    },
+    {
+      "id": "Z-12",
+      "question": "Общая структура репозитория портала: крупные модули и их назначение",
+      "patterns": [
+        {
+          "pattern": "^<\\?php",
+          "files": 64,
+          "seconds": 0.023
+        },
+        {
+          "pattern": "namespace",
+          "files": 4,
+          "seconds": 0.022
+        }
+      ],
+      "search_steps": 2,
+      "files_to_open": 3,
+      "total_tool_calls": 5,
+      "seconds": 0.046,
+      "est_chars_read": 70000
+    },
+    {
+      "id": "Z-13",
+      "question": "Как связаны миграции подсистемы и таблицы Doc*?",
+      "patterns": [
+        {
+          "pattern": "CREATE TABLE IF NOT EXISTS Doc",
+          "files": 7,
+          "seconds": 0.021
+        },
+        {
+          "pattern": "20261004_",
+          "files": 12,
+          "seconds": 0.022
+        }
+      ],
+      "search_steps": 2,
+      "files_to_open": 3,
+      "total_tool_calls": 5,
+      "seconds": 0.043,
+      "est_chars_read": 70000
+    },
+    {
+      "id": "Z-14",
+      "question": "Где описаны правила проекта для агента (конвенции и инварианты)?",
+      "patterns": [
+        {
+          "pattern": "Конвенции|инвариант",
+          "files": 6,
+          "seconds": 0.024
+        },
+        {
+          "pattern": "AGENTS",
+          "files": 10,
+          "seconds": 0.021
+        }
+      ],
+      "search_steps": 2,
+      "files_to_open": 3,
+      "total_tool_calls": 5,
+      "seconds": 0.045,
+      "est_chars_read": 70000
+    }
+  ],
+  "corpus": "z-batteryservice",
+  "generated_at": "2026-10-05T02:54:49+03:00",
+  "note": "Baseline: без индекса. Число вызовов = поиски rg плюс открытия файлов. Оценка прочитанных символов — приближение по средней плотности файла (14000 символов), а не измеренный факт."
+}

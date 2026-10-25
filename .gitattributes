@@ -1,0 +1,27 @@
+# Line endings — LF everywhere, in every shipped file.
+# This is a project convention (НФТ-9 / NFR-9), enforced by CI's hygiene job and
+# by tools/Invoke-ProjectDoctrine.ps1. Declaring it here means a clone on
+# Windows cannot introduce CRLF into the work tree in the first place.
+* text=auto eol=lf
+*.ps1 text eol=lf
+*.py text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Binary assets — never normalized, never diffed as text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.whl binary
+*.tar.gz binary
+
+# GitHub language statistics.
+# Documentation and measurement artifacts are not source code: the language bar
+# should describe the product (Python), not the prose around it.
+docs/** linguist-documentation
+LICENSE linguist-documentation
+CHANGELOG.md linguist-documentation
+bench/results/** linguist-generated

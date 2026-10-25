@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RAGRAF — польза за 30 дней</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0; font: 14px/1.45 system-ui, sans-serif; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 28px 20px 60px; }
+  header { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
+  h1 { font-size: 22px; margin: 0; }
+  .muted { opacity: .7; }
+  .small { font-size: 12.5px; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+  .card { border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+          border-radius: 10px; padding: 16px; margin: 16px 0; }
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+  .metric { border: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+            border-radius: 9px; padding: 12px; }
+  .metric b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; }
+  .metric span { font-size: 12px; opacity: .75; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent); }
+  th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  button { font: inherit; padding: 7px 10px; border-radius: 7px; cursor: pointer;
+           border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+           background: transparent; color: inherit; }
+  .status { min-height: 20px; margin-top: 10px; }
+  .status.bad { color: #b42318; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Польза за 30 дней</h1>
+    <a href="/" class="small">← панель</a>
+    <a href="/sources" class="small">источники</a>
+    <button type="button" id="refresh">Пересобрать снимок</button>
+  </header>
+
+  <p class="small muted">
+    Числа — из журнала обращений. Токены и строки — <b>оценка</b>:
+    4 символа на токен, 45 на строку. Пути, запросы и содержимое файлов в
+    журнал не пишутся, поэтому и здесь их нет.
+  </p>
+
+  <div class="card">
+    <div class="metrics" id="totals"></div>
+    <div class="status small" id="status"></div>
+  </div>
+
+  <div class="card">
+    <h2 style="font-size:15px;margin:0 0 8px">По разработкам</h2>
+    <div id="table"></div>
+  </div>
+
+  <p class="small muted">
+    Поле <span class="mono">last30</span> считается по каждому корпусу отдельно
+    и складывается только здесь, на странице: общей базы у разработок нет.
+    Если корпус ещё не собирался после обновления панели, его строка пуста —
+    это «нет данных», а не ноль.
+  </p>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var statusBox = document.getElementById('status');
+  var totalsBox = document.getElementById('totals');
+  var tableBox = document.getElementById('table');
+
+  function say(text, bad) {
+    statusBox.textContent = text || '';
+    statusBox.className = 'status small' + (bad ? ' bad' : '');
+  }
+
+  function num(value) {
+    var n = Number(value || 0);
+    return n.toLocaleString('ru-RU');
+  }
+
+  function card(label, value, hint) {
+    var box = document.createElement('div');
+    box.className = 'metric';
+    var big = document.createElement('b');
+    big.textContent = value;
+    var name = document.createElement('span');
+    name.textContent = label;
+    box.appendChild(big);
+    box.appendChild(name);
+    if (hint) {
+      var small = document.createElement('span');
+      small.textContent = ' · ' + hint;
+      box.appendChild(small);
+    }
+    return box;
+  }
+
+  function render(state) {
+    var detail = (state && state.detail) || {};
+    var names = Object.keys(detail);
+    var totals = { calls: 0, facts: 0, tokens: 0, lines: 0, errors: 0, corpora: 0, pending: 0 };
+    var rows = [];
+    names.forEach(function (name) {
+      var usage = (detail[name] || {}).usage || {};
+      var last = usage.last30;
+      if (!last || last.error) { totals.pending += 1; return; }
+      totals.corpora += 1;
+      totals.calls += Number(last.calls || 0);
+      totals.facts += Number(last.facts || 0);
+      totals.tokens += Number(last.tokens || 0);
+      totals.lines += Number(last.lines || 0);
+      totals.errors += Number(last.errors || 0);
+      rows.push({ name: name, last: last });
+    });
+    rows.sort(function (a, b) { return Number(b.last.calls || 0) - Number(a.last.calls || 0); });
+
+    totalsBox.textContent = '';
+    totalsBox.appendChild(card('Обращений', num(totals.calls), '30 дней'));
+    totalsBox.appendChild(card('Фактов', num(totals.facts)));
+    totalsBox.appendChild(card('Токенов', num(totals.tokens), 'оценка'));
+    totalsBox.appendChild(card('Строк не читалось', num(totals.lines), 'оценка'));
+    totalsBox.appendChild(card('Ошибок', num(totals.errors)));
+    totalsBox.appendChild(card('Корпусов с данными', num(totals.corpora)));
+
+    if (!rows.length) {
+      tableBox.textContent = '';
+      var empty = document.createElement('p');
+      empty.className = 'small muted';
+      empty.textContent = names.length
+        ? 'Снимок ещё собирается: поле last30 появится после обновления.'
+        : 'Снимок пуст: нажмите «Пересобрать снимок».';
+      tableBox.appendChild(empty);
+      return;
+    }
+
+    var table = document.createElement('table');
+    var head = document.createElement('thead');
+    var hr = document.createElement('tr');
+    ['Разработка', 'Обращений', 'Фактов', 'Токенов (оценка)', 'Строк (оценка)', 'Ошибок'].forEach(function (title, index) {
+      var th = document.createElement('th');
+      th.textContent = title;
+      if (index > 0) th.className = 'num';
+      hr.appendChild(th);
+    });
+    head.appendChild(hr);
+    table.appendChild(head);
+    var body = document.createElement('tbody');
+    rows.forEach(function (row) {
+      var tr = document.createElement('tr');
+      var name = document.createElement('td');
+      name.className = 'mono small';
+      name.textContent = row.name;
+      tr.appendChild(name);
+      [row.last.calls, row.last.facts, row.last.tokens, row.last.lines, row.last.errors].forEach(function (value) {
+        var td = document.createElement('td');
+        td.className = 'num';
+        td.textContent = num(value);
+        tr.appendChild(td);
+      });
+      body.appendChild(tr);
+    });
+    table.appendChild(body);
+    tableBox.textContent = '';
+    tableBox.appendChild(table);
+  }
+
+  function load(force) {
+    say(force ? 'Собираю снимок: это может занять до минуты' : '');
+    var path = '/api/state' + (force ? '?force=1' : '');
+    fetch(path, { credentials: 'same-origin' })
+      .then(function (response) { return response.json(); })
+      .then(function (data) {
+        if (!data || data.ok === false) throw new Error((data && data.error) || 'ответ без ok');
+        render(data.state || {});
+        say('Снимок обновлён');
+      })
+      .catch(function (error) {
+        say('Не удалось прочитать состояние: ' + error.message, true);
+      });
+  }
+
+  document.getElementById('refresh').addEventListener('click', function () { load(true); });
+  load(false);
+})();
+</script>
+</body>
+</html>

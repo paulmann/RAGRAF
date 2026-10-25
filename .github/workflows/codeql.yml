@@ -1,0 +1,55 @@
+name: CodeQL
+
+# Static security analysis of the Python sources, published to the repository's
+# Security → Code scanning tab. The project already publishes a threat model and
+# a list of known-open issues in SECURITY.md; this job is the mechanical half of
+# that discipline — it finds the classes of defect a human reviewer misses.
+#
+# Results appear as code-scanning alerts, not as a blocking gate: the doctrine of
+# this project is that a named gap beats a silent one, and that includes gaps
+# found by a tool that has not been triaged yet.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly, so newly published CodeQL queries reach the existing code.
+    - cron: '17 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze Python
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+      packages: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ['python']
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-and-quality
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:${{ matrix.language }}'

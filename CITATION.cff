@@ -1,0 +1,50 @@
+# Citation metadata for RAGRAF.
+#
+# Rendered by GitHub as the "Cite this repository" button and by reference
+# managers that read CFF (Zotero, JabRef, …). The `license` field below is a
+# valid SPDX identifier (verified against the SPDX licence list, 2026-10-16) —
+# the same expression `pyproject.toml` declares under PEP 639.
+
+cff-version: 1.2.0
+message: "If you use RAGRAF in academic or technical work, please cite it as below."
+
+title: "RAGRAF: a graph-and-vector knowledge base of code for LLM agents"
+abstract: >-
+  RAGRAF indexes a repository into three SQLite stores inside the indexed project — a
+  symbol/call graph, an FTS5 lexicon with vectors, and a revision and drift ledger — and
+  answers an agent's questions through a fixed set of 38 operations (40 tools over MCP):
+  where a symbol is defined, who calls it, what a change affects, what is in a database
+  table and who writes it, which files are copies, and whether a write matches the schema.
+  Every fact carries a path:line reference and its provenance (stated or derived); an
+  immutable index plus an append-only drift ledger keeps facts from different moments
+  distinguishable; and an optional code-property-graph layer (Java + Joern) unlocks
+  slicing, degrading honestly when absent. Measured on a real PHP portal: 14 navigation
+  tasks took 28 tool calls without the index and 14 with it, with 92% first-query target
+  hit rate, 100% verifiability, and no full-file reads.
+
+type: software
+authors:
+  - family-names: Deynekin
+    given-names: Mikhail
+    email: mid1977@gmail.com
+    website: "https://Deynekin.com"
+
+repository-code: "https://github.com/paulmann/RAGRAF"
+url: "https://ragraf.ru"
+license: BUSL-1.1
+version: "0.3.0"
+date-released: "2026-10-25"
+
+keywords:
+  - code knowledge base
+  - LLM agents
+  - MCP server
+  - code search
+  - code navigation
+  - static analysis
+  - code property graph
+  - tree-sitter
+  - SQLite
+  - vector search
+  - retrieval-augmented generation
+  - local-first

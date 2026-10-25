@@ -1,0 +1,349 @@
+{
+  "mode": "indexed",
+  "tasks": 14,
+  "total_tool_calls": 14,
+  "avg_tool_calls": 1.0,
+  "total_seconds": 1.405,
+  "facts_with_path": 0,
+  "facts_total": 112,
+  "verifiability": 0.0,
+  "details": [
+    {
+      "id": "Z-01",
+      "question": "Где проверяется признак главного администратора и почему не из сессии?",
+      "ops": [
+        {
+          "op": "search",
+          "args": {
+            "query": "проверка администратора SuperAdmin",
+            "limit": 5
+          },
+          "seconds": 1.335,
+          "found": true,
+          "items": 5,
+          "index_rev": "rev-0001",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 5,
+      "facts_with_path": 0,
+      "seconds": 1.335,
+      "found": true,
+      "est_chars_read": 0
+    },
+    {
+      "id": "Z-02",
+      "question": "Как устроена отдача файла из реестра писем (проверки пути)?",
+      "ops": [
+        {
+          "op": "search",
+          "args": {
+            "query": "отдача файла проверка пути realpath",
+            "limit": 5
+          },
+          "seconds": 0.006,
+          "found": true,
+          "items": 5,
+          "index_rev": "rev-0001",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 5,
+      "facts_with_path": 0,
+      "seconds": 0.006,
+      "found": true,
+      "est_chars_read": 0
+    },
+    {
+      "id": "Z-03",
+      "question": "Где собираются строки реестра корреспонденции для страницы и поиска?",
+      "ops": [
+        {
+          "op": "search",
+          "args": {
+            "query": "сборка строк реестра z_mail_rows",
+            "limit": 5
+          },
+          "seconds": 0.007,
+          "found": true,
+          "items": 5,
+          "index_rev": "rev-0001",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 5,
+      "facts_with_path": 0,
+      "seconds": 0.007,
+      "found": true,
+      "est_chars_read": 0
+    },
+    {
+      "id": "Z-04",
+      "question": "Какие модули использует Bootstrap и что он подключает?",
+      "ops": [
+        {
+          "op": "search",
+          "args": {
+            "query": "bootstrap загрузка модулей z_boot",
+            "limit": 6
+          },
+          "seconds": 0.006,
+          "found": true,
+          "items": 6,
+          "index_rev": "rev-0001",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 6,
+      "facts_with_path": 0,
+      "seconds": 0.006,
+      "found": true,
+      "est_chars_read": 0
+    },
+    {
+      "id": "Z-05",
+      "question": "Кто вызывает функцию экранирования вывода z_e()?",
+      "ops": [
+        {
+          "op": "symbol",
+          "args": {
+            "name": "z_e"
+          },
+          "seconds": 0.0,
+          "found": true,
+          "items": 2,
+          "index_rev": "rev-0001",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 2,
+      "facts_with_path": 0,
+      "seconds": 0.0,
+      "found": true,
+      "est_chars_read": 0
+    },
+    {
+      "id": "Z-06",
+      "question": "Какие таблицы портала связаны с письмами и где они читаются?",
+      "ops": [
+        {
+          "op": "search",
+          "args": {
+            "query": "OutgoingLetters Files MailType связь",
+            "limit": 6
+          },
+          "seconds": 0.007,
+          "found": true,
+          "items": 6,
+          "index_rev": "rev-0001",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 6,
+      "facts_with_path": 0,
+      "seconds": 0.007,
+      "found": true,
+      "est_chars_read": 0
+    },
+    {
+      "id": "Z-07",
+      "question": "Где определён маппинг журналов подсистемы (ключ, код, таблица)?",
+      "ops": [
+        {
+          "op": "search",
+          "args": {
+            "query": "маппинг журналов реестр DocContracts",
+            "limit": 5
+          },
+          "seconds": 0.005,
+          "found": true,
+          "items": 5,
+          "index_rev": "rev-0001",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 5,
+      "facts_with_path": 0,
+      "seconds": 0.005,
+      "found": true,
+      "est_chars_read": 0
+    },
+    {
+      "id": "Z-08",
+      "question": "Что использует права подсистемы и от чего они зависят?",
+      "ops": [
+        {
+          "op": "search",
+          "args": {
+            "query": "права область видимости scope подсистема",
+            "limit": 6
+          },
+          "seconds": 0.005,
+          "found": true,
+          "items": 6,
+          "index_rev": "rev-0001",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 6,
+      "facts_with_path": 0,
+      "seconds": 0.005,
+      "found": true,
+      "est_chars_read": 0
+    },
+    {
+      "id": "Z-09",
+      "question": "Что известно о таблице DocApproval и кто её использует?",
+      "ops": [
+        {
+          "op": "search",
+          "args": {
+            "query": "DocApproval шаг согласования слепок",
+            "limit": 6
+          },
+          "seconds": 0.006,
+          "found": true,
+          "items": 6,
+          "index_rev": "rev-0001",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 6,
+      "facts_with_path": 0,
+      "seconds": 0.006,
+      "found": true,
+      "est_chars_read": 0
+    },
+    {
+      "id": "Z-10",
+      "question": "Как устроен реестр настроек подсистемы и где хранятся секреты?",
+      "ops": [
+        {
+          "op": "search",
+          "args": {
+            "query": "реестр настроек шифрование секретов sodium",
+            "limit": 6
+          },
+          "seconds": 0.006,
+          "found": true,
+          "items": 6,
+          "index_rev": "rev-0001",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 6,
+      "facts_with_path": 0,
+      "seconds": 0.006,
+      "found": true,
+      "est_chars_read": 0
+    },
+    {
+      "id": "Z-11",
+      "question": "Что затронет изменение состава журналов (реестр §4.0)?",
+      "ops": [
+        {
+          "op": "search",
+          "args": {
+            "query": "реестр журналов код префикс таблица",
+            "limit": 6
+          },
+          "seconds": 0.005,
+          "found": true,
+          "items": 6,
+          "index_rev": "rev-0001",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 6,
+      "facts_with_path": 0,
+      "seconds": 0.005,
+      "found": true,
+      "est_chars_read": 0
+    },
+    {
+      "id": "Z-12",
+      "question": "Общая структура репозитория портала: крупные модули и их назначение",
+      "ops": [
+        {
+          "op": "repo_map",
+          "args": {
+            "budget": 1500
+          },
+          "seconds": 0.005,
+          "found": true,
+          "items": 41,
+          "index_rev": "rev-0001",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 41,
+      "facts_with_path": 0,
+      "seconds": 0.005,
+      "found": true,
+      "est_chars_read": 0
+    },
+    {
+      "id": "Z-13",
+      "question": "Как связаны миграции подсистемы и таблицы Doc*?",
+      "ops": [
+        {
+          "op": "search",
+          "args": {
+            "query": "миграция создание таблицы Doc ядро",
+            "limit": 8
+          },
+          "seconds": 0.006,
+          "found": true,
+          "items": 8,
+          "index_rev": "rev-0001",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 8,
+      "facts_with_path": 0,
+      "seconds": 0.006,
+      "found": true,
+      "est_chars_read": 0
+    },
+    {
+      "id": "Z-14",
+      "question": "Где описаны правила проекта для агента (конвенции и инварианты)?",
+      "ops": [
+        {
+          "op": "search",
+          "args": {
+            "query": "правила проекта конвенции инварианты агент",
+            "limit": 5
+          },
+          "seconds": 0.006,
+          "found": true,
+          "items": 5,
+          "index_rev": "rev-0001",
+          "capability": "full"
+        }
+      ],
+      "total_tool_calls": 1,
+      "facts_returned": 5,
+      "facts_with_path": 0,
+      "seconds": 0.006,
+      "found": true,
+      "est_chars_read": 0
+    }
+  ],
+  "corpus": "z-batteryservice",
+  "generated_at": "2026-10-05T02:55:48+03:00",
+  "note": "С индексом: число вызовов = операции фасада. Возвращаемые факты содержат path:line, поэтому проверяемость считается по факту, а не оценивается."
+}

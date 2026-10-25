@@ -1,0 +1,218 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ragraf.local/contracts/knowledge_search.v1.schema.json",
+  "title": "knowledge_search v1",
+  "description": "Единый поиск по эпизодам HARNESS (L1) и фактам RAGRAF (L2) без смешения доказательств.",
+  "type": "object",
+  "required": ["schema", "query", "routing", "lanes", "fusion", "limits"],
+  "properties": {
+    "schema": {"const": "knowledge.search/v1"},
+    "request_id": {"type": "string", "maxLength": 200},
+    "query": {"type": "string", "minLength": 1, "maxLength": 2000},
+    "routing": {"$ref": "#/$defs/Routing"},
+    "lanes": {
+      "type": "object",
+      "required": ["episodes", "code"],
+      "properties": {
+        "episodes": {"$ref": "#/$defs/EpisodeLane"},
+        "code": {"$ref": "#/$defs/CodeLane"},
+        "skills": {"$ref": "#/$defs/SkillLane"}
+      },
+      "additionalProperties": false
+    },
+    "actors": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/Actor"}
+    },
+    "fusion": {"$ref": "#/$defs/Fusion"},
+    "limits": {"$ref": "#/$defs/Limits"},
+    "warnings": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/Warning"}
+    },
+    "errors": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/Error"}
+    },
+    "trace": {"type": "object"}
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "Routing": {
+      "type": "object",
+      "required": ["intent", "lanes", "confidence", "reason"],
+      "properties": {
+        "intent": {"enum": ["find_agent", "find_skill", "find_code", "find_knowledge"]},
+        "lanes": {"type": "array", "items": {"enum": ["episodes", "code", "skills"]}},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "reason": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "EpisodeLane": {
+      "type": "object",
+      "required": ["source", "index_rev", "degraded", "items"],
+      "properties": {
+        "source": {"const": "harness.session-query"},
+        "index_rev": {"type": "string"},
+        "observed_at": {"type": "string"},
+        "degraded": {"type": "boolean"},
+        "degradation_reason": {"type": ["string", "null"]},
+        "counts": {"type": "object"},
+        "items": {"type": "array", "items": {"$ref": "#/$defs/EpisodeItem"}}
+      },
+      "additionalProperties": true
+    },
+    "EpisodeItem": {
+      "type": "object",
+      "required": ["id", "session_id", "seq", "event_type"],
+      "properties": {
+        "id": {"type": "string"},
+        "session_id": {"type": "string"},
+        "seq": {"type": "integer", "minimum": 0},
+        "event_type": {"type": "string"},
+        "time": {"type": ["string", "null"]},
+        "surface": {"type": ["string", "null"]},
+        "snippet": {"type": ["string", "null"]},
+        "session": {"type": "object"},
+        "why": {"type": "array", "items": {"type": "string"}}
+      },
+      "additionalProperties": true
+    },
+    "CodeLane": {
+      "type": "object",
+      "required": ["source", "index_rev", "capability", "degraded", "items"],
+      "properties": {
+        "source": {"const": "ragraf"},
+        "index_rev": {"type": ["string", "null"]},
+        "capability": {"enum": ["full", "degraded", "partial", "unknown"]},
+        "freshness": {"type": "object"},
+        "degraded": {"type": "boolean"},
+        "degradation_reason": {"type": ["string", "null"]},
+        "items": {"type": "array", "items": {"$ref": "#/$defs/CodeItem"}}
+      },
+      "additionalProperties": true
+    },
+    "CodeItem": {
+      "type": "object",
+      "required": ["id", "path", "start_line"],
+      "properties": {
+        "id": {"type": "string"},
+        "chunk_id": {"type": "string"},
+        "path": {"type": "string"},
+        "start_line": {"type": "integer", "minimum": 1},
+        "end_line": {"type": ["integer", "null"]},
+        "source_kind": {"type": ["string", "null"]},
+        "provenance": {"enum": ["stated", "derived", "unknown"]},
+        "score": {"type": "number"},
+        "why": {"type": "array", "items": {"type": "string"}},
+        "snippet": {"type": ["string", "null"]}
+      },
+      "additionalProperties": true
+    },
+    "SkillLane": {
+      "type": "object",
+      "required": ["source", "index_rev", "items"],
+      "properties": {
+        "source": {"type": "string"},
+        "index_rev": {"type": "string"},
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": {"type": "string"},
+              "path": {"type": ["string", "null"]},
+              "description": {"type": ["string", "null"]},
+              "when_to_use": {"type": ["string", "null"]},
+              "content_hash": {"type": ["string", "null"]},
+              "used_by": {"type": "array", "items": {"type": "object"}}
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "Actor": {
+      "type": "object",
+      "required": ["actor_id", "kind", "source", "evidence"],
+      "properties": {
+        "actor_id": {"type": "string"},
+        "name": {"type": ["string", "null"]},
+        "kind": {"enum": ["root_session", "subagent", "team_member", "autoclaw_agent", "unknown"]},
+        "source": {"enum": ["harness", "autoclaw"]},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "score": {"type": "number"},
+        "why": {"type": "array", "items": {"type": "string"}},
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["lane", "id"],
+            "properties": {
+              "lane": {"enum": ["episodes", "code", "skills"]},
+              "id": {"type": "string"}
+            },
+            "additionalProperties": true
+          }
+        },
+        "skills": {"type": "array", "items": {"type": "object"}},
+        "dispatch": {
+          "type": "object",
+          "properties": {
+            "mode": {"enum": ["spawn_replica", "team_task", "external_handoff", "none"]},
+            "available": {"type": "boolean"}
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "Fusion": {
+      "type": "object",
+      "required": ["strategy", "k"],
+      "properties": {
+        "strategy": {"const": "rrf"},
+        "k": {"type": "integer", "minimum": 1},
+        "weights": {"type": "object"},
+        "dedup": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "Limits": {
+      "type": "object",
+      "required": ["truncated"],
+      "properties": {
+        "requested": {"type": "integer", "minimum": 1},
+        "returned": {"type": "integer", "minimum": 0},
+        "truncated": {"type": "boolean"},
+        "budget": {"type": "object"},
+        "dropped": {"type": "array"}
+      },
+      "additionalProperties": true
+    },
+    "Warning": {
+      "type": "object",
+      "required": ["code", "lane", "message"],
+      "properties": {
+        "code": {"type": "string"},
+        "lane": {"type": "string"},
+        "message": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "Error": {
+      "type": "object",
+      "required": ["code", "message"],
+      "properties": {
+        "code": {"type": "string"},
+        "lane": {"type": ["string", "null"]},
+        "message": {"type": "string"},
+        "retryable": {"type": "boolean"}
+      },
+      "additionalProperties": true
+    }
+  }
+}

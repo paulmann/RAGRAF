@@ -1,0 +1,77 @@
+name: Defect report
+description: A reproducible defect — with the command, the output, and the environment (the project's currency is a fact with a reference)
+title: "[defect] "
+labels: ["defect", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        RAGRAF holds reports to its own standard: **a fact with a reference**.
+        An issue with a reproducible command and full output will be triaged fast;
+        «X doesn't work for me» without them will be closed with a pointer to this form.
+  - type: textarea
+    id: command
+    attributes:
+      label: Exact command(s)
+      description: Copy-paste what you ran (including flag order — global flags go BEFORE the subcommand).
+      placeholder: ragraf -p config/my.yaml query symbol --name Foo
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual (full output, including exit code)
+      description: "Exit codes: 0 ok (incl. found=false) · 1 error · 2 usage · 3 layer refusal. Paste the whole output, not an excerpt."
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Output of the commands below.
+      value: |
+        ragraf --version:
+        OS / PowerShell version:
+        Python version + how installed (python.org / Store / vendor):
+        Install path used (install.ps1 / pip -e / wrapper):
+        Joern layer present? (yes/no):
+    validations:
+      required: true
+  - type: textarea
+    id: index-status
+    attributes:
+      label: Index state
+      description: "Output of `ragraf --json -p <cfg> query index_status` (revision, capability, coverage, ledger size). Redact paths if needed."
+    validations:
+      required: false
+  - type: textarea
+    id: corpus
+    attributes:
+      label: Corpus characteristics
+      description: Approx. files/lines, dominant languages, anything unusual (8.3 paths, network drive, non-ASCII paths, huge files).
+    validations:
+      required: false
+  - type: textarea
+    id: attachments
+    attributes:
+      label: Attachments
+      description: Installer transcript (`~/.ragraf/logs/install-*.log`), `selftest --json` output, minimal repro fixture. **Never attach secret-bearing files.**
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-flight
+      options:
+        - label: I checked [Troubleshooting](https://github.com/paulmann/RAGRAF/wiki/10-Troubleshooting) — this is not a known recipe
+          required: true
+        - label: I searched existing issues
+          required: true
+        - label: The corpus config excludes secrets (`secrets_exclude`) and I attached no secret material
+          required: true

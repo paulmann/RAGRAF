@@ -1,0 +1,55 @@
+name: Doc ↔ code divergence
+description: A document disagrees with the code — cite both sides (these reports are among the most valued)
+title: "[docs] "
+labels: ["documentation", "divergence", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The project's own skill says: *«Verify a number from a document against the code.»*
+        This template collects both sides of a divergence so it can be resolved in one pass.
+  - type: input
+    id: doc
+    attributes:
+      label: Document (path + section)
+      placeholder: docs/02_architecture/ARCHITECTURE.md §7
+    validations:
+      required: true
+  - type: textarea
+    id: doc-claims
+    attributes:
+      label: What the document claims
+      description: Quote the exact sentence/table row.
+    validations:
+      required: true
+  - type: input
+    id: code
+    attributes:
+      label: Code (file:line)
+      placeholder: src/ragraf/facade.py:1
+    validations:
+      required: true
+  - type: textarea
+    id: code-shows
+    attributes:
+      label: What the code actually does
+      description: Paste the relevant snippet or describe the observable behavior + how you observed it.
+    validations:
+      required: true
+  - type: dropdown
+    id: wrong-side
+    attributes:
+      label: Which side is wrong?
+      options:
+        - The document (code is the truth)
+        - The code (document describes intended behavior)
+        - Both / unclear
+        - Neither — it's a version drift (say which)
+    validations:
+      required: true
+  - type: textarea
+    id: resolution
+    attributes:
+      label: Proposed resolution
+    validations:
+      required: false

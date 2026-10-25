@@ -1,0 +1,571 @@
+# RAGRAF — манифест поставки.
+#
+# Назначение: отобразить «путь в живом дереве» → «путь в публикуемом дереве».
+# Манифест — единственный источник истины о составе поставки: сборщик
+# (build_release.py) собирает по нему, проверяльщик (verify_release.py) сверяет
+# собранное с ним и с живым деревом. Пока манифеста не было, публикация
+# собиралась руками (.staging/release-v0.2, снимок 14.10), из-за чего обвязка
+# отставала от кода, а установщик существовал в трёх версиях (измерено в этапе 2).
+#
+# Правила этого файла:
+#   1. Каталоги перечисляются шаблоном, а не поштучно: 745 файлов списком — это
+#      не манифест, а копия дерева, и она расходится с деревом на первой правке.
+#   2. У каждого исключения есть причина строкой. Причина «так исторически
+#      сложилось» запрещена: проверка требует осмысленного текста, иначе
+#      исключение перестаёт быть решением и становится забывчивостью.
+#   3. Исключение либо действительно что-то отсекает (тогда оно active), либо
+#      ничего не отсекает сейчас, но страхует будущее изменение манифеста
+#      (тогда оно guard и обязано это сказать). Третьего не дано: «мёртвое»
+#      правило без пометки — провал проверки.
+
+[release]
+product = "RAGRAF"
+# Файлы, которые создаёт сам сборщик и которых поэтому нет в списке включений.
+# Проверяльщик считает их законными, но требует точного совпадения списка.
+artifacts = ["checksums.sha256"]
+
+# ---------------------------------------------------------------------------
+# 1. Обвязка поставки: 18 файлов из community/** — побайтовые копии публичного
+#    main (коммит 075caf86dc2f6274b9c48487e521915bcdfeaf2c, 2026-10-22).
+#    Перенесены в живое дерево этапом 2, сверены docs/03_implementation/
+#    RELEASE-SOURCES.md и 24-й проверкой чекера.
+# ---------------------------------------------------------------------------
+
+[[include]]
+from = "community/CHANGELOG.md"
+to = "CHANGELOG.md"
+kind = "wrapper"
+
+[[include]]
+from = "community/EULA.md"
+to = "EULA.md"
+kind = "file"
+why = "условия использования платных изданий; публикуется рядом с LICENSE и NOTICE"
+
+[[include]]
+from = "community/CITATION.cff"
+to = "CITATION.cff"
+kind = "wrapper"
+
+[[include]]
+from = "community/CODE_OF_CONDUCT.md"
+to = "CODE_OF_CONDUCT.md"
+kind = "wrapper"
+
+[[include]]
+from = "community/CONTRIBUTING.md"
+to = "CONTRIBUTING.md"
+kind = "wrapper"
+
+[[include]]
+from = "community/install.ps1"
+to = "install.ps1"
+kind = "wrapper"
+
+[[include]]
+from = "community/mkdocs.yml"
+to = "mkdocs.yml"
+kind = "wrapper"
+
+[[include]]
+from = "community/README.ru.md"
+to = "README.ru.md"
+kind = "wrapper"
+
+[[include]]
+from = "community/ROADMAP.md"
+to = "ROADMAP.md"
+kind = "wrapper"
+
+[[include]]
+from = "community/SECURITY.md"
+to = "SECURITY.md"
+kind = "wrapper"
+
+[[include]]
+from = "community/.github/dependabot.yml"
+to = ".github/dependabot.yml"
+kind = "wrapper"
+
+[[include]]
+from = "community/.github/PULL_REQUEST_TEMPLATE.md"
+to = ".github/PULL_REQUEST_TEMPLATE.md"
+kind = "wrapper"
+
+[[include]]
+from = "community/.github/release.yml"
+to = ".github/release.yml"
+kind = "wrapper"
+
+[[include]]
+from = "community/.github/ISSUE_TEMPLATE/config.yml"
+to = ".github/ISSUE_TEMPLATE/config.yml"
+kind = "wrapper"
+
+[[include]]
+from = "community/.github/ISSUE_TEMPLATE/defect-report.yml"
+to = ".github/ISSUE_TEMPLATE/defect-report.yml"
+kind = "wrapper"
+
+[[include]]
+from = "community/.github/ISSUE_TEMPLATE/doc-divergence.yml"
+to = ".github/ISSUE_TEMPLATE/doc-divergence.yml"
+kind = "wrapper"
+
+[[include]]
+from = "community/.github/workflows/ci.yml"
+to = ".github/workflows/ci.yml"
+kind = "wrapper"
+
+[[include]]
+from = "community/.github/workflows/codeql.yml"
+to = ".github/workflows/codeql.yml"
+kind = "wrapper"
+
+[[include]]
+from = "community/.github/workflows/pages.yml"
+to = ".github/workflows/pages.yml"
+kind = "wrapper"
+
+# ---------------------------------------------------------------------------
+# 2. Продукт: код, тесты, панель, измеритель, документация.
+# ---------------------------------------------------------------------------
+
+[[include]]
+from = "src"
+to = "src"
+kind = "tree"
+
+[[include]]
+from = "tools"
+to = "tools"
+kind = "tree"
+
+[[include]]
+from = "tests"
+to = "tests"
+kind = "tree"
+
+[[include]]
+from = "admin"
+to = "admin"
+kind = "tree"
+
+# bench входит в поставку потому, что его называет CI: шаг синтаксической
+# проверки обходит `src, tools, tests, bench`. Без каталога в публикуемом дереве
+# шаг красил бы CI чужого клона — ровно тот класс дефекта, из-за которого
+# появился этап 2 (CI требовал того, чего в дереве не было).
+[[include]]
+from = "bench"
+to = "bench"
+kind = "tree"
+
+[[include]]
+from = "docs"
+to = "docs"
+kind = "tree"
+
+# scripts/ тоже входит из-за CI, а не «на всякий случай»: ci.yml:125 вызывает
+# scripts/install.ps1, а шаги PSScriptAnalyzer и разбора ps1 обходят scripts
+# и tools. Каталог без этих файлов делает CI публикуемого репозитория красным.
+[[include]]
+from = "scripts"
+to = "scripts"
+kind = "tree"
+
+# Пример конфигурации корпуса. Здесь стоял ЖИВОЙ конфиг этой машины
+# (`config/ragraf.yaml`): он содержит `root: RAGRAF`, то есть
+# абсолютный путь автора, а .gitignore объявляет каталог `config/` непубликуемым.
+# Измерено 24.10.2026: сборка несла этот файл и теряла документированный пример.
+[[include]]
+from = "examples/ragraf.example.yaml"
+to = "examples/ragraf.example.yaml"
+kind = "file"
+
+[[include]]
+from = "pyproject.toml"
+to = "pyproject.toml"
+kind = "file"
+
+[[include]]
+from = "requirements.txt"
+to = "requirements.txt"
+kind = "file"
+
+[[include]]
+from = "README.md"
+to = "README.md"
+kind = "file"
+
+[[include]]
+from = "LICENSE"
+to = "LICENSE"
+kind = "file"
+
+[[include]]
+from = "NOTICE"
+to = "NOTICE"
+kind = "file"
+
+[[include]]
+from = "CLA.md"
+to = "CLA.md"
+kind = "file"
+
+[[include]]
+from = "SUPPORT.md"
+to = "SUPPORT.md"
+kind = "file"
+
+# Сборка оформления панели (Tailwind): без package.json и замка версий
+# admin/static/style.css нечем пересобрать, а версии зависимостей «на глаз»
+# расходятся с тем, чем собран лежащий файл.
+[[include]]
+from = "package.json"
+to = "package.json"
+kind = "file"
+
+[[include]]
+from = "package-lock.json"
+to = "package-lock.json"
+kind = "file"
+
+# Правила репозитория. `.gitignore` обязателен именно в публикуемой поставке:
+# правило `.ragraf/` в корне — требование §8.20 правил проекта, а без файла
+# машино-локальный индекс в чужом клоне окажется ничем не защищён.
+[[include]]
+from = ".gitignore"
+to = ".gitignore"
+kind = "file"
+
+[[include]]
+from = ".gitattributes"
+to = ".gitattributes"
+kind = "file"
+
+[[include]]
+from = ".editorconfig"
+to = ".editorconfig"
+kind = "file"
+
+# ---------------------------------------------------------------------------
+# 3. Исключения. Поле `state`:
+#      active — правило сейчас отсекает хотя бы один файл;
+#      guard  — сейчас не отсекает ничего, но страхует будущее расширение
+#               манифеста (например, если в него попадёт корень дерева).
+#    Число отсечённых файлов печатает сборщик; проверка сверяет пометку с фактом.
+# ---------------------------------------------------------------------------
+
+[[exclude]]
+pattern = "**/__pycache__/**"
+state = "active"
+why = "кеш байткода Python: пересобирается, к версии интерпретатора привязан, в поставке бесполезен"
+
+[[exclude]]
+pattern = "**/*.pyc"
+state = "guard"
+why = "скомпилированный байткод рядом с исходником: дублирует то, что и так есть текстом"
+
+[[exclude]]
+pattern = "**/*.bak"
+state = "guard"
+why = "резервная копия файла: история правок этой машины, а не содержимое версии"
+
+[[exclude]]
+pattern = "**/*.bak.*"
+state = "guard"
+why = "резервная копия с расширением исходного файла (так сохраняет правки инструмент очистки)"
+
+[[exclude]]
+pattern = "**/*.bak-*"
+state = "guard"
+why = "резервная копия с меткой задачи в имени (file.md.bak-20261024-stage3). Копий в дереве больше нет — раз все сняты по §8.23, правило работает страховкой на будущее"
+
+[[exclude]]
+pattern = "**/*.orig"
+state = "guard"
+why = "копия до слияния: содержит конфликтные маркеры и не является рабочим файлом"
+
+[[exclude]]
+pattern = "**/*.old"
+state = "guard"
+why = "прежняя версия файла: публиковать две версии одного документа значит раздвоить факт"
+
+[[exclude]]
+pattern = "**/*.save"
+state = "guard"
+why = "сохранённая копия: то же содержимое под нерабочим именем"
+
+[[exclude]]
+pattern = "**/*.rej"
+state = "guard"
+why = "отклонённая часть заплатки: рабочий мусор инструмента патчей"
+
+[[exclude]]
+pattern = "**/*.tmp"
+state = "active"
+why = "временный файл: содержимое недописано по определению"
+
+[[exclude]]
+pattern = "**/~$*"
+state = "guard"
+why = "временный файл офисного пакета: появляется при открытии документа в редакторе, к версии не относится"
+
+# Измеренный дефект 24.10.2026: tests/test_access_live_out.txt содержит
+# выданный токен доступа панели (значение не печатается ни в отчётах, ни здесь).
+# Файл — журнал прогона, а не исходник: в поставку он попадать не должен.
+# Общее правило по маске выбрано намеренно: таких журналов два, и следующий
+# прогон создаст третий с другим именем.
+[[exclude]]
+pattern = "tests/*_out.txt"
+state = "active"
+why = "журнал прогона теста: содержит выданный токен доступа панели и локальные пути машины"
+
+[[exclude]]
+pattern = "**/*.egg-info/**"
+state = "guard"
+why = """метаданные сборки пакета: пересоздаются установкой и сборкой колеса, версию не
+описывают. Сейчас их в дереве нет, поэтому пометка guard, а не active: проверка
+требует, чтобы active что-то отсекал. Замер 24.10.2026 (этап И6): сборка колеса в
+живом дереве создала src/ragraf.egg-info, и правило действительно отсекло файлы —
+то есть оно работает, просто обычно отсекать нечего"""
+
+[[exclude]]
+pattern = "build/**"
+state = "guard"
+why = """выход сборки пакета: setuptools кладёт сюда копию src перед упаковкой. Сейчас
+каталога нет, поэтому guard. Замер 24.10.2026 (этап И6): сборка колеса в живом
+дереве оставила build/lib/ragraf/** — 64 файла, и проверка поставки назвала их
+«файлами без места». Копии исходников в поставку попадать не должны"""
+
+# ---------------------------------------------------------------------------
+# 13. Закрытый модуль Pro (ПРОМТ-И15, 25.10.2026).
+#
+# Общий индекс команды (`src/ragraf/shared_index.py`) — первая платная
+# возможность, которая живёт ФАЙЛОМ, а не операцией в общем коде. В
+# Community-сборке его нет вовсе: граница издания — отсутствие кода, а не
+# проверка права в рантайме (проверку можно обойти, отсутствие файла — нет).
+#
+# Возврат в Pro объявлен в `tools/release/manifest-pro.toml` полем `pro_only` —
+# ОДНИМ объявлением, потому что оно и публикует файл в Pro, и требует его
+# отсутствия здесь (проверяется `check_pro_delivery.py` в обе стороны).
+#
+# Проверка модуля исключена вместе с кодом: тест импортирует модуль, и в
+# Community он падал бы на импорте — то есть красил бы CI чужого клона за то,
+# чего в этом издании нет.
+# ---------------------------------------------------------------------------
+
+[[exclude]]
+pattern = "src/ragraf/shared_index.py"
+state = "active"
+why = "закрытый модуль Pro: общий индекс команды. В Pro возвращается объявлением pro_only в manifest-pro.toml"
+
+[[exclude]]
+pattern = "tests/test_shared_index.py"
+state = "active"
+why = "проверка закрытого модуля Pro: импортирует src/ragraf/shared_index.py, которого в Community нет"
+
+
+# ---------------------------------------------------------------------------
+# Закрытые модули платных изданий (решение владельца 25.10.2026).
+#
+# Граница издания — ОТСУТСТВИЕ КОДА, а не проверка права в рантайме: проверку
+# можно обойти, отсутствие файла — нет. Все четыре модуля вызываются из фасада
+# только через `_feature_module("<операция>", "<модуль>", "<возможность>")`,
+# поэтому их отсутствие даёт отказ с названной причиной, а не падение.
+#
+# `src/ragraf/quality.py` СОЗНАТЕЛЬНО ОСТАВЛЕН: базовая операция `index_status`
+# читает из него `measures`, `journal_stats` и `prune_keep_default`
+# (src/ragraf/facade.py:2175-2198). Вырезание файла целиком ломало бы базовую
+# операцию Community. Разделение файла на «измерение» и «контур качества» —
+# отдельный этап, названный в отчёте.
+# ---------------------------------------------------------------------------
+
+[[exclude]]
+pattern = "src/ragraf/sso.py"
+state = "active"
+why = "закрытый модуль Enterprise: единый вход. Объявлен в pro_only манифестов pro и enterprise"
+
+[[exclude]]
+pattern = "src/ragraf/siem.py"
+state = "active"
+why = "закрытый модуль Enterprise: экспорт аудита в SIEM. Объявлен в pro_only манифестов pro и enterprise"
+
+[[exclude]]
+pattern = "src/ragraf/attest.py"
+state = "active"
+why = "закрытый модуль Enterprise: аттестация сборки. Объявлен в pro_only манифестов pro и enterprise"
+
+[[exclude]]
+pattern = "src/ragraf/license_offline.py"
+state = "active"
+why = "закрытый модуль Enterprise: офлайн-лицензия и её выпуск. Объявлен в pro_only манифестов pro и enterprise"
+
+
+
+
+
+[[exclude]]
+pattern = "src/ragraf/quality_loop.py"
+state = "active"
+why = "закрытый модуль Pro/Enterprise: контур качества (suite/diff/prune). Измерение индекса осталось в quality.py — его читает базовая операция index_status"
+
+[[exclude]]
+pattern = "tests/test_quality_loop.py"
+state = "active"
+why = "проверка закрытого модуля: импортирует src/ragraf/quality_loop.py, которого в Community нет"
+
+[[exclude]]
+pattern = "tests/test_external_access.py"
+state = "active"
+why = "проверка закрытых модулей sso/siem. Объявлен в pro_only манифестов pro и enterprise"
+
+[[exclude]]
+pattern = "tests/test_offline_attest.py"
+state = "active"
+why = "проверка закрытых модулей attest/license_offline. Объявлен в pro_only манифестов pro и enterprise"
+
+[[exclude]]
+pattern = "docs/AGENTS-context.md"
+state = "active"
+why = "внутренний материал проекта: адресован агенту этой машины, а не читателю поставки"
+
+[[exclude]]
+pattern = "AGENTS.md"
+state = "guard"
+why = "внутренние правила проекта: в поставку не входят, правило страхует расширение манифеста до корня"
+
+[[exclude]]
+pattern = "AGENTS-TRAPS.md"
+state = "guard"
+why = "внутренний разбор ловушек проекта: адресован агенту, а не потребителю поставки"
+
+[[exclude]]
+pattern = "**/.ragraf/**"
+state = "active"
+why = "индекс корпуса: машино-локален, зависит от этой машины; шаблон с ** ловит и корневой индекс, и подготовленный индекс тестовой фикстуры"
+
+[[exclude]]
+pattern = ".staging/**"
+state = "guard"
+why = "старая сборочная копия .staging/release-v0.2: только читается, пересобирается конвейером релиза"
+
+[[exclude]]
+pattern = ".zwork/**"
+state = "guard"
+why = "служебный каталог агента: вложения и рабочие файлы сессии, к продукту не относятся"
+
+[[exclude]]
+pattern = ".venv/**"
+state = "guard"
+why = "виртуальное окружение: чужие пакеты, тысячи файлов, к исходникам продукта не относятся"
+
+[[exclude]]
+pattern = ".tools/**"
+state = "guard"
+why = "распакованный комплект инструментов (JDK, Joern): сторонние бинарники, не код проекта"
+
+[[exclude]]
+pattern = "harness/**"
+state = "guard"
+why = "внутренние материалы интеграции с HARNESS: по границам этапа в поставку не входят"
+
+[[exclude]]
+pattern = "catalog/db_access.json"
+state = "guard"
+why = "реквизиты доступа к базам: секретоносный файл, в поставке его быть не может ни при каком расширении манифеста"
+
+[[exclude]]
+pattern = "catalog/secrets.key"
+state = "guard"
+why = "мастер-ключ хранилища секретов: попадание в поставку обесценило бы всё хранилище"
+
+[[exclude]]
+pattern = "config/*.local.*"
+state = "guard"
+why = "локальные перекрытия настроек: содержат реквизиты машины (тот же класс, что SECRET_PATTERNS в init_corpus)"
+
+[[exclude]]
+pattern = ".interpreter"
+state = "guard"
+why = "маркер интерпретатора этой машины: абсолютный путь к .venv, в чужом клоне неверен"
+
+[[exclude]]
+pattern = "skills-lock.json"
+state = "guard"
+why = "замок навыков агентской среды: к продукту не относится, нужен только инструментам агента"
+
+# ---------------------------------------------------------------------------
+# 12. Классы файлов tools/ (ПРОМТ-И14, 25.10.2026).
+#
+# Зачем. В tools/ 348 файлов .py, и читатель не отличал проверку от разового
+# патча: `final_cleanup_excludes.py` и `check_line_refs.py` выглядели одинаково.
+# У каждого файла теперь ровно один класс:
+#
+#   working — рабочая проверка или точка входа продукта: её вызывает гейт
+#             (tools/Invoke-ProjectDoctrine.ps1), напрямую или через импорт;
+#   oneoff  — разовый инструмент этапа: написан под конкретный вопрос и
+#             воротами не является.
+#
+# Правило класса — ДОСТИЖИМОСТЬ ОТ ГЕЙТА, а не имя файла. Это измерено, а не
+# предположено: 7 файлов с «разовым» именем `check_*` (check_bom_crlf,
+# check_licensing, check_line_refs, check_release_manifest, check_skill_variants,
+# check_community_wrapper, check_db_layer) гейт вызывает, и назвать их разовыми
+# значило бы соврать ровно в том месте, где читатель ищет защиту.
+#
+# Группы oneoff объявлены причинами: имя файла начинается с темы, и тема
+# называет, зачем инструмент писался. Новый файл с незнакомой темой попадает в
+# «не объявлен» и валит проверку — так список групп не устаревает молча.
+#
+# Честная оговорка, которая проверяется числом. Поставка пока несёт каталог
+# tools/ целиком, поэтому разовый инструмент в неё ИДЁТ. Это названо здесь
+# (`oneoff_shipped_now`) и сверяется обходом: разошлось число — находка.
+# Исключать их из поставки в этом этапе нельзя: 47 разовых инструментов
+# названы командами в публикуемых документах, и исключение сделало бы эти
+# команды невыполнимыми. Решение о выносе — отдельное, с правкой документов.
+# ---------------------------------------------------------------------------
+
+[tools_classes]
+gate = "tools/Invoke-ProjectDoctrine.ps1"
+# Измерено 25.10.2026 на rev-0291: файлов 349, рабочих 15 (13 от гейта, включая
+# tools/check_tools_classes.py, и две личные записи ниже), разовых 334, не объявлено 0.
+# Числа не вписаны руками в проверку: их печатает обход, а объявление сверяется с ним.
+oneoff_shipped_now = 334
+note = """Разовый инструмент объявлен группой темы; класс рабочего определяется
+достижимостью от гейта, поэтому «рабочий по имени» невозможен по построению."""
+
+[[tools_classes.group]]
+prefixes = ["check_", "diag_", "audit_", "verify_", "compare_", "find_"]
+reason = """Сверка разового результата: проверка написана под конкретный вопрос
+(конкретная база, конкретный корпус, конкретный отчёт) и в ворота не входит."""
+
+[[tools_classes.group]]
+prefixes = ["measure_", "bench_", "probe_", "analyze_", "phase0_", "trace_",
+            "tune_", "recalc_", "count_", "scan_", "recon_"]
+reason = """Замер и стенд: даёт число этапа, а не решение о пригодности. Порог
+окупаемости и пороги переиндексации менялись по таким замерам."""
+
+[[tools_classes.group]]
+prefixes = ["fix_", "add_", "patch_", "insert_", "merge_", "append_",
+            "renumber_", "extend_", "enable_", "install_", "setup_", "clean_",
+            "run_", "build_", "replace_", "plan_", "update_", "refine_",
+            "rollback_", "harness_"]
+reason = """Правка дерева, конфигов или данных под конкретный этап: одноразовое
+действие, которое нельзя повторять на чужом корпусе без разбора."""
+
+[[tools_classes.group]]
+prefixes = ["final_", "collect_", "summary_", "extract_", "gen_", "snapshot_",
+            "sync_", "link_", "remember_", "offline_"]
+reason = """Сбор фактов, снимок состояния или пересылка данных: обслуживает
+отчёт этапа, а не проверяет продукт."""
+
+[[tools_classes.manual]]
+path = "tools/keep_cut.py"
+class = "working"
+reason = """Копия ДО удаления (правило владельца 24.10.2026): инструмент, на который
+опирается инвариант 23, хотя гейт его не вызывает."""
+
+[[tools_classes.manual]]
+path = "tools/ragraf-mcp-http.py"
+class = "working"
+reason = """Точка входа HTTP-сервера MCP: поверхность продукта, а не разовый скрипт."""

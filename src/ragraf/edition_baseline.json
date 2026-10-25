@@ -1,0 +1,198 @@
+{
+  "schema": 1,
+  "comment": "Базовая линия изданий RAGRAF: закрытый список изданий, состав возможностей и операции, которые каждая возможность открывает. Данные, а не строки в коде: слой изданий читает этот файл, поэтому новая возможность объявляется здесь, а не правкой условия. Правило честности: возможность попадает в ответ, только если ВСЕ её операции есть в сборке. Объявленная возможность без кода в ответ не попадает и названа в разделе missing. У каждой возможности есть поле status из закрытого списка: shipped — код в сборке есть; declared — объявлено как запланированное, и в поле planned названо, что именно не написано. Статус не отменяет проверку: возможность попадает в ответ только при наличии всех своих операций в сборке, поэтому declared видна в разделе missing с причиной.",
+  "order": [
+    "community",
+    "pro",
+    "enterprise"
+  ],
+  "default": "community",
+  "titles": {
+    "community": "Community",
+    "pro": "Pro",
+    "enterprise": "Enterprise"
+  },
+  "license": {
+    "required_from": "pro",
+    "file": "catalog/edition.license",
+    "signature_suffix": ".sig",
+    "edition_field": "edition",
+    "expiry_field": "expires_at",
+    "licensee_field": "licensee"
+  },
+  "features": [
+    {
+      "name": "search",
+      "title": "поиск и чтение: векторный и лексический поиск, символы, тела функций, документы",
+      "edition": "community",
+      "status": "shipped",
+      "operations": [
+        "search",
+        "search_multi",
+        "symbol",
+        "references",
+        "code",
+        "live_read",
+        "freshness",
+        "route",
+        "neighbors"
+      ]
+    },
+    {
+      "name": "graph",
+      "title": "граф кода: вызывающие, вызываемые, влияние правки, срез, карта репозитория",
+      "edition": "community",
+      "status": "shipped",
+      "operations": [
+        "callers",
+        "callees",
+        "impact",
+        "slice",
+        "repo_map",
+        "diff",
+        "entrypoints",
+        "dead_code",
+        "duplicates"
+      ]
+    },
+    {
+      "name": "schema",
+      "title": "схема из миграций и права: таблицы, чтение и запись, политика доступа, маршруты, классы",
+      "edition": "community",
+      "status": "shipped",
+      "operations": [
+        "schema",
+        "table_usage",
+        "policy_trace",
+        "write_check",
+        "routes",
+        "class_usage"
+      ]
+    },
+    {
+      "name": "db-live",
+      "title": "живые базы: структура, таблицы, связи, примеры строк, расхождение, сверка с кодом",
+      "edition": "community",
+      "status": "shipped",
+      "operations": [
+        "db_schema",
+        "db_table",
+        "db_relations",
+        "db_sample",
+        "db_drift",
+        "db_cross"
+      ]
+    },
+    {
+      "name": "audit",
+      "title": "состояние и доверие: ревизия, реестр, журнал расхождений, заметки, задача, гейт",
+      "edition": "community",
+      "status": "shipped",
+      "operations": [
+        "index_status",
+        "catalog",
+        "drift_report",
+        "drift_ack",
+        "note",
+        "notes",
+        "task_set",
+        "task_stats",
+        "gate",
+        "calibrate"
+      ]
+    },
+    {
+      "name": "shared-index",
+      "title": "общий индекс команды: публикация корпуса для чтения по сети, допуск клиентов и вопросы к опубликованному индексу",
+      "edition": "pro",
+      "status": "shipped",
+      "operations": [
+        "shared_index_status",
+        "shared_index_publish",
+        "shared_index_query"
+      ]
+    },
+    {
+      "name": "secret-broker",
+      "title": "брокер секретов: выдача доступа по запросу и плановая смена",
+      "edition": "pro",
+      "status": "declared",
+      "planned": "выдача доступа по запросу и плановая смена: не написан брокер как служба (срок, владелец, отзыв); хранилище секретов есть, автоматической выдачи по запросу и плановой смены нет",
+      "operations": [
+        "broker_issue",
+        "broker_rotate"
+      ]
+    },
+    {
+      "name": "connectors",
+      "title": "коннекторы к внешним системам: перечень и запуск",
+      "edition": "pro",
+      "status": "declared",
+      "planned": "перечень и запуск коннекторов к внешним системам: не написан контракт запуска для каждого вида внешней системы (адрес, права, повторы), без него «запуск» был бы заглушкой с видом работы",
+      "operations": [
+        "connector_list",
+        "connector_run"
+      ]
+    },
+    {
+      "name": "fleet",
+      "title": "управление парком установок: состояние и применение настроек",
+      "edition": "pro",
+      "status": "declared",
+      "planned": "состояние и применение настроек парка установок: не написан канал управления установками и подписанный пакет настроек; зарегистрированных установок, которыми можно управлять, в этой сборке нет",
+      "operations": [
+        "fleet_status",
+        "fleet_apply"
+      ]
+    },
+    {
+      "name": "quality-loop",
+      "title": "контур качества: набор проверок индекса и разбор расхождений между прогонами",
+      "edition": "pro",
+      "status": "shipped",
+      "operations": [
+        "quality_suite",
+        "quality_diff",
+        "quality_prune"
+      ]
+    },
+    {
+      "name": "sso",
+      "title": "единый вход: OIDC authorization code + PKCE и отображение групп внешнего каталога на роли панели (SAML не реализован — отказ с причиной)",
+      "edition": "enterprise",
+      "status": "shipped",
+      "operations": [
+        "sso_login",
+        "sso_map_roles"
+      ]
+    },
+    {
+      "name": "siem-export",
+      "title": "выгрузка журналов доступа и аудита хранилища секретов во внешнюю SIEM (syslog или HTTP) и проверка доставки",
+      "edition": "enterprise",
+      "status": "shipped",
+      "operations": [
+        "siem_export",
+        "siem_test"
+      ]
+    },
+    {
+      "name": "offline-license",
+      "title": "офлайн-лицензия для закрытого контура",
+      "edition": "enterprise",
+      "status": "shipped",
+      "operations": [
+        "license_offline"
+      ]
+    },
+    {
+      "name": "attestation",
+      "title": "аттестация поставки: подписанный набор доказательств для внешнего аудита",
+      "edition": "enterprise",
+      "status": "shipped",
+      "operations": [
+        "attest_bundle"
+      ]
+    }
+  ]
+}

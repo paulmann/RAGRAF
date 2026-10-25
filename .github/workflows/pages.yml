@@ -1,0 +1,79 @@
+name: Docs site
+
+# Builds the documentation site from the repository's own `docs/` tree and
+# publishes it to GitHub Pages. The deployment is a real environment
+# (`github-pages`), so its URL and history are visible under
+# Environments → github-pages.
+#
+# The site is deliberately a render of the shipped documentation rather than a
+# second copy: there is no step here that rewrites prose, only `mkdocs build`.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time; never cancel a running deployment mid-publish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build (mkdocs)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install MkDocs Material (pinned)
+        run: pip install --disable-pip-version-check "mkdocs==1.6.1" "mkdocs-material==9.7.7"
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Build the site
+        run: mkdocs build --strict
+
+      - name: Report the build result
+        run: |
+          python - <<'PY'
+          import pathlib, sys
+          site = pathlib.Path("site")
+          pages = sorted(p.relative_to(site).as_posix() for p in site.rglob("index.html"))
+          print(f"pages built: {len(pages)}")
+          for p in pages:
+              print("  ", p)
+          for required in ("index.html", "sitemap.xml", "404.html", "search/search_index.json"):
+              if not (site / required).exists():
+                  sys.exit(f"missing artifact: {required}")
+          PY
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
