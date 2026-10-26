@@ -7,7 +7,7 @@
 в таком состоянии теряла обвязку целиком — и заметить это можно было только
 сверкой, которой до сих пор никто не делал.
 
-**Публичный `main` на момент сверки:** `2f68814f510bb06c150c73ebc74787326fd36192`
+**Публичный `main` на момент сверки:** `59ec2618a6225fa83bebed20fc6c0d190f62512d`
 (2026-10-22 00:55:51 +0300, «docs: add agent installation and usage guide»),
 репозиторий https://github.com/paulmann/RAGRAF, клон в песочнице
 `%TEMP%\ragraf-pub-20261024-175225` (`git clone --depth 50`, затем
@@ -21,35 +21,47 @@
 
 ## 1. Таблица источников
 
+Два файла обвязки отличаются от публичного `main` **намеренно**, и это записано в
+таблице, а не спрятано: `CHANGELOG.md` получил раздел выпуска 0.3.1, `CITATION.cff`
+— версию 0.3.1 и дату 2026-10-26. Столбец «sha256 в публичном main» показывает
+прежние байты публикации (сверка шла с `59ec261`), поэтому признак совпадения у
+этих двух строк — «нет». После публикации выпуска сверка выполняется заново, и
+признак вернётся в «да».
+
+
 Хэши — sha256, полные (64 знака). Столбец «совпадает» означает: файл в дереве
 побайтово равен файлу публичного `main`, то есть перенос выполнен без правки
 содержимого.
 
 | файл в дереве | источник (URL + коммит) | sha256 в публичном main | sha256 в дереве | совпадает | путь в поставке |
 |---|---|---|---|---|---|
-| community/CHANGELOG.md | https://github.com/paulmann/RAGRAF/blob/2f68814f510bb06c150c73ebc74787326fd36192/CHANGELOG.md | 794cc66b3bc899a47810fa3f869aa751867957a58c3bf66ae67f9e183163adca | 794cc66b3bc899a47810fa3f869aa751867957a58c3bf66ae67f9e183163adca | да | CHANGELOG.md |
-| community/CITATION.cff | https://github.com/paulmann/RAGRAF/blob/2f68814f510bb06c150c73ebc74787326fd36192/CITATION.cff | 0e38d47c65b4dd9ee85ef2581cd4d253a1e2959d079ad6315e6d2b9fc90ab5a4 | 0e38d47c65b4dd9ee85ef2581cd4d253a1e2959d079ad6315e6d2b9fc90ab5a4 | да | CITATION.cff |
-| community/CODE_OF_CONDUCT.md | https://github.com/paulmann/RAGRAF/blob/2f68814f510bb06c150c73ebc74787326fd36192/CODE_OF_CONDUCT.md | 34596ad809e62b3c5a0f9cfb3106c971c21b4f145b18c7e70704959d6996b580 | 34596ad809e62b3c5a0f9cfb3106c971c21b4f145b18c7e70704959d6996b580 | да | CODE_OF_CONDUCT.md |
-| community/CONTRIBUTING.md | https://github.com/paulmann/RAGRAF/blob/2f68814f510bb06c150c73ebc74787326fd36192/CONTRIBUTING.md | 4702989e9f57c205f752d6e5977b692316fae0fa4c61c32355d5289e05d98689 | 4702989e9f57c205f752d6e5977b692316fae0fa4c61c32355d5289e05d98689 | да | CONTRIBUTING.md |
-| community/install.ps1 | https://github.com/paulmann/RAGRAF/blob/2f68814f510bb06c150c73ebc74787326fd36192/install.ps1 | 5a55c8d88ba70066e43147d9b772d98352f46ca82a88ef18a2d8ada71509e8e0 | 5a55c8d88ba70066e43147d9b772d98352f46ca82a88ef18a2d8ada71509e8e0 | да | install.ps1 |
-| community/mkdocs.yml | https://github.com/paulmann/RAGRAF/blob/2f68814f510bb06c150c73ebc74787326fd36192/mkdocs.yml | fafbfabe326de2139b7075cc831c358729070a28f0e1b90baa26dbf8bcd4a0e4 | fafbfabe326de2139b7075cc831c358729070a28f0e1b90baa26dbf8bcd4a0e4 | да | mkdocs.yml |
-| community/README.ru.md | https://github.com/paulmann/RAGRAF/blob/2f68814f510bb06c150c73ebc74787326fd36192/README.ru.md | 0b54d4d486bab6c2d6838175ac15d416b45c37d69f3a1f488ecef50cc5f8cede | 0b54d4d486bab6c2d6838175ac15d416b45c37d69f3a1f488ecef50cc5f8cede | да | README.ru.md |
-| community/EULA.md | https://github.com/paulmann/RAGRAF/blob/2f68814f510bb06c150c73ebc74787326fd36192/EULA.md | 4c722977b993fb0f22c51e33857648bb91b56a214a3164f29e842a88c2e7e666 | 4c722977b993fb0f22c51e33857648bb91b56a214a3164f29e842a88c2e7e666 | да | EULA.md |
-| community/ROADMAP.md | https://github.com/paulmann/RAGRAF/blob/2f68814f510bb06c150c73ebc74787326fd36192/ROADMAP.md | dae3feb0c20c70ec55cae98740401a02206875e2ebfcc8cded00637ca8ab0cf4 | dae3feb0c20c70ec55cae98740401a02206875e2ebfcc8cded00637ca8ab0cf4 | да | ROADMAP.md |
-| community/SECURITY.md | https://github.com/paulmann/RAGRAF/blob/2f68814f510bb06c150c73ebc74787326fd36192/SECURITY.md | dbc7d9c2bd4d3e2d1481a36d00655633c3b45603d1f6753a26c9357414495700 | dbc7d9c2bd4d3e2d1481a36d00655633c3b45603d1f6753a26c9357414495700 | да | SECURITY.md |
-| community/.github/dependabot.yml | https://github.com/paulmann/RAGRAF/blob/2f68814f510bb06c150c73ebc74787326fd36192/.github/dependabot.yml | 37360b6fa679b5639b08465c684bca8d86c56f9cdf5b1e8c9dd3e1d813f79532 | 37360b6fa679b5639b08465c684bca8d86c56f9cdf5b1e8c9dd3e1d813f79532 | да | .github/dependabot.yml |
-| community/.github/PULL_REQUEST_TEMPLATE.md | https://github.com/paulmann/RAGRAF/blob/2f68814f510bb06c150c73ebc74787326fd36192/.github/PULL_REQUEST_TEMPLATE.md | 30c5a2c60f7d1933b201b326d55ce6955aad46457d3d65503c9b666706ab82b0 | 30c5a2c60f7d1933b201b326d55ce6955aad46457d3d65503c9b666706ab82b0 | да | .github/PULL_REQUEST_TEMPLATE.md |
-| community/.github/release.yml | https://github.com/paulmann/RAGRAF/blob/2f68814f510bb06c150c73ebc74787326fd36192/.github/release.yml | 48c9059c309e7e04177c3e649c02ff3aa5b93b0045a55eff3998004e4356560c | 48c9059c309e7e04177c3e649c02ff3aa5b93b0045a55eff3998004e4356560c | да | .github/release.yml |
-| community/.github/ISSUE_TEMPLATE/config.yml | https://github.com/paulmann/RAGRAF/blob/2f68814f510bb06c150c73ebc74787326fd36192/.github/ISSUE_TEMPLATE/config.yml | 0bc9435ed1245c47bbde5fc751fb937c75b554553be3010da264be10d2c89654 | 0bc9435ed1245c47bbde5fc751fb937c75b554553be3010da264be10d2c89654 | да | .github/ISSUE_TEMPLATE/config.yml |
-| community/.github/ISSUE_TEMPLATE/defect-report.yml | https://github.com/paulmann/RAGRAF/blob/2f68814f510bb06c150c73ebc74787326fd36192/.github/ISSUE_TEMPLATE/defect-report.yml | abab94c9ded87699c6046f527486ff84c0abb6d1df8c7f3447baeb25f58fc2a6 | abab94c9ded87699c6046f527486ff84c0abb6d1df8c7f3447baeb25f58fc2a6 | да | .github/ISSUE_TEMPLATE/defect-report.yml |
-| community/.github/ISSUE_TEMPLATE/doc-divergence.yml | https://github.com/paulmann/RAGRAF/blob/2f68814f510bb06c150c73ebc74787326fd36192/.github/ISSUE_TEMPLATE/doc-divergence.yml | 743c9e238dcaaa3eb10f4739a53f7ec7cab43d81ff3c1d93adfab768adcf3aff | 743c9e238dcaaa3eb10f4739a53f7ec7cab43d81ff3c1d93adfab768adcf3aff | да | .github/ISSUE_TEMPLATE/doc-divergence.yml |
-| community/.github/workflows/ci.yml | https://github.com/paulmann/RAGRAF/blob/2f68814f510bb06c150c73ebc74787326fd36192/.github/workflows/ci.yml | ea6d8ae5a2007164ca196a0e1b6fc7e71976c9a354ebe55efc50f32d7e6b3a99 | ea6d8ae5a2007164ca196a0e1b6fc7e71976c9a354ebe55efc50f32d7e6b3a99 | да | .github/workflows/ci.yml |
-| community/.github/workflows/codeql.yml | https://github.com/paulmann/RAGRAF/blob/2f68814f510bb06c150c73ebc74787326fd36192/.github/workflows/codeql.yml | 5c09bbc2cec2fe16c338d4527100b92b63badfc6dbf3dea34b2652d5a0726bfb | 5c09bbc2cec2fe16c338d4527100b92b63badfc6dbf3dea34b2652d5a0726bfb | да | .github/workflows/codeql.yml |
-| community/.github/workflows/pages.yml | https://github.com/paulmann/RAGRAF/blob/2f68814f510bb06c150c73ebc74787326fd36192/.github/workflows/pages.yml | 4735800e7da31eb2b1ef550ccff883867e072118f8edb164b8ddbddd65abeb38 | 4735800e7da31eb2b1ef550ccff883867e072118f8edb164b8ddbddd65abeb38 | да | .github/workflows/pages.yml |
-| scripts/install.ps1 | https://github.com/paulmann/RAGRAF/blob/2f68814f510bb06c150c73ebc74787326fd36192/scripts/install.ps1 | 223530f6ded780547e79ebd45fc4264a3d2df46c676666b76bec18508ec935a2 | f6cee5d8bb7f98039c297b578cc86c15fb439e14ed2206289d63382031be5996 | нет | scripts/install.ps1 |
-| scripts/ragraf.ps1 | https://github.com/paulmann/RAGRAF/blob/2f68814f510bb06c150c73ebc74787326fd36192/scripts/ragraf.ps1 | f7dbe0bb262b92456945a7863e6263bce3b4678f1cb04ae5f9e81c6a05488813 | f7dbe0bb262b92456945a7863e6263bce3b4678f1cb04ae5f9e81c6a05488813 | да | scripts/ragraf.ps1 |
-| scripts/install-joern.ps1 | https://github.com/paulmann/RAGRAF/blob/2f68814f510bb06c150c73ebc74787326fd36192/scripts/install-joern.ps1 | c3ebcf0e2c344b95e1fc1d9c3f60937ac87fe6fac7d76351683c8b8faf4f8a27 | c3ebcf0e2c344b95e1fc1d9c3f60937ac87fe6fac7d76351683c8b8faf4f8a27 | да | scripts/install-joern.ps1 |
-| scripts/PSScriptAnalyzerSettings.psd1 | https://github.com/paulmann/RAGRAF/blob/2f68814f510bb06c150c73ebc74787326fd36192/scripts/PSScriptAnalyzerSettings.psd1 | dd5fbe1cb5be2fa1bc9ca6f9fc5b45b3b1ec40cecb452ae5b2d938c6c9473657 | dd5fbe1cb5be2fa1bc9ca6f9fc5b45b3b1ec40cecb452ae5b2d938c6c9473657 | да | scripts/PSScriptAnalyzerSettings.psd1 |
+| community/CHANGELOG.md | https://github.com/paulmann/RAGRAF/blob/59ec2618a6225fa83bebed20fc6c0d190f62512d/CHANGELOG.md | 794cc66b3bc899a47810fa3f869aa751867957a58c3bf66ae67f9e183163adca | 801a6ade05de5fc19a448d92a82879dc4a7559992a76810d9471362c183e51e9 | нет | CHANGELOG.md |
+| community/CITATION.cff | https://github.com/paulmann/RAGRAF/blob/59ec2618a6225fa83bebed20fc6c0d190f62512d/CITATION.cff | 0e38d47c65b4dd9ee85ef2581cd4d253a1e2959d079ad6315e6d2b9fc90ab5a4 | 66b646fef4e186b062d1854a9337cc2e91ab1d2cddaa8abee2d95df3b0fe0581 | нет | CITATION.cff |
+| community/CODE_OF_CONDUCT.md | https://github.com/paulmann/RAGRAF/blob/59ec2618a6225fa83bebed20fc6c0d190f62512d/CODE_OF_CONDUCT.md | 34596ad809e62b3c5a0f9cfb3106c971c21b4f145b18c7e70704959d6996b580 | 34596ad809e62b3c5a0f9cfb3106c971c21b4f145b18c7e70704959d6996b580 | да | CODE_OF_CONDUCT.md |
+| community/CONTRIBUTING.md | https://github.com/paulmann/RAGRAF/blob/59ec2618a6225fa83bebed20fc6c0d190f62512d/CONTRIBUTING.md | 4702989e9f57c205f752d6e5977b692316fae0fa4c61c32355d5289e05d98689 | 4702989e9f57c205f752d6e5977b692316fae0fa4c61c32355d5289e05d98689 | да | CONTRIBUTING.md |
+| community/install.ps1 | https://github.com/paulmann/RAGRAF/blob/59ec2618a6225fa83bebed20fc6c0d190f62512d/install.ps1 | 5a55c8d88ba70066e43147d9b772d98352f46ca82a88ef18a2d8ada71509e8e0 | 5a55c8d88ba70066e43147d9b772d98352f46ca82a88ef18a2d8ada71509e8e0 | да | install.ps1 |
+| community/mkdocs.yml | https://github.com/paulmann/RAGRAF/blob/59ec2618a6225fa83bebed20fc6c0d190f62512d/mkdocs.yml | fafbfabe326de2139b7075cc831c358729070a28f0e1b90baa26dbf8bcd4a0e4 | fafbfabe326de2139b7075cc831c358729070a28f0e1b90baa26dbf8bcd4a0e4 | да | mkdocs.yml |
+| community/README.de.md | https://github.com/paulmann/RAGRAF/blob/59ec2618a6225fa83bebed20fc6c0d190f62512d/README.de.md | a43a47f12b3f2c362f5da1e428a9e3cb6701830c9d9254a14bec3fb9cd3b660f | a43a47f12b3f2c362f5da1e428a9e3cb6701830c9d9254a14bec3fb9cd3b660f | да | README.de.md |
+| community/README.es.md | https://github.com/paulmann/RAGRAF/blob/59ec2618a6225fa83bebed20fc6c0d190f62512d/README.es.md | 603d4e7f287ab163475ca8a1d745b07187a4be5e5254e61c1276e68d9a55c007 | 603d4e7f287ab163475ca8a1d745b07187a4be5e5254e61c1276e68d9a55c007 | да | README.es.md |
+| community/README.hi.md | https://github.com/paulmann/RAGRAF/blob/59ec2618a6225fa83bebed20fc6c0d190f62512d/README.hi.md | c8e4bee16f3300f5f9e9b905afa479f18cb30beec54877a7c35aa60869a35cf7 | c8e4bee16f3300f5f9e9b905afa479f18cb30beec54877a7c35aa60869a35cf7 | да | README.hi.md |
+| community/README.zh.md | https://github.com/paulmann/RAGRAF/blob/59ec2618a6225fa83bebed20fc6c0d190f62512d/README.zh.md | f4252d8b8e51a9aa0c1e7c6375de755b39d6d61c35fb7dbe510cc3fdff88b1de | f4252d8b8e51a9aa0c1e7c6375de755b39d6d61c35fb7dbe510cc3fdff88b1de | да | README.zh.md |
+| community/README.ru.md | https://github.com/paulmann/RAGRAF/blob/59ec2618a6225fa83bebed20fc6c0d190f62512d/README.ru.md | 0b54d4d486bab6c2d6838175ac15d416b45c37d69f3a1f488ecef50cc5f8cede | 0b54d4d486bab6c2d6838175ac15d416b45c37d69f3a1f488ecef50cc5f8cede | да | README.ru.md |
+| community/EULA.md | https://github.com/paulmann/RAGRAF/blob/59ec2618a6225fa83bebed20fc6c0d190f62512d/EULA.md | 4c722977b993fb0f22c51e33857648bb91b56a214a3164f29e842a88c2e7e666 | 4c722977b993fb0f22c51e33857648bb91b56a214a3164f29e842a88c2e7e666 | да | EULA.md |
+| community/ROADMAP.md | https://github.com/paulmann/RAGRAF/blob/59ec2618a6225fa83bebed20fc6c0d190f62512d/ROADMAP.md | dae3feb0c20c70ec55cae98740401a02206875e2ebfcc8cded00637ca8ab0cf4 | dae3feb0c20c70ec55cae98740401a02206875e2ebfcc8cded00637ca8ab0cf4 | да | ROADMAP.md |
+| community/SECURITY.md | https://github.com/paulmann/RAGRAF/blob/59ec2618a6225fa83bebed20fc6c0d190f62512d/SECURITY.md | dbc7d9c2bd4d3e2d1481a36d00655633c3b45603d1f6753a26c9357414495700 | dbc7d9c2bd4d3e2d1481a36d00655633c3b45603d1f6753a26c9357414495700 | да | SECURITY.md |
+| community/.github/dependabot.yml | https://github.com/paulmann/RAGRAF/blob/59ec2618a6225fa83bebed20fc6c0d190f62512d/.github/dependabot.yml | 37360b6fa679b5639b08465c684bca8d86c56f9cdf5b1e8c9dd3e1d813f79532 | 37360b6fa679b5639b08465c684bca8d86c56f9cdf5b1e8c9dd3e1d813f79532 | да | .github/dependabot.yml |
+| community/.github/PULL_REQUEST_TEMPLATE.md | https://github.com/paulmann/RAGRAF/blob/59ec2618a6225fa83bebed20fc6c0d190f62512d/.github/PULL_REQUEST_TEMPLATE.md | 30c5a2c60f7d1933b201b326d55ce6955aad46457d3d65503c9b666706ab82b0 | 30c5a2c60f7d1933b201b326d55ce6955aad46457d3d65503c9b666706ab82b0 | да | .github/PULL_REQUEST_TEMPLATE.md |
+| community/.github/release.yml | https://github.com/paulmann/RAGRAF/blob/59ec2618a6225fa83bebed20fc6c0d190f62512d/.github/release.yml | 48c9059c309e7e04177c3e649c02ff3aa5b93b0045a55eff3998004e4356560c | 48c9059c309e7e04177c3e649c02ff3aa5b93b0045a55eff3998004e4356560c | да | .github/release.yml |
+| community/.github/ISSUE_TEMPLATE/config.yml | https://github.com/paulmann/RAGRAF/blob/59ec2618a6225fa83bebed20fc6c0d190f62512d/.github/ISSUE_TEMPLATE/config.yml | 0bc9435ed1245c47bbde5fc751fb937c75b554553be3010da264be10d2c89654 | 0bc9435ed1245c47bbde5fc751fb937c75b554553be3010da264be10d2c89654 | да | .github/ISSUE_TEMPLATE/config.yml |
+| community/.github/ISSUE_TEMPLATE/defect-report.yml | https://github.com/paulmann/RAGRAF/blob/59ec2618a6225fa83bebed20fc6c0d190f62512d/.github/ISSUE_TEMPLATE/defect-report.yml | abab94c9ded87699c6046f527486ff84c0abb6d1df8c7f3447baeb25f58fc2a6 | abab94c9ded87699c6046f527486ff84c0abb6d1df8c7f3447baeb25f58fc2a6 | да | .github/ISSUE_TEMPLATE/defect-report.yml |
+| community/.github/ISSUE_TEMPLATE/doc-divergence.yml | https://github.com/paulmann/RAGRAF/blob/59ec2618a6225fa83bebed20fc6c0d190f62512d/.github/ISSUE_TEMPLATE/doc-divergence.yml | 743c9e238dcaaa3eb10f4739a53f7ec7cab43d81ff3c1d93adfab768adcf3aff | 743c9e238dcaaa3eb10f4739a53f7ec7cab43d81ff3c1d93adfab768adcf3aff | да | .github/ISSUE_TEMPLATE/doc-divergence.yml |
+| community/.github/workflows/ci.yml | https://github.com/paulmann/RAGRAF/blob/59ec2618a6225fa83bebed20fc6c0d190f62512d/.github/workflows/ci.yml | ea6d8ae5a2007164ca196a0e1b6fc7e71976c9a354ebe55efc50f32d7e6b3a99 | ea6d8ae5a2007164ca196a0e1b6fc7e71976c9a354ebe55efc50f32d7e6b3a99 | да | .github/workflows/ci.yml |
+| community/.github/workflows/codeql.yml | https://github.com/paulmann/RAGRAF/blob/59ec2618a6225fa83bebed20fc6c0d190f62512d/.github/workflows/codeql.yml | 5c09bbc2cec2fe16c338d4527100b92b63badfc6dbf3dea34b2652d5a0726bfb | 5c09bbc2cec2fe16c338d4527100b92b63badfc6dbf3dea34b2652d5a0726bfb | да | .github/workflows/codeql.yml |
+| community/.github/workflows/pages.yml | https://github.com/paulmann/RAGRAF/blob/59ec2618a6225fa83bebed20fc6c0d190f62512d/.github/workflows/pages.yml | 4735800e7da31eb2b1ef550ccff883867e072118f8edb164b8ddbddd65abeb38 | 4735800e7da31eb2b1ef550ccff883867e072118f8edb164b8ddbddd65abeb38 | да | .github/workflows/pages.yml |
+| scripts/install.ps1 | https://github.com/paulmann/RAGRAF/blob/59ec2618a6225fa83bebed20fc6c0d190f62512d/scripts/install.ps1 | 223530f6ded780547e79ebd45fc4264a3d2df46c676666b76bec18508ec935a2 | f6cee5d8bb7f98039c297b578cc86c15fb439e14ed2206289d63382031be5996 | нет | scripts/install.ps1 |
+| scripts/ragraf.ps1 | https://github.com/paulmann/RAGRAF/blob/59ec2618a6225fa83bebed20fc6c0d190f62512d/scripts/ragraf.ps1 | f7dbe0bb262b92456945a7863e6263bce3b4678f1cb04ae5f9e81c6a05488813 | f7dbe0bb262b92456945a7863e6263bce3b4678f1cb04ae5f9e81c6a05488813 | да | scripts/ragraf.ps1 |
+| scripts/install-joern.ps1 | https://github.com/paulmann/RAGRAF/blob/59ec2618a6225fa83bebed20fc6c0d190f62512d/scripts/install-joern.ps1 | c3ebcf0e2c344b95e1fc1d9c3f60937ac87fe6fac7d76351683c8b8faf4f8a27 | c3ebcf0e2c344b95e1fc1d9c3f60937ac87fe6fac7d76351683c8b8faf4f8a27 | да | scripts/install-joern.ps1 |
+| scripts/PSScriptAnalyzerSettings.psd1 | https://github.com/paulmann/RAGRAF/blob/59ec2618a6225fa83bebed20fc6c0d190f62512d/scripts/PSScriptAnalyzerSettings.psd1 | dd5fbe1cb5be2fa1bc9ca6f9fc5b45b3b1ec40cecb452ae5b2d938c6c9473657 | dd5fbe1cb5be2fa1bc9ca6f9fc5b45b3b1ec40cecb452ae5b2d938c6c9473657 | да | scripts/PSScriptAnalyzerSettings.psd1 |
 
 > **Изменение 24.10.2026 (этап И5).** `community/SECURITY.md` отредактирован в
 > живом дереве после переноса из публичного `main`: дефекты C-01 и C-04 закрыты,
@@ -161,7 +173,7 @@
 | `scripts/install-joern.ps1` | 5 314 Б, 137 строк, 1 функция | 20 431 Б, 425 строк, 6 функций | живая версия качает архив Joern без проверки SHA-256 и не восстанавливает `JAVA_HOME`/`PATH` — то есть ставит сторонний бинарник без проверки целостности |
 | `scripts/PSScriptAnalyzerSettings.psd1` | отсутствовал | 1 594 Б | на файл ссылается шаг PSScriptAnalyzer в `ci.yml` (`-Settings scripts/PSScriptAnalyzerSettings.psd1`); без него CI публикуемого дерева падал бы на отсутствующем файле настроек |
 
-Источник — публичный `main`, коммит `2f68814f510bb06c150c73ebc74787326fd36192`:
+Источник — публичный `main`, коммит `59ec2618a6225fa83bebed20fc6c0d190f62512d`:
 файлы скачаны по адресу коммита, хэши совпали с копиями в старой сборочной копии
 (`.staging/release-v0.2/RAGRAF/scripts/`), то есть снимок 14.10 для этих трёх
 файлов был верен. Прежние версии сохранены:
@@ -207,7 +219,7 @@ MIT/PolyForm. Проверено разбором парсером PowerShell (0
 ```powershell
 git clone --depth 50 https://github.com/paulmann/RAGRAF.git $sbx
 git -C $sbx fetch origin --depth 50
-git -C $sbx rev-parse origin/main        # 2f68814f510bb06c150c73ebc74787326fd36192
+git -C $sbx rev-parse origin/main        # 59ec2618a6225fa83bebed20fc6c0d190f62512d
 
 # хэши источника и приёмника
 Get-FileHash <файл> -Algorithm SHA256

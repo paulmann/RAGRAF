@@ -1,8 +1,5 @@
 # RAGRAF
 
-<!-- md-i18n:switcher -->
-**На других языках:** [English](README.md) · [Deutsch](README.de.md) · [中文](README.zh.md) · [हिन्दी](README.hi.md) · [Español](README.es.md) · Русский
-
 **Графово-векторная база знаний о коде для LLM-агентов.**
 
 [**Сайт**](https://ragraf.ru) · [**Вики**](https://github.com/paulmann/RAGRAF/wiki) · [**Документация (Pages)**](https://paulmann.github.io/RAGRAF/) · [**Релизы**](https://github.com/paulmann/RAGRAF/releases) · [**Обсуждения**](https://github.com/paulmann/RAGRAF/discussions)

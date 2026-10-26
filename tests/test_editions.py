@@ -28,8 +28,10 @@
 from __future__ import annotations
 
 import json
+import json
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -468,7 +470,7 @@ try:
           "подделка лицензии не ломает базовое издание (код 0)", str(proc.returncode))
 
     print("\n6. Модуля возможности нет в сборке — отказ, а не трассировка")
-    # Дефект назван в `pro/PRO-DELIVERY.md` §5: импорт платного модуля стоял ВНЕ
+    # Дефект назван в `enterprise/PRO-TIER.md` §5: импорт платного модуля стоял ВНЕ
     # try, и при выносе модуля из поставки операция падала ModuleNotFoundError —
     # то есть клиент получал трассировку вместо «возможности нет в этой сборке».
     # Проверяется ПОВЕДЕНИЕ на копии `src` (песочница): живой файл не
@@ -533,6 +535,48 @@ print(json.dumps(out, ensure_ascii=False))
         check(refused.get("operation") == operation and bool(refused.get("feature")),
               f"{operation}: раздел refused называет операцию и возможность",
               str(refused.get("operation")))
+
+    # Числа и статусы в документах изданий — против ОБЪЯВЛЕНИЯ (базовой линии), а не
+    # друг друга. Измерено 26.10.2026: EDITIONS-PRO.md держал `shared-index` в статусе
+    # declared («ничего в сборке») при shipped, называл «10 возможностей» enterprise и
+    # «шесть» pro при фактических 11 и 7, раздел 5 — 73 и 83 свойства тестов при 95 и
+    # 154, а документ уровня Pro дублировал строку `shared-index`. Класс тот же, что
+    # числа README: расходится молча и читается как действующее описание.
+    baseline_doc = json.loads((REPO / "src/ragraf/edition_baseline.json").read_text(encoding="utf-8"))
+    features = baseline_doc.get("features") or []
+    pro_text = (REPO / "docs/03_implementation/EDITIONS-PRO.md").read_text(encoding="utf-8")
+    delivery_text = (REPO / "enterprise/PRO-TIER.md").read_text(encoding="utf-8")
+    shipped = [item for item in features if item.get("status") == "shipped"]
+    pro_count = len([item for item in shipped if item.get("edition") in ("community", "pro")])
+    enterprise_count = len(shipped)
+
+    for item in features:
+        if item.get("edition") not in ("pro", "enterprise"):
+            continue  # базовые возможности Community в этом документе не таблицей
+        name, status = str(item.get("name")), str(item.get("status"))
+        row = re.search(rf"\| `{re.escape(name)}` \| (?:community|pro|enterprise) \| `(\w+)` \|",
+                        pro_text)
+        rows_found = len(re.findall(rf"\| `{re.escape(name)}` \| (?:community|pro|enterprise) \|",
+                                    pro_text))
+        check(row is not None and rows_found == 1 and row.group(1) == status,
+              f"строка возможности {name} в EDITIONS-PRO.md одна и её статус = {status}",
+              f"строк {rows_found}, статус в документе {row.group(1) if row else None}")
+
+    stated_enterprise = re.search(r"у \*\*enterprise\*\* действуют \*\*(\d+) возможностей\*\*",
+                                  pro_text)
+    check(stated_enterprise is not None and int(stated_enterprise.group(1)) == enterprise_count,
+          "число возможностей enterprise в EDITIONS-PRO.md равно объявлению",
+          f"документ {stated_enterprise.group(1) if stated_enterprise else None}, "
+          f"объявление {enterprise_count}")
+    stated_pro = re.search(r"У \*\*pro\*\* действуют\s+\*\*(\d+)\*\*", pro_text)
+    check(stated_pro is not None and int(stated_pro.group(1)) == pro_count,
+          "число возможностей Pro в EDITIONS-PRO.md равно объявлению",
+          f"документ {stated_pro.group(1) if stated_pro else None}, объявление {pro_count}")
+    check(f"**{pro_count} возможностей**" in delivery_text,
+          f"enterprise/PRO-TIER.md называет {pro_count} возможностей Pro")
+    check(delivery_text.count("| `shared-index` | pro |") == 1,
+          "в enterprise/PRO-TIER.md ровно одна строка shared-index",
+          str(delivery_text.count("| `shared-index` | pro |")))
 
 finally:
     clear_env()

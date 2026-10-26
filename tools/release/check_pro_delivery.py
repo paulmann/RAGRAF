@@ -73,7 +73,7 @@ import relcommon as rel  # noqa: E402 - путь к общему модулю д
 REPO = rel.default_source()
 #: Умолчание — поставка Pro: инструмент вызывается без параметров и в чекере, и
 #: руками. Enterprise проверяется тем же инструментом с явным --manifest.
-MANIFEST = REPO / "tools/release/manifest-pro.toml"
+MANIFEST = REPO / "tools/release/manifest-enterprise.toml"
 MANIFEST_BASE = REPO / rel.MANIFEST_DEFAULT
 DECLARATION = REPO / "editions/editions.toml"
 BASELINE = REPO / "src/ragraf/edition_baseline.json"
@@ -171,10 +171,15 @@ def editions_chain(manifest_path: pathlib.Path) -> list[dict]:
     """Цепочка изданий, к которой относится манифест: от Community до своего.
 
     Издание определяется ОБЪЯВЛЕНИЕМ, а не именем файла: имя манифеста можно
-    переименовать, объявление — нет. Порядок звеньев берётся из объявления и
-    обязан совпадать с порядком изданий в базовой линии: иначе цепочка манифестов
-    и порядок прав считались бы по разным спискам, и «Enterprise = Pro + папка»
-    проверялось бы над одним порядком, а лицензия выдавала права по другому.
+    переименовать, объявление — нет.
+
+    Про две разные вещи. В `editions.toml` объявлены ПОСТАВКИ, в базовой линии —
+    ЛЕСТНИЦА ПРАВ (community → pro → enterprise). С 26.10.2026 поставка одна
+    (Enterprise), а уровни лицензии остались: лицензия Pro открывает подмножество.
+    Поэтому проверяется не равенство списков, а то, что цепочка поставок —
+    подпоследовательность лестницы, начиная с community: опечатка в имени,
+    перепутанный порядок и лишнее звено ловятся, а требование «по поставке на
+    каждый уровень» снято намеренно.
     """
     declaration = tomllib.loads(DECLARATION.read_text(encoding="utf-8"))
     rows = declaration.get("edition") or {}
@@ -207,9 +212,11 @@ def editions_chain(manifest_path: pathlib.Path) -> list[dict]:
 
     baseline = json.loads(BASELINE.read_text(encoding="utf-8"))
     order = [str(item) for item in baseline.get("order") or []]
-    expect([item["name"] for item in chain] == order[: len(chain)],
-           f"порядок изданий в editions/editions.toml не совпадает с базовой линией: "
-           f"{[item['name'] for item in chain]} против {order[: len(chain)]}")
+    chain_names = [item["name"] for item in chain]
+    expected = [name for name in order if name in chain_names]
+    expect(chain_names == expected,
+           f"цепочка поставок в editions/editions.toml не следует лестнице прав "
+           f"из базовой линии: {chain_names} против {expected}")
 
     # Звено N+1 наследует звено N — это и есть проверяемое свойство цепочки.
     for previous, current in zip(chain, chain[1:]):

@@ -130,17 +130,18 @@ python -m ragraf.shared_index revoke --label "клиент-A"        # отоз�
 
 ## 9. Издание: закрытый модуль
 
-Модуль `src/ragraf/shared_index.py` — **закрытая часть Pro**. В поставке Community
-его нет: граница издания — отсутствие кода, а не проверка права в рантайме.
-Объявление одно — `pro_only` в `tools/release/manifest-pro.toml`; оно и публикует
-файл в Pro, и требует его отсутствия в Community:
+Модуль `src/ragraf/shared_index.py` — **закрытая часть коммерческой поставки**
+(уровень лицензии Pro; в Enterprise работает по той же лицензии). В поставке
+Community его нет: граница поставки — отсутствие кода, а не проверка права в
+рантайме. Объявление одно — `pro_only` в `tools/release/manifest-enterprise.toml`;
+оно и публикует файл в закрытой поставке, и требует его отсутствия в Community:
 
 ```powershell
 python tools\release\build_release.py --out $env:TEMP\community
-python tools\release\build_release.py --manifest tools\release\manifest-pro.toml --out $env:TEMP\pro
+python tools\release\build_release.py --manifest tools\release\manifest-enterprise.toml --out $env:TEMP\ent
 python tools\release\verify_release.py --tree $env:TEMP\community
     -> файла src\ragraf\shared_index.py в сборке нет (правило excluded его отсекает)
-python tools\release\verify_release.py --tree $env:TEMP\pro --manifest tools\release\manifest-pro.toml
+python tools\release\verify_release.py --tree $env:TEMP\ent --manifest tools\release\manifest-enterprise.toml
     -> файл есть, правило excluded не применяется по объявлению pro_only
 ```
 

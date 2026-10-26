@@ -39,7 +39,7 @@
 | Возможность | Издание | Статус | Что сделано | Что осталось |
 |---|---|---|---|---|
 | `quality-loop` | pro | `shipped` | `src/ragraf/quality.py`: набор проверок индекса, запись прогона в добавляющую таблицу `quality_run`, сравнение двух прогонов; операции `quality_suite`, `quality_diff`, `quality_prune` (прореживание журнала прогонов: сухой прогон по умолчанию, копия до удаления, подтверждение); инструменты `ragraf_quality_suite`, `ragraf_quality_diff`, `ragraf_quality_prune`; проверка `tests/test_quality_loop.py` | — |
-| `shared-index` | pro | `declared` | ничего в сборке | контракт обмена ревизией между установками: что публикуется, как проверяется получатель, где лежит общая ревизия; своего канала между установками нет |
+| `shared-index` | pro | `shipped` | `src/ragraf/shared_index.py`: чтение индекса команды по сети — `serve` отдаёт операции чтения по допуску, `query` возвращает тот же конверт, что локальный фасад, с честной свежестью; запись по сети не публикуется (граница этапа); операции `shared_index_status`, `shared_index_publish`, `shared_index_query`; проверка `tests/test_shared_index.py` (69 свойств) | — |
 | `secret-broker` | pro | `declared` | хранилище секретов (`vault.py`, `vault_ops.py`) — это ДРУГАЯ возможность и она в Community | брокер как служба: выдача по запросу, срок, владелец, отзыв, плановая смена |
 | `connectors` | pro | `declared` | ничего в сборке | контракт запуска для каждого вида внешней системы (адрес, права, повторы); без него «запуск» был бы заглушкой |
 | `fleet` | pro | `declared` | ничего в сборке | канал управления установками и подписанный пакет настроек |
@@ -48,10 +48,11 @@
 | `offline-license` | enterprise | `shipped` | `src/ragraf/license_offline.py`: заявка, выпуск, приёмка по подписи и отпечатку установки, перенос | — |
 | `attestation` | enterprise | `shipped` | `src/ragraf/attest.py`: подписанный набор, проверка пересчётом хэшей из файлов | — |
 
-Итог по изданиям: у **enterprise** действуют **10 возможностей** (пять базовых
-Community + `quality-loop` + четыре enterprise), в `missing` — четыре
-запланированные pro. У **pro** действуют шесть (пять базовых + `quality-loop`),
-в `missing` — три запланированные pro и четыре enterprise.
+Итог по изданиям: у **enterprise** действуют **11 возможностей** (пять базовых
+Community + `quality-loop` + `shared-index` + четыре enterprise), в `missing` — три
+запланированные pro (`secret-broker`, `connectors`, `fleet`). У **pro** действуют
+**7** (пять базовых + `quality-loop` + `shared-index`), в `missing` — те же три pro
+и четыре enterprise.
 
 ## 3. Почему четыре возможности не сделаны «заодно»
 
@@ -115,9 +116,9 @@ Community + `quality-loop` + четыре enterprise), в `missing` — четы
 
 ```powershell
 python tools\ragraf.py edition                 # Community: 5 возможностей
-python tests\test_editions.py                  # 73 свойства, включая статусы
-python tests\test_quality_loop.py              # 83 свойства
-python tests\test_offline_attest.py            # 78 свойств, enterprise = 10 возможностей
+python tests\test_editions.py                  # 95 свойств, включая статусы
+python tests\test_quality_loop.py              # 154 свойства
+python tests\test_offline_attest.py            # 78 свойств, enterprise = 11 возможностей
 pwsh -NoLogo -NoProfile -NonInteractive -File tools\Invoke-ProjectDoctrine.ps1
 ```
 

@@ -251,6 +251,9 @@ PAIRS = (
          marker="class EmbeddingUnavailable"),
     dict(doc="AGENTS.md", anchor="**Деградация вместо падения.**", path="src/ragraf/joern_server.py",
          marker="class JoernServerUnavailable"),
+    # §6: необязательный набор `secrets` — строка, где он объявлен.
+    dict(doc="AGENTS.md", anchor="необязательным набором `secrets`", path="pyproject.toml",
+         marker='secrets = ["PyNaCl'),
 )
 
 # Иллюстративные адреса: пример доказательства из чужого проекта, а не адрес

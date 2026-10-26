@@ -335,11 +335,25 @@ def _context(record_id: str, name: str, version: int) -> bytes:
     return f"{record_id}\x1f{name}\x1f{version}".encode("utf-8")
 
 
+def _require_nacl() -> Any:
+    """Модуль шифрования либо отказ с понятной причиной.
+
+    ``assert`` здесь не годится: без PyNaCl он падает в ``AssertionError``
+    без сообщения, и MCP-обёртка отдаёт «internal» вместо кода
+    ``crypto_missing``, который читает агент. Возвращает модуль, чтобы
+    вызывающий не трогал ``_nacl_secret`` напрямую.
+    """
+    if _nacl_secret is None:
+        raise VaultError("crypto_missing",
+                         "нет библиотеки PyNaCl: шифровать нечем")
+    return _nacl_secret
+
+
 def _encrypt(master: bytes, record_id: str, name: str, version: int,
              value: str) -> tuple[str, str]:
-    assert _nacl_secret is not None
-    box = _nacl_secret.SecretBox(_record_key(master, record_id))
-    nonce = _random.token_bytes(_nacl_secret.SecretBox.NONCE_SIZE)
+    secret_mod = _require_nacl()
+    box = secret_mod.SecretBox(_record_key(master, record_id))
+    nonce = _random.token_bytes(secret_mod.SecretBox.NONCE_SIZE)
     payload = _context(record_id, name, version) + b"\x00" + value.encode("utf-8")
     blob = bytes(box.encrypt(payload, nonce))
     # PyNaCl возвращает nonce ВНУТРИ блоба (первые 24 байта). Храним nonce и
@@ -350,8 +364,8 @@ def _encrypt(master: bytes, record_id: str, name: str, version: int,
 
 def _decrypt(master: bytes, record_id: str, name: str, version: int,
              nonce_text: str, cipher_text: str) -> str:
-    assert _nacl_secret is not None
-    box = _nacl_secret.SecretBox(_record_key(master, record_id))
+    secret_mod = _require_nacl()
+    box = secret_mod.SecretBox(_record_key(master, record_id))
     try:
         raw = box.decrypt(_b64d(cipher_text), _b64d(nonce_text))
     except _CryptoError as exc:
@@ -1317,11 +1331,11 @@ class Vault:
         salt = _random.token_bytes(16)
         snap_key = hashlib.scrypt(str(passphrase).encode("utf-8"), salt=salt,
                                   n=2 ** 14, r=8, p=1, dklen=32)
-        assert _nacl_secret is not None
-        nonce = _random.token_bytes(_nacl_secret.SecretBox.NONCE_SIZE)
-        sealed = bytes(_nacl_secret.SecretBox(snap_key).encrypt(payload, nonce))
+        secret_mod = _require_nacl()
+        nonce = _random.token_bytes(secret_mod.SecretBox.NONCE_SIZE)
+        sealed = bytes(secret_mod.SecretBox(snap_key).encrypt(payload, nonce))
         # См. `_encrypt`: nonce хранится отдельно, в шифротексте его нет.
-        cipher_text = sealed[_nacl_secret.SecretBox.NONCE_SIZE:]
+        cipher_text = sealed[secret_mod.SecretBox.NONCE_SIZE:]
         target = Path(path)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(json.dumps({
@@ -1354,9 +1368,9 @@ class Vault:
         salt = _b64d(str(raw["salt"]))
         key = hashlib.scrypt(str(passphrase).encode("utf-8"), salt=salt,
                              n=2 ** 14, r=8, p=1, dklen=32)
-        assert _nacl_secret is not None
+        secret_mod = _require_nacl()
         try:
-            blob = _nacl_secret.SecretBox(key).decrypt(
+            blob = secret_mod.SecretBox(key).decrypt(
                 _b64d(str(raw["ciphertext"])), _b64d(str(raw["nonce"])))
         except _CryptoError as exc:
             raise VaultError("bad_passphrase",

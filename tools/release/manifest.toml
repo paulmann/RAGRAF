@@ -25,7 +25,7 @@ product = "RAGRAF"
 artifacts = ["checksums.sha256"]
 
 # ---------------------------------------------------------------------------
-# 1. Обвязка поставки: 18 файлов из community/** — побайтовые копии публичного
+# 1. Обвязка поставки: 22 файла из community/** — побайтовые копии публичного
 #    main (коммит 075caf86dc2f6274b9c48487e521915bcdfeaf2c, 2026-10-22).
 #    Перенесены в живое дерево этапом 2, сверены docs/03_implementation/
 #    RELEASE-SOURCES.md и 24-й проверкой чекера.
@@ -66,6 +66,26 @@ kind = "wrapper"
 from = "community/mkdocs.yml"
 to = "mkdocs.yml"
 kind = "wrapper"
+
+# Переводы README (четыре языка): публикуются с 26.10.2026 и в живом дереве, и в
+# поставке. До этого они существовали ТОЛЬКО в публикации, и сборка «как собрано»
+# удаляла бы их из репозитория — найдено разведкой публикации (§10.9).
+
+[[include]]
+from = "community/README.de.md"
+to = "README.de.md"
+
+[[include]]
+from = "community/README.es.md"
+to = "README.es.md"
+
+[[include]]
+from = "community/README.hi.md"
+to = "README.hi.md"
+
+[[include]]
+from = "community/README.zh.md"
+to = "README.zh.md"
 
 [[include]]
 from = "community/README.ru.md"
@@ -346,7 +366,8 @@ why = """выход сборки пакета: setuptools кладёт сюда 
 # Community-сборке его нет вовсе: граница издания — отсутствие кода, а не
 # проверка права в рантайме (проверку можно обойти, отсутствие файла — нет).
 #
-# Возврат в Pro объявлен в `tools/release/manifest-pro.toml` полем `pro_only` —
+# Возврат в закрытую поставку объявлен в `tools/release/manifest-enterprise.toml`
+# полем `pro_only` —
 # ОДНИМ объявлением, потому что оно и публикует файл в Pro, и требует его
 # отсутствия здесь (проверяется `check_pro_delivery.py` в обе стороны).
 #
@@ -358,7 +379,7 @@ why = """выход сборки пакета: setuptools кладёт сюда 
 [[exclude]]
 pattern = "src/ragraf/shared_index.py"
 state = "active"
-why = "закрытый модуль Pro: общий индекс команды. В Pro возвращается объявлением pro_only в manifest-pro.toml"
+why = "закрытый модуль закрытой поставки: общий индекс команды. Возвращается объявлением pro_only в manifest-enterprise.toml"
 
 [[exclude]]
 pattern = "tests/test_shared_index.py"
