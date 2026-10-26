@@ -8,7 +8,7 @@
 сверкой, которой до сих пор никто не делал.
 
 **Публичный `main` на момент сверки:** `aa662940b2065e92ae1e8892f583c6bbee7934e8`
-(2026-10-22 00:55:51 +0300, «docs: add agent installation and usage guide»),
+(None, «выпуск документов этапа И17»),
 репозиторий https://github.com/paulmann/RAGRAF, клон в песочнице
 `%TEMP%\ragraf-pub-20261024-175225` (`git clone --depth 50`, затем
 `git fetch origin`, `git rev-parse origin/main`).
@@ -32,6 +32,13 @@
 описание прошлого, а не текущего состояния.
 
 
+> **Изменение 26.10.2026 (этап И17).** `community/EULA.md` переписан в живом
+> дереве: поставка одна, Pro и Enterprise — уровни лицензии внутри неё, переход
+> между уровнями — активация лицензии, а не установка (решение владельца от
+> 26.10.2026). Строка таблицы поэтому честно говорит «нет»: публичный `main`
+> отдаёт прежний текст, пока выпуск не отправлен. После отправки строка
+> пересчитывается на новой голове и признак становится «да».
+
 Хэши — sha256, полные (64 знака). Столбец «совпадает» означает: файл в дереве
 побайтово равен файлу публичного `main`, то есть перенос выполнен без правки
 содержимого.
@@ -49,7 +56,7 @@
 | community/README.hi.md | https://github.com/paulmann/RAGRAF/blob/aa662940b2065e92ae1e8892f583c6bbee7934e8/README.hi.md | c8e4bee16f3300f5f9e9b905afa479f18cb30beec54877a7c35aa60869a35cf7 | c8e4bee16f3300f5f9e9b905afa479f18cb30beec54877a7c35aa60869a35cf7 | да | README.hi.md |
 | community/README.zh.md | https://github.com/paulmann/RAGRAF/blob/aa662940b2065e92ae1e8892f583c6bbee7934e8/README.zh.md | f4252d8b8e51a9aa0c1e7c6375de755b39d6d61c35fb7dbe510cc3fdff88b1de | f4252d8b8e51a9aa0c1e7c6375de755b39d6d61c35fb7dbe510cc3fdff88b1de | да | README.zh.md |
 | community/README.ru.md | https://github.com/paulmann/RAGRAF/blob/aa662940b2065e92ae1e8892f583c6bbee7934e8/README.ru.md | 0b54d4d486bab6c2d6838175ac15d416b45c37d69f3a1f488ecef50cc5f8cede | 0b54d4d486bab6c2d6838175ac15d416b45c37d69f3a1f488ecef50cc5f8cede | да | README.ru.md |
-| community/EULA.md | https://github.com/paulmann/RAGRAF/blob/aa662940b2065e92ae1e8892f583c6bbee7934e8/EULA.md | 4c722977b993fb0f22c51e33857648bb91b56a214a3164f29e842a88c2e7e666 | 4c722977b993fb0f22c51e33857648bb91b56a214a3164f29e842a88c2e7e666 | да | EULA.md |
+| community/EULA.md | https://github.com/paulmann/RAGRAF/blob/aa662940b2065e92ae1e8892f583c6bbee7934e8/EULA.md | 4c722977b993fb0f22c51e33857648bb91b56a214a3164f29e842a88c2e7e666 | 1ea1866c28f181bf9135732b1a2e6806eec22b6b6ff66603b9a25b347767b22a | нет | EULA.md |
 | community/ROADMAP.md | https://github.com/paulmann/RAGRAF/blob/aa662940b2065e92ae1e8892f583c6bbee7934e8/ROADMAP.md | dae3feb0c20c70ec55cae98740401a02206875e2ebfcc8cded00637ca8ab0cf4 | dae3feb0c20c70ec55cae98740401a02206875e2ebfcc8cded00637ca8ab0cf4 | да | ROADMAP.md |
 | community/SECURITY.md | https://github.com/paulmann/RAGRAF/blob/aa662940b2065e92ae1e8892f583c6bbee7934e8/SECURITY.md | dbc7d9c2bd4d3e2d1481a36d00655633c3b45603d1f6753a26c9357414495700 | dbc7d9c2bd4d3e2d1481a36d00655633c3b45603d1f6753a26c9357414495700 | да | SECURITY.md |
 | community/.github/dependabot.yml | https://github.com/paulmann/RAGRAF/blob/aa662940b2065e92ae1e8892f583c6bbee7934e8/.github/dependabot.yml | 37360b6fa679b5639b08465c684bca8d86c56f9cdf5b1e8c9dd3e1d813f79532 | 37360b6fa679b5639b08465c684bca8d86c56f9cdf5b1e8c9dd3e1d813f79532 | да | .github/dependabot.yml |

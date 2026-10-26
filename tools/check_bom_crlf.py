@@ -60,6 +60,8 @@ FILES = [
     "tools/update_agents_ops.py",
     "tools/fix_agents_table.py",
     "tools/check_bom_crlf.py",
+    # Этап И17: документы единственной поставки и два уровня лицензии.
+    "tools/check_single_delivery.py",
     # конфигурация корпусов
     "config/z-batteryservice.yaml",
     "config/revoap.yaml",

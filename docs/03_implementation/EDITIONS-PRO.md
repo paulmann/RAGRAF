@@ -122,6 +122,6 @@ python tests\test_offline_attest.py            # 78 свойств, enterprise =
 pwsh -NoLogo -NoProfile -NonInteractive -File tools\Invoke-ProjectDoctrine.ps1
 ```
 
-Чекер — **31 проверка**: `Test-EditionLayer` (27-я) запускает оба набора —
+Чекер — **32 проверки**: `Test-EditionLayer` (27-я) запускает оба набора —
 изданий и контура качества — и отдельно требует, чтобы каждый осмотрел не меньше
 своего порога свойств. Ноль осмотренных свойств при успехе — провал, а не PASS.

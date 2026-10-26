@@ -18,7 +18,7 @@
     результат Ok=$true при нулевом осмотре считается ложным PASS и валит прогон.
 
     Ожидаемый baseline на момент передачи проекта: 0 ошибок, 0 предупреждений,
-    31 проверка — ровно столько, сколько записей в реестре `$script:CheckFunctions`;
+    32 проверки — ровно столько, сколько записей в реестре `$script:CheckFunctions`;
     это сверяет Test-DocumentedNumbers. Прежние две ошибки («запись прогона в реестр
     не покрывала путь ensure» и «документы называли 18 и 16 инструментов там, где
     в коде 23») закрыты
@@ -41,7 +41,7 @@
 .PARAMETER Only
     Прогнать одну проверку, имя которой содержит эту подстроку. Нужно там, где
     проверяется поведение САМОЙ проверки (песочница на три исхода), а не
-    состояние проекта: гонять все 30 ради одной — минуты впустую.
+    состояние проекта: гонять все 32 ради одной — минуты впустую.
     Итоговая строка тогда называет и число прогнанных, и полный размер реестра.
 
 .EXAMPLE
@@ -2811,6 +2811,70 @@ function Test-DeliveryVisibleToGit {
 }
 
 
+function Test-SingleDeliveryCopy {
+    <#
+    .SYNOPSIS
+        Документы поставки описывают одну закрытую поставку и два уровня лицензии.
+
+    .DESCRIPTION
+        Измеренный дефект (26.10.2026, этап И17): решение «закрытая поставка одна,
+        Pro — уровень лицензии внутри неё» проведено в коде этапом И15, а
+        `community/EULA.md` продолжал говорить «относится к изданиям Pro и
+        Enterprise» и «сборку соответствующего издания». Расхождение видит
+        покупатель, и не видит ни одна проверка: EULA никто не сверял с базовой
+        линией, а слова «издание» и «Pro» встречаются в документах десятки раз
+        законно — поэтому grep тут не помогает.
+
+        Проверка формулируется через свойства, а не через написание: EULA называет
+        оба уровня и говорит, что поставка одна; переход между уровнями описан как
+        активация лицензии, а не установка; названы ВСЕ написанные платные
+        возможности из `src/ragraf/edition_baseline.json`; объявленные не выданы за
+        написанные; Pro не назван отдельным пакетом или сборкой; манифест
+        действительно кладёт EULA в поставку; переводы README не заявляют двух
+        пакетов; `editions.toml` называет закрытую поставку единственной;
+        `docs/AGENTS-context.md` объявляет границу про сайт.
+
+        Молчаливый пропуск запрещён: нет скрипта, нет python или ноль осмотренных
+        объектов — это провал, а не «нечего проверять».
+    #>
+    $problems = [System.Collections.Generic.List[string]]::new()
+    $checkName = 'delivery documents describe one closed delivery and two licence levels'
+
+    $toolPath = Join-Path $script:ProjectRoot 'tools/check_single_delivery.py'
+    if (-not (Test-Path -LiteralPath $toolPath)) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: нет tools/check_single_delivery.py')
+    }
+
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $python) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: python не найден в PATH')
+    }
+
+    $output = & $python.Source $toolPath --root $script:ProjectRoot 2>&1
+    $code = $LASTEXITCODE
+    $text = ($output | Out-String).Trim()
+    Write-Host "    документы поставки: $text"
+
+    $examinedText = ([regex]::Match($text, 'осмотрено:\s*(\d+)')).Groups[1].Value
+    $examined = if ($examinedText) { [int]$examinedText } else { 0 }
+
+    if ($code -ne 0) {
+        foreach ($line in ($output | Where-Object { $_ -is [string] })) {
+            if ($line -match '^\s*FAIL:') { $problems.Add(($line -replace '^\s*FAIL:\s*', '')) }
+        }
+        if ($problems.Count -eq 0) {
+            $problems.Add("проверка документов поставки завершилась кодом $code без расшифровки")
+        }
+    }
+    if ($examined -eq 0) {
+        $problems.Add('ни одного наблюдения не сделано: «ноль проверенного» — это не PASS')
+    }
+
+    return New-CheckResult -Name $checkName -Ok ($problems.Count -eq 0) -Examined $examined -Details $problems
+}
+
 $script:CheckFunctions = @(
     'Test-ProjectLayout'
     'Test-SecretHygiene'
@@ -2843,6 +2907,7 @@ $script:CheckFunctions = @(
     'Test-OfflineAttestation'
     'Test-DocumentAddresses'
     'Test-DeliveryVisibleToGit'
+    'Test-SingleDeliveryCopy'
 )
 
 $script:CheckNames = @()
