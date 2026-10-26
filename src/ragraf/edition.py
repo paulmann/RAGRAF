@@ -217,6 +217,37 @@ def baseline_problems(raw: Any) -> list[str]:
                     f"«{seen_ops[op_name]}» и «{name}»"
                 )
             seen_ops.setdefault(op_name, name)
+    # Раздел roadmap: снятые из предмета возможности. Проверяется так же, как
+    # features, и по той же причине: «сняли» — это статус, а не отсутствие
+    # строки. Возможность, названная сразу в features и в roadmap, имела бы
+    # два статуса, и читатель не смог бы понять, продаётся она или нет.
+    roadmap = raw.get("roadmap")
+    if roadmap is not None:
+        if not isinstance(roadmap, list):
+            problems.append("раздел roadmap не списком: снятые возможности не читаются")
+        else:
+            seen_roadmap: set[str] = set()
+            for item in roadmap:
+                if not isinstance(item, dict):
+                    problems.append(f"запись roadmap не объектом: {item!r}")
+                    continue
+                name = str(item.get("name") or "").strip()
+                if not name:
+                    problems.append("запись roadmap без имени")
+                    continue
+                if name in seen_roadmap:
+                    problems.append(f"возможность «{name}» в roadmap объявлена дважды")
+                seen_roadmap.add(name)
+                if name in seen_names:
+                    problems.append(
+                        f"возможность «{name}» одновременно в features и в roadmap: "
+                        "у возможности обязан быть ровно один статус"
+                    )
+                if not str(item.get("why") or "").strip():
+                    problems.append(
+                        f"возможность «{name}» снята без причины: по roadmap "
+                        "нельзя понять, почему её не обещают"
+                    )
     return problems
 
 

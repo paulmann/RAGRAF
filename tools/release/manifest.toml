@@ -437,6 +437,16 @@ state = "active"
 why = "проверка закрытого модуля: импортирует src/ragraf/quality_loop.py, которого в Community нет"
 
 [[exclude]]
+pattern = "src/ragraf/broker.py"
+state = "active"
+why = "закрытый модуль закрытой поставки: брокер секретов (выдача по запросу и плановая смена). Хранилище секретов остаётся в Community — платное здесь служба. Возвращается объявлением pro_only в manifest-enterprise.toml"
+
+[[exclude]]
+pattern = "tests/test_broker.py"
+state = "active"
+why = "проверка закрытого модуля: импортирует src/ragraf/broker.py, которого в Community нет"
+
+[[exclude]]
 pattern = "tests/test_external_access.py"
 state = "active"
 why = "проверка закрытых модулей sso/siem. Объявлен в pro_only манифестов pro и enterprise"

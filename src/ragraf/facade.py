@@ -5832,6 +5832,168 @@ class Facade:
             env.error = f"SharedIndexError: {type(exc).__name__}: {exc}"
         return env.to_dict()
 
+    # ---------------- брокер секретов (уровень лицензии pro) ----------------
+    #
+    # Почему брокер живёт в фасаде, а не рядом с `vault_ops`. Гейт издания в этом
+    # файле ОДИН (`_install_edition_gate`) и оборачивает методы `op_*`. Живи
+    # брокер в `vault_ops` (как `secret_*`), проверку издания пришлось бы писать
+    # второй раз, и первая же новая операция её бы забыла.
+    #
+    # Значение секрета проходит через ответ операции и НЕ попадает ни в журнал
+    # обращений (там числа и хэш первичного аргумента), ни в журнал доступа (там
+    # `ok` и причина). Это проверяется тестом, а не обещанием.
+
+    def _broker_actor(self):
+        """Участник операции брокера: имя клиента, вид и канал.
+
+        Имя не выдумывается: если клиент себя не назвал, остаётся `unknown`, и это
+        видно в журнале доступа — ровно как у хранилища секретов.
+        """
+        from . import vault as vault_mod
+
+        label = str(getattr(self, "agent", "") or "").strip()
+        via = "mcp" if label else "cli"
+        return vault_mod.actor_from_env(via, label=label,
+                                        client=str(getattr(self, "tool", "") or ""))
+
+    def _broker_failed(self, env: Envelope, operation: str, exc: BaseException) -> dict:
+        """Отказ брокера конвертом проекта: результат, ошибка и раздел `refused`.
+
+        Отказ не исключение, а ответ: клиент получает код причины (`bad_ttl`,
+        `lease_used`, `not_owner`), по которому отличает одно «нельзя» от
+        другого, и запись в журнале доступа. Иначе агент видел бы одинаковое
+        «не получилось» и шёл обходить.
+        """
+        code = str(getattr(exc, "code", "") or "broker_refusal")
+        message = str(getattr(exc, "message", "") or exc)
+        detail = dict(getattr(exc, "detail", {}) or {})
+        env.result = {"state": "refused", "code": code, "reason": message, **detail}
+        env.found = False
+        env.error = f"BrokerRefusal: {message}"
+        env.extra["refused"] = {
+            "reason": message,
+            "code": code,
+            "operation": operation,
+            "feature": "secret-broker",
+            "edition": self.edition_state().effective,
+            "suggest": ("что заведено в хранилище: ragraf_secret_list; что "
+                        "запланировано: broker_rotate mode=status"),
+        }
+        self._record_external(operation, {"ok": False, "reason": message,
+                                          "state": "refused"})
+        return env.to_dict()
+
+    def op_broker_issue(self, secret: str = "", agent: str = "",
+                        ttl_minutes: int = 0, reason: str = "",
+                        reveal: bool = True) -> dict:
+        """Выдача секрета по запросу: аренда со сроком, распорядителем и причиной.
+
+        Два случая и один вид аренды:
+
+          * **себе** — нужен действующий доступ в хранилище; значение отдаётся
+            сразу, если `reveal` истинно;
+          * **другому агенту** — нужен статус распорядителя (автор записи или
+            администратор). Значение при этом не возвращается: его получит
+            названный агент своим вызовом.
+
+        Погашение одноразовое, и это не вежливость клиента: повторный вызов по
+        уже погашенной аренде получает `lease_used`, после смены значения —
+        `lease_stale`, после истечения срока — `lease_expired`.
+
+        `ttl_minutes=0` означает «как настроено» (`broker_default_ttl_minutes`),
+        а не «бессрочно»: предел задан `broker_max_ttl_minutes`.
+        """
+        env = self.make_env("broker_issue", provenance="secrets")
+        broker_mod, refusal = self._feature_module(
+            "broker_issue", "broker", "secret-broker")
+        if refusal is not None:
+            return refusal
+        try:
+            data = broker_mod.issue(
+                actor=self._broker_actor(),
+                secret=str(secret or ""),
+                agent=str(agent or ""),
+                ttl_minutes=int(ttl_minutes or 0),
+                reason=str(reason or ""),
+                reveal=bool(reveal),
+            )
+        except broker_mod.BrokerError as exc:
+            return self._broker_failed(env, "broker_issue", exc)
+        except Exception as exc:  # noqa: BLE001 — причина названа, а не спрятана
+            env.found = False
+            env.error = f"BrokerError: {type(exc).__name__}: {exc}"
+            return env.to_dict()
+        env.result = data
+        env.found = bool(data.get("lease"))
+        lease = data.get("lease") or {}
+        env.extra["lease_id"] = str(lease.get("id") or "")
+        env.extra["lease_state"] = str(lease.get("state") or "")
+        env.extra["redeemed"] = bool(data.get("redeemed"))
+        if data.get("redeemed"):
+            env.extra["value_revealed"] = True
+            env.limits.append(
+                "значение выдано один раз: повтор вернёт lease_used, смена "
+                "значения — lease_stale, истечение срока — lease_expired")
+        self._record_external("broker_issue", {
+            "ok": True,
+            "reason": f"lease={env.extra['lease_state']}",
+            "state": "ok",
+        })
+        return env.to_dict()
+
+    def op_broker_rotate(self, secret: str = "", mode: str = "status",
+                         every_days: int = 0, value: str = "",
+                         reason: str = "") -> dict:
+        """Плановая смена значения: `status` | `plan` | `run`.
+
+        * `status` — что запланировано, что просрочено, сколько аренд действует.
+          Ничего не пишет и считает по записям, доступным вызывающему: список
+          чужих имён — уже сведение.
+        * `plan` — задать срок смены для записи (автор записи или администратор).
+        * `run` — сменить значение сейчас: новое значение берётся из `value` либо
+          генерируется. Версия поднимается, ВСЕ аренды записи отзываются, а
+          ответ значение не возвращает: его отдаёт погашение аренды.
+
+        Порядок в `run` назван явно: сначала меняется значение, потом отзываются
+        аренды. Обратный порядок оставил бы окно «аренда отозвана, значение
+        старое». Обрыв между шагами безопасен: аренда помнит версию и откажет
+        `lease_stale` вместо выдачи нового значения по старому разрешению.
+        """
+        env = self.make_env("broker_rotate", provenance="secrets")
+        broker_mod, refusal = self._feature_module(
+            "broker_rotate", "broker", "secret-broker")
+        if refusal is not None:
+            return refusal
+        try:
+            data = broker_mod.rotate(
+                actor=self._broker_actor(),
+                secret=str(secret or ""),
+                mode=str(mode or "status"),
+                every_days=int(every_days or 0),
+                value=str(value or ""),
+                reason=str(reason or ""),
+            )
+        except broker_mod.BrokerError as exc:
+            return self._broker_failed(env, "broker_rotate", exc)
+        except Exception as exc:  # noqa: BLE001 — причина названа, а не спрятана
+            env.found = False
+            env.error = f"BrokerError: {type(exc).__name__}: {exc}"
+            return env.to_dict()
+        env.result = data
+        env.found = True
+        env.extra["mode"] = str(data.get("mode") or "")
+        if env.extra["mode"] == "status":
+            env.extra["overdue"] = list(data.get("overdue") or [])
+            env.extra["planned"] = int(data.get("planned") or 0)
+        else:
+            env.extra["revoked_leases"] = int(data.get("revoked_leases") or 0)
+        self._record_external("broker_rotate", {
+            "ok": True,
+            "reason": f"mode={env.extra['mode']}",
+            "state": "ok",
+        })
+        return env.to_dict()
+
     def close(self) -> None:
         self.graph.close()
         self.lexvec.close()

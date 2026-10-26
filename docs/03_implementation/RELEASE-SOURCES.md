@@ -37,14 +37,22 @@
 > активация лицензии, а не установка (решение владельца от 26.10.2026). Выпуск
 > отправлен, хэши совпадают, адрес источника указывает на голову выпуска.
 
+> **Изменение 26.10.2026 (этап И18).** В `community/EULA.md` добавлен уровень
+> Pro — `secret-broker` переведён в предмет (код есть и проверен), а `connectors`
+> и `fleet` сняты из предмета всех уровней и названы в плане развития. Выпуск НЕ
+> отправлялся: публикация — отдельное решение владельца, поэтому строка выше
+> честно говорит «не совпадает с main», а хэш публикации остался прежним.
+> После публикации строка пересчитывается на новой голове — это правило раздела,
+> а не пожелание.
+
 Хэши — sha256, полные (64 знака). Столбец «совпадает» означает: файл в дереве
 побайтово равен файлу публичного `main`, то есть перенос выполнен без правки
 содержимого.
 
 | файл в дереве | источник (URL + коммит) | sha256 в публичном main | sha256 в дереве | совпадает | путь в поставке |
 |---|---|---|---|---|---|
-| community/CHANGELOG.md | https://github.com/paulmann/RAGRAF/blob/5b98bccd3dc8f1904e930f03e39a55ba4a20d317/CHANGELOG.md | 801a6ade05de5fc19a448d92a82879dc4a7559992a76810d9471362c183e51e9 | 801a6ade05de5fc19a448d92a82879dc4a7559992a76810d9471362c183e51e9 | да | CHANGELOG.md |
-| community/CITATION.cff | https://github.com/paulmann/RAGRAF/blob/5b98bccd3dc8f1904e930f03e39a55ba4a20d317/CITATION.cff | 66b646fef4e186b062d1854a9337cc2e91ab1d2cddaa8abee2d95df3b0fe0581 | 66b646fef4e186b062d1854a9337cc2e91ab1d2cddaa8abee2d95df3b0fe0581 | да | CITATION.cff |
+| community/CHANGELOG.md | https://github.com/paulmann/RAGRAF/blob/5b98bccd3dc8f1904e930f03e39a55ba4a20d317/CHANGELOG.md | 801a6ade05de5fc19a448d92a82879dc4a7559992a76810d9471362c183e51e9 | b5ea007e9b8bccf1e5cf8752c4543c6c909d5bef4972113b98cfdfe8a564abed | нет | CHANGELOG.md |
+| community/CITATION.cff | https://github.com/paulmann/RAGRAF/blob/5b98bccd3dc8f1904e930f03e39a55ba4a20d317/CITATION.cff | 66b646fef4e186b062d1854a9337cc2e91ab1d2cddaa8abee2d95df3b0fe0581 | 5c308089f1f5ac1587a2639b97cb1e1f5fbefb836f81e2661919015af4951232 | нет | CITATION.cff |
 | community/CODE_OF_CONDUCT.md | https://github.com/paulmann/RAGRAF/blob/5b98bccd3dc8f1904e930f03e39a55ba4a20d317/CODE_OF_CONDUCT.md | 34596ad809e62b3c5a0f9cfb3106c971c21b4f145b18c7e70704959d6996b580 | 34596ad809e62b3c5a0f9cfb3106c971c21b4f145b18c7e70704959d6996b580 | да | CODE_OF_CONDUCT.md |
 | community/CONTRIBUTING.md | https://github.com/paulmann/RAGRAF/blob/5b98bccd3dc8f1904e930f03e39a55ba4a20d317/CONTRIBUTING.md | 4702989e9f57c205f752d6e5977b692316fae0fa4c61c32355d5289e05d98689 | 4702989e9f57c205f752d6e5977b692316fae0fa4c61c32355d5289e05d98689 | да | CONTRIBUTING.md |
 | community/install.ps1 | https://github.com/paulmann/RAGRAF/blob/5b98bccd3dc8f1904e930f03e39a55ba4a20d317/install.ps1 | 5a55c8d88ba70066e43147d9b772d98352f46ca82a88ef18a2d8ada71509e8e0 | 5a55c8d88ba70066e43147d9b772d98352f46ca82a88ef18a2d8ada71509e8e0 | да | install.ps1 |
@@ -54,8 +62,8 @@
 | community/README.hi.md | https://github.com/paulmann/RAGRAF/blob/5b98bccd3dc8f1904e930f03e39a55ba4a20d317/README.hi.md | c8e4bee16f3300f5f9e9b905afa479f18cb30beec54877a7c35aa60869a35cf7 | c8e4bee16f3300f5f9e9b905afa479f18cb30beec54877a7c35aa60869a35cf7 | да | README.hi.md |
 | community/README.zh.md | https://github.com/paulmann/RAGRAF/blob/5b98bccd3dc8f1904e930f03e39a55ba4a20d317/README.zh.md | f4252d8b8e51a9aa0c1e7c6375de755b39d6d61c35fb7dbe510cc3fdff88b1de | f4252d8b8e51a9aa0c1e7c6375de755b39d6d61c35fb7dbe510cc3fdff88b1de | да | README.zh.md |
 | community/README.ru.md | https://github.com/paulmann/RAGRAF/blob/5b98bccd3dc8f1904e930f03e39a55ba4a20d317/README.ru.md | 0b54d4d486bab6c2d6838175ac15d416b45c37d69f3a1f488ecef50cc5f8cede | 0b54d4d486bab6c2d6838175ac15d416b45c37d69f3a1f488ecef50cc5f8cede | да | README.ru.md |
-| community/EULA.md | https://github.com/paulmann/RAGRAF/blob/5b98bccd3dc8f1904e930f03e39a55ba4a20d317/EULA.md | 1ea1866c28f181bf9135732b1a2e6806eec22b6b6ff66603b9a25b347767b22a | 1ea1866c28f181bf9135732b1a2e6806eec22b6b6ff66603b9a25b347767b22a | да | EULA.md |
-| community/ROADMAP.md | https://github.com/paulmann/RAGRAF/blob/5b98bccd3dc8f1904e930f03e39a55ba4a20d317/ROADMAP.md | dae3feb0c20c70ec55cae98740401a02206875e2ebfcc8cded00637ca8ab0cf4 | dae3feb0c20c70ec55cae98740401a02206875e2ebfcc8cded00637ca8ab0cf4 | да | ROADMAP.md |
+| community/EULA.md | https://github.com/paulmann/RAGRAF/blob/5b98bccd3dc8f1904e930f03e39a55ba4a20d317/EULA.md | 1ea1866c28f181bf9135732b1a2e6806eec22b6b6ff66603b9a25b347767b22a | de3a473f73d39dedb64f362384554f25584979d62b51f8ea50c5d531bab75a3a | нет | EULA.md |
+| community/ROADMAP.md | https://github.com/paulmann/RAGRAF/blob/5b98bccd3dc8f1904e930f03e39a55ba4a20d317/ROADMAP.md | dae3feb0c20c70ec55cae98740401a02206875e2ebfcc8cded00637ca8ab0cf4 | 1973da88532a9dab0b96873df9acf57575b286af40f4904a36e87ccf5c6457be | нет | ROADMAP.md |
 | community/SECURITY.md | https://github.com/paulmann/RAGRAF/blob/5b98bccd3dc8f1904e930f03e39a55ba4a20d317/SECURITY.md | dbc7d9c2bd4d3e2d1481a36d00655633c3b45603d1f6753a26c9357414495700 | dbc7d9c2bd4d3e2d1481a36d00655633c3b45603d1f6753a26c9357414495700 | да | SECURITY.md |
 | community/.github/dependabot.yml | https://github.com/paulmann/RAGRAF/blob/5b98bccd3dc8f1904e930f03e39a55ba4a20d317/.github/dependabot.yml | 37360b6fa679b5639b08465c684bca8d86c56f9cdf5b1e8c9dd3e1d813f79532 | 37360b6fa679b5639b08465c684bca8d86c56f9cdf5b1e8c9dd3e1d813f79532 | да | .github/dependabot.yml |
 | community/.github/PULL_REQUEST_TEMPLATE.md | https://github.com/paulmann/RAGRAF/blob/5b98bccd3dc8f1904e930f03e39a55ba4a20d317/.github/PULL_REQUEST_TEMPLATE.md | 30c5a2c60f7d1933b201b326d55ce6955aad46457d3d65503c9b666706ab82b0 | 30c5a2c60f7d1933b201b326d55ce6955aad46457d3d65503c9b666706ab82b0 | да | .github/PULL_REQUEST_TEMPLATE.md |

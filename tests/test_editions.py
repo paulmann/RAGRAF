@@ -131,9 +131,10 @@ try:
     # Число сверяется с документами текущего состояния. ПРОМТ-И9 добавил две
     # операции контура качества (`quality_suite`, `quality_diff`), ПРОМТ-И15 —
     # три операции общего индекса (`shared_index_status`, `shared_index_publish`,
-    # `shared_index_query`), поэтому здесь 52: проверка обязана называть
-    # действующее число, иначе она охраняет прошлое.
-    check(len(BUILD_OPS) == 52, "операций в сборке — 52 (как в документах текущего состояния)",
+    # `shared_index_query`), этап И18 — две операции брокера секретов
+    # (`broker_issue`, `broker_rotate`), поэтому здесь 54: проверка обязана
+    # называть действующее число, иначе она охраняет прошлое.
+    check(len(BUILD_OPS) == 54, "операций в сборке — 54 (как в документах текущего состояния)",
           str(len(BUILD_OPS)))
     ops_in_two = [op for op, names in edition.operations_index(BASE).items() if len(names) > 1]
     check(not ops_in_two, "ни одна операция не объявлена в двух возможностях", str(ops_in_two[:3]))
@@ -159,26 +160,56 @@ try:
     problems = edition.baseline_problems(json.loads(bad_status.read_text(encoding="utf-8")))
     check(any("вне закрытого списка" in p for p in problems),
           "опечатка в статусе отвергается проверкой данных", str(problems[:2]))
-    no_plan = variant("declared-no-plan", lambda d: [item.pop("planned", None)
-                                                     for item in d["features"]
-                                                     if item.get("status") == "declared"])
+    # Механика статуса `declared` проверяется на СИНТЕТИЧЕСКОЙ базовой линии.
+    # До этапа И18 её держала живая: три объявленные возможности. После решения
+    # (secret-broker написан, connectors и fleet сняты) объявленных не осталось,
+    # и проверка механизма исчезла бы вместе с ними — то есть механизм перестал
+    # бы проверяться ровно тогда, когда им снова воспользуются.
+    def add_declared(data: dict, *, planned: str = "") -> None:
+        entry = {"name": "trap-declared", "title": "ловушка проверки",
+                 "edition": "pro", "status": "declared",
+                 "operations": ["trap_declared_op"]}
+        if planned:
+            entry["planned"] = planned
+        data["features"].append(entry)
+
+    no_plan = variant("declared-no-plan", add_declared)
     problems = edition.baseline_problems(json.loads(no_plan.read_text(encoding="utf-8")))
     check(any("declared без поля planned" in p for p in problems),
           "запланированная возможность без planned отвергается", str(problems[:2]))
+    with_plan = variant("declared-with-plan",
+                        lambda d: add_declared(d, planned="не написан код брокера"))
+    problems = edition.baseline_problems(json.loads(with_plan.read_text(encoding="utf-8")))
+    check(not any("declared без поля planned" in p for p in problems),
+          "запланированная возможность с planned принимается", str(problems[:2]))
     extra_plan = variant("shipped-plan", lambda d: [item.update({"planned": "лишнее"})
                                                     for item in d["features"]
                                                     if item.get("status") == "shipped"])
     problems = edition.baseline_problems(json.loads(extra_plan.read_text(encoding="utf-8")))
     check(any("shipped с полем planned" in p for p in problems),
           "готовая возможность с planned отвергается как противоречие", str(problems[:2]))
-    # Запланированных возможностей три: `shared-index` переведён в shipped в
-    # ПРОМТ-И15, потому что код появился (`src/ragraf/shared_index.py`) и его
-    # операции есть в сборке. Число названо, а не выведено из данных намеренно:
-    # иначе «пропажа» возможности из статуса declared прошла бы незамеченной.
+    # Объявленных и не написанных возможностей после этапа И18 нет: `secret-broker`
+    # написан (`src/ragraf/broker.py`, операции в сборке), `connectors` и `fleet`
+    # сняты из предмета уровней и названы в разделе `roadmap`. Пустой список
+    # назван явно, а не выведен из данных: «пропажа» возможности из статуса
+    # declared иначе прошла бы незамеченной.
     declared_names = sorted(name for name, value in statuses.items() if value == "declared")
-    check(declared_names == ["connectors", "fleet", "secret-broker"],
-          "запланированных возможностей три: connectors, fleet, secret-broker",
+    check(declared_names == [],
+          "объявленных и не написанных возможностей не осталось",
           str(declared_names))
+    roadmap_names = sorted(str(item.get("name")) for item in BASE.get("roadmap") or [])
+    check(roadmap_names == ["connectors", "fleet"],
+          "снятые возможности названы в разделе roadmap: connectors, fleet",
+          str(roadmap_names))
+    check(all(str(item.get("why") or "").strip() for item in BASE.get("roadmap") or []),
+          "у каждой снятой возможности названа причина")
+    # Возможность с двумя статусами сразу — тот же класс дефекта, что дубль
+    # операции: читатель не может понять, продаётся она или нет.
+    both = variant("roadmap-both", lambda d: d["roadmap"].append(
+        {"name": "search", "why": "проверка ловушки"}))
+    problems = edition.baseline_problems(json.loads(both.read_text(encoding="utf-8")))
+    check(any("одновременно в features и в roadmap" in p for p in problems),
+          "возможность сразу в features и в roadmap отвергается", str(problems[:2]))
 
     community_features = [str(item["name"]) for item in BASE["features"]
                           if item.get("edition") == "community"]
@@ -206,7 +237,13 @@ try:
           str(missing_names))
     check(all("status" in item for item in payload["missing"]),
           "у каждой строки missing есть поле status", str(payload["missing"][:1]))
-    planned_rows = [item for item in payload["missing"] if item.get("status") == "declared"]
+    # Причина запланированной возможности проверяется на синтетической базовой
+    # линии: у живой объявленных нет, и прежняя проверка стала бы пустой
+    # (bool([]) — ложь, то есть зелёный результат без осмотра).
+    synthetic = edition.resolve(operations=BUILD_OPS,
+                                baseline_file=str(with_plan)).to_dict()
+    planned_rows = [item for item in synthetic["missing"]
+                    if item.get("status") == "declared"]
     check(bool(planned_rows) and all("запланированная" in str(item["reason"])
                                      for item in planned_rows),
           "причина запланированной возможности называет статус, а не только издание",
@@ -480,7 +517,7 @@ try:
     shutil.copytree(REPO / "src" / "ragraf", degraded / "ragraf")
     removed = {"sso.py": "sso_login", "siem.py": "siem_test",
                "attest.py": "attest_bundle", "license_offline.py": "license_offline",
-               "quality_loop.py": "quality_suite"}
+               "quality_loop.py": "quality_suite", "broker.py": "broker_issue"}
     for name in removed:
         target = degraded / "ragraf" / name
         target.rename(target.with_suffix(".absent"))

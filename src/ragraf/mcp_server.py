@@ -270,6 +270,67 @@ TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "ragraf_broker_issue",
+        "description": (
+            "Выдача секрета по запросу: аренда со сроком, распорядителем и "
+            "причиной. Значение отдаётся ОДИН раз: повтор получает lease_used, "
+            "смена значения — lease_stale, истечение срока — lease_expired. "
+            "Свою запись агент получает по правам хранилища, чужую — только от "
+            "её автора. Возможность уровня pro (secret-broker); в сборке без "
+            "модуля отвечает причиной, а не пустым ответом."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "secret": {"type": "string", "description": "имя секрета в хранилище"},
+                "agent": {
+                    "type": "string",
+                    "description": "кому выдаётся аренда; пусто — вызывающему",
+                },
+                "ttl_minutes": {
+                    "type": "integer", "default": 0,
+                    "description": "срок аренды в минутах; 0 — как настроено, не «бессрочно»",
+                },
+                "reason": {"type": "string", "description": "причина выдачи (в журнал доступа)"},
+                "reveal": {
+                    "type": "boolean", "default": True,
+                    "description": "погасить аренду сразу и вернуть значение",
+                },
+            },
+            "required": ["secret"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "ragraf_broker_rotate",
+        "description": (
+            "Плановая смена секрета: status — что запланировано и что просрочено, "
+            "plan — задать срок смены, run — сменить значение сейчас (версия "
+            "поднимается, все аренды записи отзываются). Значение в ответ не "
+            "возвращается. Возможность уровня pro (secret-broker)."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "secret": {"type": "string", "description": "имя секрета (нужно для plan и run)"},
+                "mode": {
+                    "type": "string", "enum": ["status", "plan", "run"],
+                    "default": "status", "description": "вид работы",
+                },
+                "every_days": {
+                    "type": "integer", "default": 0,
+                    "description": "срок смены в сутках; 0 — как настроено",
+                },
+                "value": {
+                    "type": "string",
+                    "description": "новое значение; пусто — сгенерировать",
+                },
+                "reason": {"type": "string", "description": "причина смены (в журнал доступа)"},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
         "name": "ragraf_quality_suite",
         "description": (
             "Набор проверок индекса: чанки сверх предела размера, обрезанные "
@@ -1358,6 +1419,16 @@ _TOOL_META: dict[str, dict[str, Any]] = {
     "ragraf_attest_bundle": {
         "title": "Аттестация поставки: подписанный набор доказательств и его проверка",
         "readOnlyHint": False, "destructiveHint": False, "idempotentHint": False,
+    },
+    "ragraf_broker_issue": {
+        "title": "Брокер секретов: аренда со сроком и распорядителем",
+        "readOnlyHint": False, "destructiveHint": False, "idempotentHint": False,
+        "openWorldHint": False,
+    },
+    "ragraf_broker_rotate": {
+        "title": "Брокер секретов: план и смена значения",
+        "readOnlyHint": False, "destructiveHint": True, "idempotentHint": False,
+        "openWorldHint": False,
     },
     "ragraf_quality_suite": {
         "title": "Набор проверок индекса и запись прогона",
@@ -2711,6 +2782,23 @@ class McpServer:
             "ragraf_secret_grant": lambda a: self._op_vault("secret_grant", a),
             "ragraf_secret_revoke": lambda a: self._op_vault("secret_revoke", a),
             "ragraf_secret_delete": lambda a: self._op_vault("secret_delete", a),
+            # Брокер секретов (этап И18): через фасад, потому что гейт издания
+            # один и стоит на `op_*`. Значение проходит в ответ и не пишется ни
+            # в журнал обращений, ни в журнал доступа.
+            "ragraf_broker_issue": lambda a: f().op_broker_issue(
+                secret=str(a.get("secret") or ""),
+                agent=str(a.get("agent") or ""),
+                ttl_minutes=int(a.get("ttl_minutes") or 0),
+                reason=str(a.get("reason") or ""),
+                reveal=bool(a.get("reveal", True)),
+            ),
+            "ragraf_broker_rotate": lambda a: f().op_broker_rotate(
+                secret=str(a.get("secret") or ""),
+                mode=str(a.get("mode") or "status"),
+                every_days=int(a.get("every_days") or 0),
+                value=str(a.get("value") or ""),
+                reason=str(a.get("reason") or ""),
+            ),
             "ragraf_secret_policy": lambda a: self._op_vault("secret_policy", a),
         }
 

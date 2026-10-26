@@ -534,9 +534,23 @@ def check_licence_binding(tree: pathlib.Path, sandbox: pathlib.Path) -> int:
         shipped_missing = sorted(missing_names & set(FEATURES_OF_PAID_EDITIONS))
         expect(not shipped_missing,
                f"под лицензией НАПИСАННЫЕ возможности названы отсутствующими: {shipped_missing}")
-        expect(bool(missing_names),
+        # Свойство переформулировано этапом И18. Прежняя редакция требовала
+        # НЕПУСТОГО `missing` — она опиралась на то, что объявленные и не
+        # написанные возможности есть всегда. После решения 26.10.2026 их нет
+        # (secret-broker написан, connectors и fleet сняты в roadmap), и под
+        # полной лицензией `missing` обязан быть пуст. Проверяется смысл:
+        # объявленное, если оно есть, названо; написанное не выдано за
+        # отсутствующее (строкой выше).
+        declared_paid = {
+            str(item.get("name"))
+            for item in json.loads(BASELINE.read_text(encoding="utf-8")).get("features", [])
+            if str(item.get("edition")) not in {"", "community"}
+            and str(item.get("status")) != "shipped"
+        }
+        hidden = sorted(declared_paid - missing_names)
+        expect(not hidden,
                "объявленные-но-не-написанные возможности в missing не названы — "
-               "неразрешённое выдано за доступное")
+               f"неразрешённое выдано за доступное: {hidden}")
         unlocked_shipped = 0
         for row in unlocked.get("paid") or []:
             decision = row.get("decision") or {}

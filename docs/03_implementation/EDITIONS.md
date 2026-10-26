@@ -18,8 +18,9 @@
 
 **Возможность** (feature) — не операция, а группа операций, отвечающая на один
 вопрос: `search`, `graph`, `schema`, `db-live`, `audit` (базовые); `shared-index` (написан, ПРОМТ-И15),
-`secret-broker`, `connectors`, `fleet`, `quality-loop` (Pro); `sso`,
-`siem-export`, `offline-license`, `attestation` (Enterprise).
+`secret-broker` (написан, этап И18), `quality-loop` (Pro); `sso`,
+`siem-export`, `offline-license`, `attestation` (Enterprise). Снятые в roadmap —
+`connectors` и `fleet`: они не возможности, а записи плана развития.
 
 Состав возможностей и операции, которые каждая открывает, — ДАННЫЕ:
 `src/ragraf/edition_baseline.json`. Новая возможность объявляется там, и гейт
@@ -151,14 +152,15 @@ SBOM (`src/ragraf/signing.py`).
 **База безопасности не платная.** Исключение секретоносных путей, аудит доступа,
 хранилище секретов, вход в панель — в Community и остаются там.
 
-**Платные возможности: шесть написаны, три нет — и это измерено, а не
-обещано** (26.10.2026). Написаны и включаются лицензией: уровень Pro —
-`quality-loop`, `shared-index` (общий индекс команды,
-`src/ragraf/shared_index.py`); уровень Enterprise — `sso`, `siem-export`,
-`offline-license`, `attestation`. Статус `shipped` в `edition_baseline.json`,
-файлы перечислены в `enterprise/inventory.toml`, поведение проверяют 27–29-я
-проверки чекера. Не написаны: `secret-broker`, `connectors`, `fleet` — статус
-`declared`, причина у каждой в поле `planned`.
+**Платные возможности: семь написаны, объявленных и не написанных нет** (этап
+И18, 26.10.2026). Написаны и включаются лицензией: уровень Pro — `quality-loop`,
+`shared-index` (общий индекс команды, `src/ragraf/shared_index.py`) и
+`secret-broker` (брокер секретов, `src/ragraf/broker.py`); уровень Enterprise —
+`sso`, `siem-export`, `offline-license`, `attestation`. Статус `shipped` в
+`edition_baseline.json`, файлы перечислены в `enterprise/inventory.toml`,
+поведение проверяют 27–29-я проверки чекера. Сняты в `roadmap` с причиной и
+датой: `connectors`, `fleet` — у них нет ни контракта запуска, ни парка
+установок, на которых поведение можно доказать.
 
 Прежняя редакция этого раздела утверждала, что не написаны ВСЕ девять платных
 возможностей. Замер 25.10.2026 показал обратное по пяти: код есть, он собран,

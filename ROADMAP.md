@@ -107,6 +107,8 @@
 | **R-VIS-3** | **LSP bridge**: expose `symbol`/`references` as an LSP server so humans get the same verified facts in-IDE that agents get over MCP |
 | **R-VIS-4** | **Write-path**: `write_check` plans → generated migration skeletons with schema-diff evidence (still «RAGRAF answers, agent edits» — the answer just gets richer) |
 | **R-VIS-5** | **Confidence calibration as a service**: `calibrate` currently needs manual samples; semi-automate from git history (co-change vs edge presence), publishing calibration artifacts per corpus |
+| **R-VIS-6** | **Connectors to external systems** — removed from the licence subject on **2026-10-26** (it was a promise, not code: no launch contract, no external system to prove behaviour on). Returns only together with a launch contract (endpoint, permissions, retries) **and** a live external system on which the behaviour is demonstrated. Reserved operations: `connector_list`, `connector_run` (`src/ragraf/edition_baseline.json` → `roadmap`) |
+| **R-VIS-7** | **Fleet management** — removed from the licence subject on **2026-10-26** (there is no settings-delivery channel and no fleet of registered installs to manage). Returns only together with a signed settings-delivery channel **and** a fleet of registered installs. Reserved operations: `fleet_status`, `fleet_apply` (`src/ragraf/edition_baseline.json` → `roadmap`) |
 
 ---
 
