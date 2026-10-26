@@ -121,7 +121,7 @@ La tabla recoge solo las operaciones del nivel Community. Los niveles de pago no
 
 Las cifras no se copian en esta traducción: cambian de una etapa a otra y la traducción se quedaría atrás. Los valores comprobados están en el documento principal [`README.md`](README.md), en la sección «El proyecto en cifras y el banco de pruebas medido»; los vigila `Test-DocumentedNumbers` en [`tools/Invoke-ProjectDoctrine.ps1`](tools/Invoke-ProjectDoctrine.ps1).
 
-Contrastado con el registro de revisión activo `rev-0376` (27.10.2026): **54** operaciones de fachada, **61** herramientas MCP, **50** operaciones `query` con **21** subcomandos de CLI, **29** lenguas por árbol de sintaxis y **40** como texto, **84** formatos en el registro; el índice propio de RAGRAF — 858 archivos, 5 130 nodos, 67 428 aristas.
+Contrastado con el registro de revisión activo `rev-0377` (27.10.2026): **54** operaciones de fachada, **61** herramientas MCP, **50** operaciones `query` con **21** subcomandos de CLI, **29** lenguas por árbol de sintaxis y **40** como texto, **84** formatos en el registro; el índice propio de RAGRAF — 858 archivos, 5 130 nodos, 67 413 aristas.
 
 El banco de pruebas, el volumen de la entrega y las corridas de pruebas no se repiten aquí a propósito: cambian, y una cifra copiada sería más pronto falsa que correcta.
 
