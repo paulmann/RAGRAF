@@ -67,11 +67,11 @@
 | community/CONTRIBUTING.md | https://github.com/paulmann/RAGRAF/blob/c041a9b749f12f1d1ef0027540aaeb154c56b11e/CONTRIBUTING.md | 4702989e9f57c205f752d6e5977b692316fae0fa4c61c32355d5289e05d98689 | 4702989e9f57c205f752d6e5977b692316fae0fa4c61c32355d5289e05d98689 | да | CONTRIBUTING.md |
 | community/install.ps1 | https://github.com/paulmann/RAGRAF/blob/c041a9b749f12f1d1ef0027540aaeb154c56b11e/install.ps1 | 5a55c8d88ba70066e43147d9b772d98352f46ca82a88ef18a2d8ada71509e8e0 | 5a55c8d88ba70066e43147d9b772d98352f46ca82a88ef18a2d8ada71509e8e0 | да | install.ps1 |
 | community/mkdocs.yml | https://github.com/paulmann/RAGRAF/blob/c041a9b749f12f1d1ef0027540aaeb154c56b11e/mkdocs.yml | fafbfabe326de2139b7075cc831c358729070a28f0e1b90baa26dbf8bcd4a0e4 | fafbfabe326de2139b7075cc831c358729070a28f0e1b90baa26dbf8bcd4a0e4 | да | mkdocs.yml |
-| community/README.de.md | https://github.com/paulmann/RAGRAF/blob/c041a9b749f12f1d1ef0027540aaeb154c56b11e/README.de.md | ac10caebb64143e20adb0aa5a430c4027dff9c497117d015ea4b60f8aa6edc12 | ac10caebb64143e20adb0aa5a430c4027dff9c497117d015ea4b60f8aa6edc12 | да | README.de.md |
-| community/README.es.md | https://github.com/paulmann/RAGRAF/blob/c041a9b749f12f1d1ef0027540aaeb154c56b11e/README.es.md | 0b321224ef6e6441ebe921d29dd7b905aeeac8b7511d11e342b9c7566765723d | 0b321224ef6e6441ebe921d29dd7b905aeeac8b7511d11e342b9c7566765723d | да | README.es.md |
-| community/README.hi.md | https://github.com/paulmann/RAGRAF/blob/c041a9b749f12f1d1ef0027540aaeb154c56b11e/README.hi.md | 9bf32b6a590cf4ccbe6f5a7bdf8f16dfcbd87dbf050b4fd95012a0bbcabcbf0e | 9bf32b6a590cf4ccbe6f5a7bdf8f16dfcbd87dbf050b4fd95012a0bbcabcbf0e | да | README.hi.md |
-| community/README.zh.md | https://github.com/paulmann/RAGRAF/blob/c041a9b749f12f1d1ef0027540aaeb154c56b11e/README.zh.md | 480ffb4a41d89e290747ad6d05556ed5ee312711ced4a80ef8c78269e65a2642 | 480ffb4a41d89e290747ad6d05556ed5ee312711ced4a80ef8c78269e65a2642 | да | README.zh.md |
-| community/README.ru.md | https://github.com/paulmann/RAGRAF/blob/c041a9b749f12f1d1ef0027540aaeb154c56b11e/README.ru.md | 89837447ff9ba3f40f8c184affe35dab3c0c06a3bff2816865e247ca7f88678c | 89837447ff9ba3f40f8c184affe35dab3c0c06a3bff2816865e247ca7f88678c | да | README.ru.md |
+| community/README.de.md | https://github.com/paulmann/RAGRAF/blob/c041a9b749f12f1d1ef0027540aaeb154c56b11e/README.de.md | ac10caebb64143e20adb0aa5a430c4027dff9c497117d015ea4b60f8aa6edc12 | a6e77c909a85ed5ea0d2a7da101e58a36aae0ff38294c09b77fc03e478bd0320 | нет | README.de.md |
+| community/README.es.md | https://github.com/paulmann/RAGRAF/blob/c041a9b749f12f1d1ef0027540aaeb154c56b11e/README.es.md | 0b321224ef6e6441ebe921d29dd7b905aeeac8b7511d11e342b9c7566765723d | 1b6646c8f29ffd186d212aca5413fca719fa5b9c9f848f8b91395d887a0c24af | нет | README.es.md |
+| community/README.hi.md | https://github.com/paulmann/RAGRAF/blob/c041a9b749f12f1d1ef0027540aaeb154c56b11e/README.hi.md | 9bf32b6a590cf4ccbe6f5a7bdf8f16dfcbd87dbf050b4fd95012a0bbcabcbf0e | 8873719f34a5325a669a608d3ccf3eb630f2c3ca6bc955b57efd5ff0691e9d66 | нет | README.hi.md |
+| community/README.zh.md | https://github.com/paulmann/RAGRAF/blob/c041a9b749f12f1d1ef0027540aaeb154c56b11e/README.zh.md | 480ffb4a41d89e290747ad6d05556ed5ee312711ced4a80ef8c78269e65a2642 | 8f069c6e12b01622abf3997399bf2f36afeed127ad4ee381f4c1a7a525bb24a0 | нет | README.zh.md |
+| community/README.ru.md | https://github.com/paulmann/RAGRAF/blob/c041a9b749f12f1d1ef0027540aaeb154c56b11e/README.ru.md | 89837447ff9ba3f40f8c184affe35dab3c0c06a3bff2816865e247ca7f88678c | 0ea29926f24f5fc231520bec9a0afaf75f25b2daad6b8fa209dadfe1e6d69cad | нет | README.ru.md |
 | community/EULA.md | https://github.com/paulmann/RAGRAF/blob/c041a9b749f12f1d1ef0027540aaeb154c56b11e/EULA.md | de3a473f73d39dedb64f362384554f25584979d62b51f8ea50c5d531bab75a3a | de3a473f73d39dedb64f362384554f25584979d62b51f8ea50c5d531bab75a3a | да | EULA.md |
 | community/ROADMAP.md | https://github.com/paulmann/RAGRAF/blob/c041a9b749f12f1d1ef0027540aaeb154c56b11e/ROADMAP.md | 1973da88532a9dab0b96873df9acf57575b286af40f4904a36e87ccf5c6457be | 1973da88532a9dab0b96873df9acf57575b286af40f4904a36e87ccf5c6457be | да | ROADMAP.md |
 | community/SECURITY.md | https://github.com/paulmann/RAGRAF/blob/c041a9b749f12f1d1ef0027540aaeb154c56b11e/SECURITY.md | dbc7d9c2bd4d3e2d1481a36d00655633c3b45603d1f6753a26c9357414495700 | dbc7d9c2bd4d3e2d1481a36d00655633c3b45603d1f6753a26c9357414495700 | да | SECURITY.md |
@@ -108,6 +108,33 @@
 Каталога `community/` до этого изменения не существовало: перенос аддитивен,
 ни один файл владельца не удалён и не перезаписан этим переносом.
 
+## 1а. Переводы README: состояние каждого
+
+Состояние каждого перевода записано здесь потому, что молчаливое расхождение хуже
+отставшего числа: числа проверяются, а смысл — нет. Измерено 27.10.2026 (этап И20):
+в переводах стояли числа 0.4.0, а содержание описывало 0.3.x — ни брокера секретов,
+ни уровней лицензии, ни снятых `connectors` и `fleet`; сверх того 9 относительных ссылок
+в каждом файле вели на `docs/ru/**` и `docs/DEFECTS.md`, которых в поставке нет, а в
+блоках команд оставался русский заполнитель `-p <конфиг>`.
+
+**Состояний два, третьего нет:** либо перевод приведён к текущему продукту целиком,
+либо он объявлен частичным — с шапкой, которая называет, чего в нём нет, на каком
+состоянии он остановлен и где смотреть полный текст.
+
+| перевод | состояние | на каком состоянии остановлен | чего нет | где полный текст |
+|---|---|---|---|---|
+| `README.ru.md` | **полный на 0.4.0** — зеркало основного документа | текущее, 27.10.2026 | ничего; отличие от `README.md` только в шапке с переключателем языков | [`README.md`](https://github.com/paulmann/RAGRAF/blob/main/README.md) (он же на русском) |
+| `README.de.md` | **частичный перевод** | редакция 0.3.x (текст от 16.10.2026), числа поверхности и ссылки приведены к 0.4.0 27.10.2026 | уровни лицензии Community / Pro / Enterprise и порядок активации; брокер секретов; контур качества и общий индекс; операции SSO, SIEM, офлайн-лицензии и аттестации; снятые `connectors` и `fleet`; разбор документов Office/PDF; операции `route` и `neighbors` | [`README.md`](https://github.com/paulmann/RAGRAF/blob/main/README.md) — основной документ; состав возможностей по уровням — [`EULA.md`](https://github.com/paulmann/RAGRAF/blob/main/EULA.md) |
+| `README.es.md` | **частичный перевод** | редакция 0.3.x (текст от 16.10.2026), числа поверхности и ссылки приведены к 0.4.0 27.10.2026 | уровни лицензии Community / Pro / Enterprise и порядок активации; брокер секретов; контур качества и общий индекс; операции SSO, SIEM, офлайн-лицензии и аттестации; снятые `connectors` и `fleet`; разбор документов Office/PDF; операции `route` и `neighbors` | [`README.md`](https://github.com/paulmann/RAGRAF/blob/main/README.md) — основной документ; состав возможностей по уровням — [`EULA.md`](https://github.com/paulmann/RAGRAF/blob/main/EULA.md) |
+| `README.hi.md` | **частичный перевод** | редакция 0.3.x (текст от 16.10.2026), числа поверхности и ссылки приведены к 0.4.0 27.10.2026 | уровни лицензии Community / Pro / Enterprise и порядок активации; брокер секретов; контур качества и общий индекс; операции SSO, SIEM, офлайн-лицензии и аттестации; снятые `connectors` и `fleet`; разбор документов Office/PDF; операции `route` и `neighbors` | [`README.md`](https://github.com/paulmann/RAGRAF/blob/main/README.md) — основной документ; состав возможностей по уровням — [`EULA.md`](https://github.com/paulmann/RAGRAF/blob/main/EULA.md) |
+| `README.zh.md` | **частичный перевод** | редакция 0.3.x (текст от 16.10.2026), числа поверхности и ссылки приведены к 0.4.0 27.10.2026 | уровни лицензии Community / Pro / Enterprise и порядок активации; брокер секретов; контур качества и общий индекс; операции SSO, SIEM, офлайн-лицензии и аттестации; снятые `connectors` и `fleet`; разбор документов Office/PDF; операции `route` и `neighbors` | [`README.md`](https://github.com/paulmann/RAGRAF/blob/main/README.md) — основной документ; состав возможностей по уровням — [`EULA.md`](https://github.com/paulmann/RAGRAF/blob/main/EULA.md) |
+
+Русский файл объявлен зеркалом основного документа, а не отдельным переводом: основной
+`README.md` тоже на русском, и две разные русские редакции одного текста расходились
+молча. Зеркало проверяемо равенством: `README.ru.md` обязан совпадать с `README.md`
+плюс пять строк шапки, а шапка каждой частичной редакции несёт свой признак — этим и
+отличается состояние «полный» от «частичный». Ссылки переводов сверяются обходом:
+относительная ссылка, не находящая файла в поставке, — провал (до правки таких было 45).
 ## 2. Решение по установщику
 
 Установщик существовал в **трёх** версиях, а не в двух. Измерено:
@@ -215,8 +242,8 @@ BUSL-1.1. Четыре файла называли прежнюю лицензи
 
 | файл | было | стало |
 |---|---|---|
-| `community/README.ru.md:429` | «PolyForm Noncommercial 1.0.0» и утверждение `license = "PolyForm-Noncommercial-1.0.0"` | ссылка на `LICENSE`, выражение `BUSL-1.1`, история смены лицензий — в `CHANGELOG.md` |
-| `community/README.ru.md:431` | «значок показывает Other, потому что PolyForm отсутствует в каталоге» | «значку верить нельзя, источники истины — `LICENSE` и `pyproject.toml`» |
+| `community/README.ru.md` (этап 3; номера строк не повторяются: с этапа И20 файл — зеркало `README.md`) | «PolyForm Noncommercial 1.0.0» и утверждение `license = "PolyForm-Noncommercial-1.0.0"` | ссылка на `LICENSE`, выражение `BUSL-1.1`, история смены лицензий — в `CHANGELOG.md` |
+| `community/README.ru.md` (этап 3, та же причина) | «значок показывает Other, потому что PolyForm отсутствует в каталоге» | «значку верить нельзя, источники истины — `LICENSE` и `pyproject.toml`» |
 | `community/CITATION.cff:34` | `license: PolyForm-Noncommercial-1.0.0` | `license: BUSL-1.1` (нормализуется именно это выражение; `BSL-1.1` даёт `InvalidLicenseExpression` — замер этапа 1) |
 | `community/mkdocs.yml:26` | подпись в подвале сайта «PolyForm Noncommercial License 1.0.0» | «Business Source License 1.1» |
 | `community/CONTRIBUTING.md:73` | условие вклада под PolyForm | условие вклада под BUSL-1.1 плюс ссылка на `CLA.md` |

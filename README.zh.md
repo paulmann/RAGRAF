@@ -1,13 +1,15 @@
 # RAGRAF
 
 <!-- md-i18n:switcher -->
-**其他语言：** [English](README.md) · [Deutsch](README.de.md) · 中文 · [हिन्दी](README.hi.md) · [Español](README.es.md) · [Русский](README.ru.md)
+**其他语言：** [Русский](README.md) · [Deutsch](README.de.md) · 中文 · [हिन्दी](README.hi.md) · [Español](README.es.md) · [Русский (副本)](README.ru.md)
 
 **面向 LLM 智能体的图-向量代码知识库。**
 
 [**官网**](https://ragraf.ru) · [**Wiki**](https://github.com/paulmann/RAGRAF/wiki) · [**文档（Pages）**](https://paulmann.github.io/RAGRAF/) · [**发行版**](https://github.com/paulmann/RAGRAF/releases) · [**讨论**](https://github.com/paulmann/RAGRAF/discussions)
 
 ![RAGRAF — 面向 LLM 智能体的图-向量代码知识库：61 个 MCP 工具、带 file:line 引用的可验证事实、完全本地运行](assets/social-preview.png)
+
+> **本译本不完整，停留在 0.3.x 版本。** 章节清单与数字已与当前产品核对，内容没有：译本中没有许可证层级 Community / Pro / Enterprise、机密代理（secret broker）、质量回路与共享索引、已撤下的 `connectors` 和 `fleet`、Office 与 PDF 文档解析，以及 `route` 和 `neighbors` 两个操作。完整的当前文本在主文档 [`README.md`](README.md)（俄文）；哪些能力属于哪个许可证层级，见 [`EULA.md`](EULA.md) 与 `src/ragraf/edition_baseline.json`。本译本的状态记录在 [`docs/03_implementation/RELEASE-SOURCES.md`](docs/03_implementation/RELEASE-SOURCES.md)。
 
 一个回答智能体关于代码库问题的助手——*代码在哪里、谁在调用它、改动会破坏什么、附近类似功能是怎么做的*——给出可验证的事实（`file:line`），而不是盲目的 `rg` 和整文件通读。Python 3.13+、SQLite（图 + FTS5 + 向量在同一个文件里）、tree-sitter、无 torch 的本地嵌入。**一切都在代码所在的机器上运行**：不需要启动服务，索引不会上传到云端——这就是针对你仓库的本地 RAG 索引。可选的代码属性图层（Java + Joern）解锁切片；没有它，产品照常工作，并如实说明这一点。
 
@@ -65,7 +67,7 @@ RAGRAF 用索引取代这条路径。智能体通过固定操作提问，得到�
 | 审别人的 diff | `diff`、`drift_report`、`live_read` | 变化的符号与边（含回归），以及带差异标注的当前文件 |
 | 找副本（`Files.php` … `Files7.php`） | `duplicates` | 哪些文件互为副本，哪一份**有证明地**是活跃版本 |
 | 「代码里别处是怎么做的？」 | `search`（BM25 + 向量，混合检索） | 语料的排序片段；回答本身不需要嵌入模型 |
-| 把索引接到智能体上 | **61 个 MCP 工具** `ragraf_*` 或 CLI | 同一批操作走 stdio——见 [`docs/ru/03_implementation/INTEGRATION.md`](docs/ru/03_implementation/INTEGRATION.md) |
+| 把索引接到智能体上 | **61 个 MCP 工具** `ragraf_*` 或 CLI | 同一批操作走 stdio——见 [`docs/03_implementation/INTEGRATION.md`](docs/03_implementation/INTEGRATION.md) |
 
 ---
 
@@ -109,45 +111,19 @@ RAGRAF 用索引取代这条路径。智能体通过固定操作提问，得到�
 同一批操作也可以作为 **61 个 MCP 工具**（`ragraf_*`）使用——用于作为服务器接入智能体，也可以通过 CLI 使用。单独一组工具是数据库活层：`ragraf_db_schema`、`ragraf_db_table`、`ragraf_db_relations`、`ragraf_db_sample`、`ragraf_db_drift`、`ragraf_db_cross`。
 第二十四个是 `use_project`：当一个服务器服务多个项目时用来选择语料。`context` 回答选中了哪个语料、依据是什么：没有它，关于别的项目的回答与本项目的回答无法区分。
 
-**十六种语言**按树解析（图的节点与边）：PHP、Python、JavaScript、TypeScript、Java、C#、C、C++、Ruby、Lua、Go、Perl、bash、PowerShell、CSS、HTML——十三个通用剖面加上 PHP、CSS 和 HTML 的专用提取器。另有十一种以纯文本接入——文件能被搜到，但不产生节点：Markdown、SQL、YAML、JSON、TOML、INI、XML、RST、Rust、batch、普通文本。共映射 55 种扩展名。
+上表只列出 Community 层级的操作。付费层级在此没有说明——这正是本译本不覆盖的部分：`quality_suite`, `quality_diff`, `quality_prune`, `shared_index_status`, `shared_index_publish`, `shared_index_query`, `broker_issue`, `broker_rotate`, `sso_login`, `sso_map_roles`, `siem_export`, `siem_test`, `license_offline`, `attest_bundle`。它们由 `src/ragraf/edition_baseline.json` 定义，条款见 [`EULA.md`](EULA.md)。
+
+**二十九种语言**通过语法树解析（图的节点与边），另有四十种以文本方式接入——文件可被搜索到，但不产生节点；格式登记表中共有 **84** 种格式。完整的语言与格式清单见主文档 [`README.md`](README.md)。
 
 ---
 
 ## 用数字看项目
 
-下列所有数字都按 **2026-10-16** 的发布树实测——不是从旧文本里誊抄的。其中两个关键数字由 [`tools/Invoke-ProjectDoctrine.ps1`](tools/Invoke-ProjectDoctrine.ps1) 中的 `Test-DocumentedNumbers` 看守：它把文档与代码对照。
+本译本不抄写数字：数字逐阶段变化，译本必然落后。经过核对的值在主文档 [`README.md`](README.md) 的「用数字看项目和实测基准」一节；由 [`tools/Invoke-ProjectDoctrine.ps1`](tools/Invoke-ProjectDoctrine.ps1) 中的 `Test-DocumentedNumbers` 看守。
 
-| 面 | 数量 | 从哪里测得 |
-|---|---|---|
-| 门面操作 | **54** | `src/ragraf/facade.py` 中的 `def op_*` |
-| MCP 工具 | **61**——其中 6 个是数据库活层 | `src/ragraf/mcp_server.py` 中的 `ragraf_*` 名称 |
-| MCP 资源 / 提示 | 3 + 1 个 URI 模板 / 2 | `ragraf://status`、`ragraf://catalog`、`ragraf://corpus/{name}/map`；提示 `ragraf-check`、`ragraf-repair` |
-| CLI 子命令 / `query` 操作 | 21 / **50** | `src/ragraf/cli.py` 中的 `add_parser(…)` 和 `OPS` |
-| 按树解析的语言 | **16** | `src/ragraf/config.py` 中的 `TREE_LANGS` |
-| 以纯文本接入的语言 | **11** | `LANG_BY_EXT` 的其余取值 |
-| 已映射的扩展名 | 55 | `LANG_BY_EXT` |
-| 管理面板 API 路由 | 32 | `src/ragraf/admin_server.py` |
-| 运行时依赖 | 7（+1 个可选 `tls` 集合） | `pyproject.toml` |
-| `src/` 中的 Python | 67 个文件 · 52 527 行 | 发布树 |
-| PowerShell——安装器、包装器、检查器 | 5 个文件 · 3 423 行 | 发布树 |
-| Markdown | 28 个文件（`docs/` 中 20 个，其中 9 个俄语）+ 15 个 wiki 页面 | 发布树与 wiki |
-| 可移植测试集 | 6 个集合 · **164 项检查，0 项失败** | 每个集合单独运行 |
-| 缺陷登记册 | 61 项发现 | [`docs/DEFECTS.md`](docs/DEFECTS.md)；按严重度汇总的审计计入了其中 43 项 |
-| 发布树 | 136 个文件 · 3.5 MB | 发布树 |
+与活动修订记录 `rev-0376`（2026-10-27）核对：**54** 个外观操作、**61** 个 MCP 工具、**21** 个 CLI 子命令下的 **50** 个 `query` 操作、**29** 种语法树语言与 **40** 种文本语言、登记表 **84** 种格式；RAGRAF 自身索引——858 个文件、5 130 个节点、67 428 条边。
 
-作为量级参考：RAGRAF 索引自己的工作树（648 个文件、140 741 行——大于这个发布子集），得到 3 620 个符号、46 296 条边和 3 417 个分块，耗时 **74 秒**，其中 63 秒是可选的 Joern/CPG 阶段（`rev-0156`，2026-10-16 实测；`capability=full`，0 个文件出错）。详细剖析见 [Wiki → Benchmarks and Limits](https://github.com/paulmann/RAGRAF/wiki/11-Benchmarks-and-Limits)。
-
-**实测对照场，已脱敏。** 登记册里 **28 个语料，25 个已索引**——10 个带 CPG 层，15 个处于 `degraded` 模式。其中 16 个的修订记录读取于 2026-10-16：**7 527 个文件、94 528 个符号、791 871 条边、86 790 个分块**。项目名、路径和域名有意隐藏：标签按大小排序，只有作者的私有对照表能还原。
-
-| 语料 | 类型 | 文件 | 符号 | 边 | 模式 |
-|---|---|---|---|---|---|
-| C-02 | PHP Web 应用 | 2 722 | 32 761 | 355 192 | degraded |
-| C-04 | C# 服务 / 桌面应用 | 1 274 | 20 331 | 98 605 | degraded |
-| C-05 | PHP Web 应用 | 928 | 17 381 | 99 029 | full |
-| C-18 | PowerShell 自动化脚本集 | 81 | 324 | 4 214 | degraded |
-| C-24 | Markdown + bash（最小） | 18 | 184 | 1 515 | degraded |
-
-完整的 16 行表格、脱敏规则和一条计数说明在 [Wiki → Benchmarks and Limits](https://github.com/paulmann/RAGRAF/wiki/11-Benchmarks-and-Limits)。引用数字时这条说明很重要：对同一个修订，语料登记册和修订记录给出**不同**的合计（在同一语料上实测：8 721 对 4 498 个符号，41 201 对 56 106 条边），因此上面所有数字都取自**修订记录**——也就是响应信封所返回的那一份。
+基准、交付规模和测试运行在此有意不重复：它们会变化，抄下来的数字比正确更早变成错误。
 
 ---
 
@@ -203,16 +179,16 @@ pwsh -NoLogo -NoProfile -File scripts/install.ps1
 常用变体：
 
 ```powershell
-# установить и сразу подготовить корпус для своего проекта
+# 安装并立即为自己的项目准备语料
 pwsh -File scripts/install.ps1 -Project C:\work\myproject
 
-# то же плюс полная индексация (скачает модель эмбеддингов ~240 МБ)
+# 同上，并做完整索引（会下载嵌入模型，约 240 MB）
 pwsh -File scripts/install.ps1 -Project C:\work\myproject -Index
 
-# индексация без векторов: модель не скачивается, лексический поиск работает
+# 不建向量的索引：不下载模型，词法搜索可用
 pwsh -File scripts/install.ps1 -Project C:\work\myproject -Index -NoVectors
 
-# в сети с TLS-инспекцией (корпоративный прокси)
+# 在带 TLS 检查的网络中（企业代理）
 pwsh -File scripts/install.ps1 -WithTruststore
 ```
 
@@ -225,7 +201,7 @@ git clone https://github.com/paulmann/RAGRAF.git
 cd RAGRAF
 python -m venv .venv
 . .venv/bin/activate            # Windows: .venv\Scripts\Activate.ps1
-pip install -e .                # или: pip install -r requirements.txt
+pip install -e .                # 或：pip install -r requirements.txt
 ragraf --version
 ```
 
@@ -252,23 +228,23 @@ pwsh -File scripts/install-joern.ps1
 ## 第一步
 
 ```bash
-# 1. Подготовить корпус: найти, досоздать, пересобрать отставший индекс.
-#    Корпус для незнакомого каталога создаётся этой же командой.
+# 1. 准备语料：找到它、缺失时创建、重建过期的索引。
+#    陌生目录的语料正是由这条命令创建。
 ragraf ensure C:\work\myproject
 
-# 2. Проверить окружение (отчёт по 11 компонентам).
-#    ВНИМАНИЕ: команда ВСЕГДА возвращает код 0 — это не гейт, читайте отчёт.
-ragraf -p <конфиг> selftest
+# 2. 检查环境（11 个组件的报告）。
+#    注意：该命令始终返回代码 0 —— 它不是闸门，请读报告。
+ragraf -p <config> selftest
 
-# 3. Спросить
-ragraf -p <конфиг> query search "задержка переиндексации"
-ragraf -p <конфиг> query symbol --name corpus_hash
-ragraf -p <конфиг> query code --name corpus_hash
-ragraf -p <конфиг> query callers --name dedupe
-ragraf -p <конфиг> query impact --target Facade --depth 2
+# 3. 提问
+ragraf -p <config> query search "重新索引延迟"
+ragraf -p <config> query symbol --name corpus_hash
+ragraf -p <config> query code --name corpus_hash
+ragraf -p <config> query callers --name dedupe
+ragraf -p <config> query impact --target Facade --depth 2
 
-# 4. Свежесть: изменился ли код после индексации
-ragraf -p <конфиг> check
+# 4. 新鲜度：索引之后代码是否改变
+ragraf -p <config> check
 ```
 
 完整命令列表见 `ragraf --help`。重要：**全局选项 `--project/-p` 和 `--json` 写在子命令之前**（`ragraf -p cfg query search ...`），子命令自己的选项写在它之后。
@@ -276,13 +252,13 @@ ragraf -p <конфиг> check
 ### 语料管理
 
 ```bash
-ragraf init C:\work\myproject         # создать конфигурацию корпуса и показать путь к ней
-ragraf -p <конфиг> register           # зарегистрировать разработку в реестре
-ragraf -p <конфиг> index              # полная индексация
-ragraf -p <конфиг> reindex            # переиндексация + архивация журнала расхождений
-ragraf -p <конфиг> drift --scan       # зарегистрировать различия, НЕ меняя индекс
-ragraf -p <конфиг> status             # состояние: ревизия, покрытие, размер журнала
-ragraf -p <конфиг> usage              # телеметрия: обращения, факты, оценка эффекта
+ragraf init C:\work\myproject         # 创建语料配置并显示其路径
+ragraf -p <config> register           # 把项目登记到注册表
+ragraf -p <config> index              # 完整索引
+ragraf -p <config> reindex            # 重新索引 + 归档不一致日志
+ragraf -p <config> drift --scan       # 登记不一致，但不改索引
+ragraf -p <config> status             # 状态：修订、覆盖、日志大小
+ragraf -p <config> usage              # 遥测：调用、事实、效果估计
 ```
 
 ### 作为 MCP 服务器接入智能体
@@ -330,7 +306,7 @@ python tools/ragraf-admin.py --no-browser
 **关于网络与证书。** 在带 TLS 检查的网络里（企业代理），模型下载会在证书校验处失败。办法是安装 `truststore`：
 
 ```bash
-pip install truststore      # или: install.ps1 -WithTruststore
+pip install truststore      # 或：install.ps1 -WithTruststore
 ```
 
 在家庭网络里不需要这个包。实测：没有它——拒绝为 `certificate verify failed`；有它——240 MB 用 9.2 秒下载完。
@@ -346,13 +322,13 @@ pip install truststore      # или: install.ps1 -WithTruststore
 | [ragraf.ru](https://ragraf.ru) | 公开站点：功能、实测基准、管理面板模拟器 |
 | [Wiki](https://github.com/paulmann/RAGRAF/wiki) | 15 个页面：入门、操作参考、CLI、MCP、CPG 层、诊断、FAQ |
 | [文档（Pages）](https://paulmann.github.io/RAGRAF/) | 这套带搜索的文档——由 `pages.yml` 流水线构建并发布 |
-| [`docs/ru/02_architecture/ARCHITECTURE.md`](docs/ru/02_architecture/ARCHITECTURE.md) | 原则、组件、存储示意图、操作契约 |
-| [`docs/ru/02_architecture/TZ.md`](docs/ru/02_architecture/TZ.md) | 功能与非功能需求、验收标准 |
-| [`docs/ru/03_implementation/INTEGRATION.md`](docs/ru/03_implementation/INTEGRATION.md) | 接入智能体：MCP、工作规则、规程 |
-| [`docs/ru/03_implementation/CPG_INTEGRATION.md`](docs/ru/03_implementation/CPG_INTEGRATION.md) | 代码属性图：Joern、JDK、降级模式 |
-| [`docs/ru/skills/ragraf-core/SKILL.md`](docs/ru/skills/ragraf-core/SKILL.md) | 使用索引的技能：选操作、恢复 |
-| [`docs/ru/05_article/RAGRAF_ARTICLE.md`](docs/ru/05_article/RAGRAF_ARTICLE.md) | 综述文章：技术栈、架构、实测 |
-| [`docs/DEFECTS.md`](docs/DEFECTS.md) | 已发现缺陷的登记册，每项发现都带 `file:line` 证据 |
+| [`docs/02_architecture/ARCHITECTURE.md`](docs/02_architecture/ARCHITECTURE.md) | 原则、组件、存储示意图、操作契约 |
+| [`docs/02_architecture/TZ.md`](docs/02_architecture/TZ.md) | 功能与非功能需求、验收标准 |
+| [`docs/03_implementation/INTEGRATION.md`](docs/03_implementation/INTEGRATION.md) | 接入智能体：MCP、工作规则、规程 |
+| [`docs/03_implementation/CPG_INTEGRATION.md`](docs/03_implementation/CPG_INTEGRATION.md) | 代码属性图：Joern、JDK、降级模式 |
+| [`docs/skills/ragraf-core/SKILL.md`](docs/skills/ragraf-core/SKILL.md) | 使用索引的技能：选操作、恢复 |
+| [`docs/05_article/RAGRAF_ARTICLE.md`](docs/05_article/RAGRAF_ARTICLE.md) | 综述文章：技术栈、架构、实测 |
+| [`docs/03_implementation/RELEASE-SOURCES.md`](docs/03_implementation/RELEASE-SOURCES.md) | 交付中每个文件的来源，以及每份译本的状态 |
 | [`ROADMAP.md`](ROADMAP.md) | 计划中的改进，带稳定标识符（`R-*`） |
 
 ---
@@ -360,14 +336,14 @@ pip install truststore      # или: install.ps1 -WithTruststore
 ## 开发
 
 ```bash
-# тесты запускаются отдельными скриптами — единого раннера нет
+# 测试以独立脚本运行 —— 没有统一 runner
 python tests/test_lang_routing.py
 python tests/test_watch.py
 
-# чекер конвенций проекта (14 проверок)
+# 项目约定检查器（14 项检查）
 pwsh -NoLogo -NoProfile -File tools/Invoke-ProjectDoctrine.ps1
 
-# актуализация индекса самого RAGRAF
+# 更新 RAGRAF 自身的索引
 python tools/ragraf.py ensure .
 ```
 
@@ -422,6 +398,8 @@ python tools/ragraf.py ensure .
 ## 许可证
 
 **[Business Source License 1.1](LICENSE)**（BUSL-1.1，Community）。条款见 [`LICENSE`](LICENSE) 文件；机器可读表达式是 `pyproject.toml` 中的 `license = "BUSL-1.1"`。许可证变更史（MIT → PolyForm Noncommercial → BUSL-1.1）记录在 [CHANGELOG.md](CHANGELOG.md) 中。
+
+**许可证层级。** Community、Pro 与 Enterprise 是同一份闭源交付的层级，而不是三套独立的文件集合：层级决定同一批文件中哪些是开放的，层级之间的转换是激活许可证，不是重新安装。条款见 [`EULA.md`](EULA.md)，能力与层级的对应关系见 `src/ragraf/edition_baseline.json`；`connectors` 与 `fleet` 在任何层级都不属于标的，已在开发计划中列名。
 
 > GitHub 上的许可证徽章不可信：它并不能识别所有表达式，BUSL-1.1 可能显示为「Other」。真值来源是 `LICENSE` 文件和 `pyproject.toml` 中的 `license` 字段。
 

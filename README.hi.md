@@ -1,13 +1,15 @@
 # RAGRAF
 
 <!-- md-i18n:switcher -->
-**अन्य भाषाओं में:** [English](README.md) · [Deutsch](README.de.md) · [中文](README.zh.md) · हिन्दी · [Español](README.es.md) · [Русский](README.ru.md)
+**अन्य भाषाओं में:** [Русский](README.md) · [Deutsch](README.de.md) · [中文](README.zh.md) · हिन्दी · [Español](README.es.md) · [Русский (प्रतिलिपि)](README.ru.md)
 
 **LLM-एजेंट के लिए कोड का ग्राफ़-वेक्टर ज्ञानकोश।**
 
 [**वेबसाइट**](https://ragraf.ru) · [**विकी**](https://github.com/paulmann/RAGRAF/wiki) · [**दस्तावेज़ (Pages)**](https://paulmann.github.io/RAGRAF/) · [**रिलीज़**](https://github.com/paulmann/RAGRAF/releases) · [**चर्चाएँ**](https://github.com/paulmann/RAGRAF/discussions)
 
 ![RAGRAF — LLM-एजेंट के लिए कोड का ग्राफ़-वेक्टर ज्ञानकोश: 61 MCP टूल, file:line संदर्भ के साथ सत्यापनीय तथ्य, पूरी तरह लोकल](assets/social-preview.png)
+
+> **यह अनुवाद अधूरा है और संस्करण 0.3.x पर रुका है।** अनुभागों की सूची और संख्याएँ वर्तमान प्रोडक्ट से मिलाई गई हैं, पर सामग्री नहीं: इसमें लाइसेंस स्तर Community / Pro / Enterprise, गोप्य-सूचना ब्रोकर (secret broker), गुणवत्ता-चक्र और साझा इंडेक्स, हटाए गए `connectors` और `fleet`, Office और PDF दस्तावेज़ों का विश्लेषण, तथा `route` और `neighbors` ऑपरेशन नहीं हैं। पूरा वर्तमान पाठ मुख्य दस्तावेज़ [`README.md`](README.md) (रूसी) में है; कौन-सी क्षमता किस लाइसेंस स्तर की है — [`EULA.md`](EULA.md) और `src/ragraf/edition_baseline.json` में। इस अनुवाद की स्थिति [`docs/03_implementation/RELEASE-SOURCES.md`](docs/03_implementation/RELEASE-SOURCES.md) में दर्ज है।
 
 एक सहायक जो एजेंट के कोडबेस-संबंधी सवालों का जवाब सत्यापनीय तथ्यों (`file:line`) से देता है — *यह कहाँ पड़ा है, इसे कौन कॉल करता है, बदलाव से क्या टूटेगा, पास में मिलता-जुलता काम कैसे हुआ* — अंधाधुंध `rg` और पूरी फ़ाइलें पढ़ने के बजाय। Python 3.13+, SQLite (ग्राफ़ + FTS5 + वेक्टर एक ही फ़ाइल में), tree-sitter, torch के बिना लोकल एम्बेडिंग। **सब कुछ उसी मशीन पर चलता है जहाँ कोड रखा है**: कोई सर्विस उठाने की ज़रूरत नहीं, इंडेक्स क्लाउड में नहीं जाता — आपके रिपॉज़िटरी पर लोकल RAG-इंडेक्स। कोड-प्रॉपर्टी ग्राफ़ की वैकल्पिक परत (Java + Joern) स्लाइस खोलती है; उसके बिना भी प्रोडक्ट काम करता है और यह बात साफ़ कहता है।
 
@@ -65,7 +67,7 @@ RAGRAF इस रास्ते की जगह इंडेक्स दे�
 | किसी और का diff समझ रहे हैं | `diff`, `drift_report`, `live_read` | बदले हुए सिंबल और एज, रिग्रेशन सहित, और अंतर के निशान वाली मौजूदा फ़ाइल |
 | कॉपियाँ ढूँढ़ रहे हैं (`Files.php` … `Files7.php`) | `duplicates` | कौन-सी फ़ाइलें कॉपी हैं और कौन-सी कॉपी **सिद्ध रूप से** चालू है |
 | «कोड में यह दूसरी जगहों पर कैसे किया गया है?» | `search` (BM25 + वेक्टर, हाइब्रिड) | कॉर्पस के रैंक किए गए अंश; जवाबों के लिए एम्बेडिंग मॉडल की ज़रूरत नहीं |
-| इंडेक्स को एजेंट से जोड़ रहे हैं | **61 MCP टूल** `ragraf_*` या CLI | stdio पर वही ऑपरेशन — देखें [`docs/ru/03_implementation/INTEGRATION.md`](docs/ru/03_implementation/INTEGRATION.md) |
+| इंडेक्स को एजेंट से जोड़ रहे हैं | **61 MCP टूल** `ragraf_*` या CLI | stdio पर वही ऑपरेशन — देखें [`docs/03_implementation/INTEGRATION.md`](docs/03_implementation/INTEGRATION.md) |
 
 ---
 
@@ -111,45 +113,19 @@ RAGRAF इस रास्ते की जगह इंडेक्स दे�
 वही ऑपरेशन **61 MCP टूल** (`ragraf_*`) के रूप में भी उपलब्ध हैं — एजेंट से सर्वर की तरह जोड़ने के लिए, और CLI से भी। टूल का अलग समूह — डेटाबेस की लाइव परत: `ragraf_db_schema`, `ragraf_db_table`, `ragraf_db_relations`, `ragraf_db_sample`, `ragraf_db_drift`, `ragraf_db_cross`।
 चौबीसवाँ — `use_project`: कॉर्पस चुनना, जब एक सर्वर कई प्रोजेक्ट संभालता है। `context` बताता है कि कौन-सा कॉर्पस चुना गया और किस आधार पर: उसके बिना दूसरे प्रोजेक्ट के जवाब अपने प्रोजेक्ट के जवाबों से अलग पहचाने नहीं जाते थे।
 
-**सोलह भाषाएँ** पेड़ (tree-sitter) से पार्स होती हैं (ग्राफ़ के नोड और एज): PHP, Python, JavaScript, TypeScript, Java, C#, C, C++, Ruby, Lua, Go, Perl, bash, PowerShell, CSS, HTML — तेरह सामान्य प्रोफ़ाइल और साथ में PHP, CSS तथा HTML के अलग एक्सट्रैक्टर। ग्यारह और टेक्स्ट के रूप में जुड़ती हैं — फ़ाइलें खोज में मिलती हैं, पर नोड नहीं देतीं: Markdown, SQL, YAML, JSON, TOML, INI, XML, RST, Rust, batch, सादा टेक्स्ट। कुल 55 एक्सटेंशन जोड़े गए हैं।
+तालिका में केवल Community स्तर के ऑपरेशन हैं। सशुल्क स्तर यहाँ नहीं समझाए गए — यही वह भाग है जो इस अनुवाद में नहीं है: `quality_suite`, `quality_diff`, `quality_prune`, `shared_index_status`, `shared_index_publish`, `shared_index_query`, `broker_issue`, `broker_rotate`, `sso_login`, `sso_map_roles`, `siem_export`, `siem_test`, `license_offline`, `attest_bundle`। उनकी संरचना `src/ragraf/edition_baseline.json` में और शर्तें [`EULA.md`](EULA.md) में हैं।
+
+**उनतीस भाषाएँ** सिंटैक्स-ट्री से पढ़ी जाती हैं (ग्राफ़ के नोड और किनारे), चालीस और पाठ के रूप में जोड़ी जाती हैं — फ़ाइलें खोज में मिलती हैं पर नोड नहीं देतीं; फ़ॉर्मैट रजिस्टर में **84** फ़ॉर्मैट हैं। भाषाओं और फ़ॉर्मैट की पूरी सूची मुख्य दस्तावेज़ [`README.md`](README.md) में है।
 
 ---
 
 ## संख्याओं में परियोजना
 
-नीचे के सभी आँकड़े **16.10.2026** के प्रकाशित ट्री पर मापे गए हैं — पुराने पाठों से उतारे नहीं गए। इनमें से दो मुख्य आँकड़ों की निगरानी [`tools/Invoke-ProjectDoctrine.ps1`](tools/Invoke-ProjectDoctrine.ps1) में `Test-DocumentedNumbers` करता है: वह दस्तावेज़ों को कोड से मिलाता है।
+इस अनुवाद में संख्याएँ नकल करके नहीं लिखी जातीं: वे हर चरण में बदलती हैं और अनुवाद पीछे रह जाएगा। जाँची गई संख्याएँ मुख्य दस्तावेज़ [`README.md`](README.md) के «संख्याओं में परियोजना और मापा गया परीक्षण-क्षेत्र» अनुभाग में हैं; उन पर `Test-DocumentedNumbers` ([`tools/Invoke-ProjectDoctrine.ps1`](tools/Invoke-ProjectDoctrine.ps1)) नज़र रखता है।
 
-| सतह | कितना | कहाँ से मापा गया |
-|---|---|---|
-| फ़साड ऑपरेशन | **54** | `src/ragraf/facade.py` में `def op_*` |
-| MCP टूल | **61** — इनमें 6 डेटाबेस की लाइव परत के | `src/ragraf/mcp_server.py` में `ragraf_*` नाम |
-| MCP संसाधन / प्रॉम्प्ट | 3 + 1 URI टेम्पलेट / 2 | `ragraf://status`, `ragraf://catalog`, `ragraf://corpus/{name}/map`; प्रॉम्प्ट `ragraf-check`, `ragraf-repair` |
-| CLI उपकमांड / `query` ऑपरेशन | 21 / **50** | `src/ragraf/cli.py` में `add_parser(…)` और `OPS` |
-| पेड़ से पार्स होने वाली भाषाएँ | **16** | `src/ragraf/config.py` में `TREE_LANGS` |
-| टेक्स्ट के रूप में जुड़ने वाली भाषाएँ | **11** | `LANG_BY_EXT` के बाकी मान |
-| जोड़े गए एक्सटेंशन | 55 | `LANG_BY_EXT` |
-| एडमिन पैनल के API रूट | 32 | `src/ragraf/admin_server.py` |
-| रनटाइम निर्भरताएँ | 7 (+1 वैकल्पिक सेट `tls`) | `pyproject.toml` |
-| `src/` में Python | 67 फ़ाइलें · 52 527 पंक्तियाँ | प्रकाशित ट्री |
-| PowerShell — इंस्टॉलर, रैपर, चेकर | 5 फ़ाइलें · 3 423 पंक्तियाँ | प्रकाशित ट्री |
-| Markdown | 28 फ़ाइलें (`docs/` में 20, इनमें 9 रूसी) + विकी के 15 पेज | प्रकाशित ट्री और विकी |
-| पोर्टेबल टेस्ट सूट | 6 सूट · **164 जाँचें, 0 विफलता** | हर सूट अलग चलाया गया |
-| दोष रजिस्टर | 61 खोज | [`docs/DEFECTS.md`](docs/DEFECTS.md); महत्व के अनुसार ऑडिट सारांश में इनमें से 43 गिने गए |
-| प्रकाशित ट्री | 136 फ़ाइलें · 3,5 MB | प्रकाशित ट्री |
+सक्रिय रिविज़न रिकॉर्ड `rev-0376` (27.10.2026) से मिलाया गया: **54** फ़साड ऑपरेशन, **61** MCP औज़ार, **21** CLI उपकमांड के साथ **50** `query` ऑपरेशन, सिंटैक्स-ट्री से **29** भाषाएँ और पाठ के रूप में **40**, रजिस्टर में **84** फ़ॉर्मैट; RAGRAF का अपना इंडेक्स — 858 फ़ाइलें, 5 130 नोड, 67 428 किनारे।
 
-पैमाने के लिए: RAGRAF अपना ही कार्य-ट्री इंडेक्स करता है (648 फ़ाइलें, 140 741 पंक्तियाँ — इस प्रकाशित उपसमुच्चय से बड़ा) — 3 620 सिंबल, 46 296 एज और 3 417 चंक, **74 सेकंड** में, जिनमें से 63 सेकंड वैकल्पिक Joern/CPG चरण है (`rev-0156`, माप 16.10.2026; `capability=full`, त्रुटि वाली 0 फ़ाइलें)। विस्तृत विश्लेषण — [विकी → Benchmarks and Limits](https://github.com/paulmann/RAGRAF/wiki/11-Benchmarks-and-Limits) में।
-
-**मापा गया पॉलीगॉन, बेनाम।** रजिस्टर में **28 कॉर्पस, 25 इंडेक्स किए गए** — 10 CPG परत के साथ, 15 `degraded` मोड में। इनमें से 16 का रिवीज़न रिकॉर्ड 16.10.2026 को पढ़ा गया: **7 527 फ़ाइलें, 94 528 सिंबल, 791 871 एज, 86 790 चंक**। प्रोजेक्टों के नाम, पथ और डोमेन जानबूझकर छिपाए गए हैं: लेबल आकार के क्रम में रखे गए हैं, और उन्हें केवल लेखक का निजी नक्शा खोलता है।
-
-| कॉर्पस | प्रकार | फ़ाइलें | सिंबल | एज | मोड |
-|---|---|---|---|---|---|
-| C-02 | PHP वेब ऐप | 2 722 | 32 761 | 355 192 | degraded |
-| C-04 | C# सर्विस / डेस्कटॉप | 1 274 | 20 331 | 98 605 | degraded |
-| C-05 | PHP वेब ऐप | 928 | 17 381 | 99 029 | full |
-| C-18 | PowerShell ऑटोमेशन सेट | 81 | 324 | 4 214 | degraded |
-| C-24 | Markdown + bash (सबसे छोटा) | 18 | 184 | 1 515 | degraded |
-
-16 पंक्तियों की पूरी तालिका, बेनाम करने के नियम और गिनती से जुड़ी एक चेतावनी — [विकी → Benchmarks and Limits](https://github.com/paulmann/RAGRAF/wiki/11-Benchmarks-and-Limits) में। आँकड़े उद्धृत करते समय वह चेतावनी ज़रूरी है: कॉर्पस रजिस्टर और रिवीज़न रिकॉर्ड एक ही रिवीज़न के लिए **अलग** कुल देते हैं (एक ही कॉर्पस पर मापा गया: 8 721 बनाम 4 498 सिंबल, 41 201 बनाम 56 106 एज), इसलिए ऊपर के सभी आँकड़े **रिवीज़न रिकॉर्ड** से लिए गए हैं — उसी से जो जवाब का लिफ़ाफ़ा देता है।
+परीक्षण-क्षेत्र, डिलीवरी का आकार और टेस्ट रन यहाँ जान-बूझकर नहीं दोहराए गए: वे बदलते हैं, और नकल की गई संख्या सही होने से पहले ग़लत हो जाती है।
 
 ---
 
@@ -205,16 +181,16 @@ pwsh -NoLogo -NoProfile -File scripts/install.ps1
 उपयोगी विकल्प:
 
 ```powershell
-# установить и сразу подготовить корпус для своего проекта
+# इंस्टॉल करें और तुरंत अपने प्रोजेक्ट के लिए कॉर्पस तैयार करें
 pwsh -File scripts/install.ps1 -Project C:\work\myproject
 
-# то же плюс полная индексация (скачает модель эмбеддингов ~240 МБ)
+# वही, साथ में पूरी इंडेक्सिंग (एम्बेडिंग मॉडल ~240 MB डाउनलोड होगा)
 pwsh -File scripts/install.ps1 -Project C:\work\myproject -Index
 
-# индексация без векторов: модель не скачивается, лексический поиск работает
+# वेक्टर के बिना इंडेक्सिंग: मॉडल डाउनलोड नहीं होता, लेक्सिकल खोज चलती है
 pwsh -File scripts/install.ps1 -Project C:\work\myproject -Index -NoVectors
 
-# в сети с TLS-инспекцией (корпоративный прокси)
+# TLS-निरीक्षण वाले नेटवर्क में (कॉर्पोरेट प्रॉक्सी)
 pwsh -File scripts/install.ps1 -WithTruststore
 ```
 
@@ -227,7 +203,7 @@ git clone https://github.com/paulmann/RAGRAF.git
 cd RAGRAF
 python -m venv .venv
 . .venv/bin/activate            # Windows: .venv\Scripts\Activate.ps1
-pip install -e .                # или: pip install -r requirements.txt
+pip install -e .                # या: pip install -r requirements.txt
 ragraf --version
 ```
 
@@ -254,23 +230,23 @@ pwsh -File scripts/install-joern.ps1
 ## पहले कदम
 
 ```bash
-# 1. Подготовить корпус: найти, досоздать, пересобрать отставший индекс.
-#    Корпус для незнакомого каталога создаётся этой же командой.
+# 1. कॉर्पस तैयार करें: ढूँढ़ें, ज़रूरत हो तो बनाएँ, पुराना इंडेक्स फिर से बनाएँ।
+#    अनजान डायरेक्टरी का कॉर्पस इसी कमांड से बनता है।
 ragraf ensure C:\work\myproject
 
-# 2. Проверить окружение (отчёт по 11 компонентам).
-#    ВНИМАНИЕ: команда ВСЕГДА возвращает код 0 — это не гейт, читайте отчёт.
-ragraf -p <конфиг> selftest
+# 2. वातावरण जाँचें (11 घटकों पर रिपोर्ट)।
+#    ध्यान दें: कमांड हमेशा कोड 0 लौटाता है — यह गेट नहीं है, रिपोर्ट पढ़ें।
+ragraf -p <config> selftest
 
-# 3. Спросить
-ragraf -p <конфиг> query search "задержка переиндексации"
-ragraf -p <конфиг> query symbol --name corpus_hash
-ragraf -p <конфиг> query code --name corpus_hash
-ragraf -p <конфиг> query callers --name dedupe
-ragraf -p <конфиг> query impact --target Facade --depth 2
+# 3. पूछें
+ragraf -p <config> query search "रीइंडेक्सिंग में देरी"
+ragraf -p <config> query symbol --name corpus_hash
+ragraf -p <config> query code --name corpus_hash
+ragraf -p <config> query callers --name dedupe
+ragraf -p <config> query impact --target Facade --depth 2
 
-# 4. Свежесть: изменился ли код после индексации
-ragraf -p <конфиг> check
+# 4. ताज़गी: इंडेक्सिंग के बाद कोड बदला क्या
+ragraf -p <config> check
 ```
 
 कमांड की पूरी सूची — `ragraf --help`। ज़रूरी बात: **ग्लोबल कुंजियाँ `--project/-p` और `--json` उपकमांड से पहले** लगती हैं (`ragraf -p cfg query search ...`), और उपकमांड की अपनी कुंजियाँ उसके बाद।
@@ -278,13 +254,13 @@ ragraf -p <конфиг> check
 ### कॉर्पस प्रबंधन
 
 ```bash
-ragraf init C:\work\myproject         # создать конфигурацию корпуса и показать путь к ней
-ragraf -p <конфиг> register           # зарегистрировать разработку в реестре
-ragraf -p <конфиг> index              # полная индексация
-ragraf -p <конфиг> reindex            # переиндексация + архивация журнала расхождений
-ragraf -p <конфиг> drift --scan       # зарегистрировать различия, НЕ меняя индекс
-ragraf -p <конфиг> status             # состояние: ревизия, покрытие, размер журнала
-ragraf -p <конфиг> usage              # телеметрия: обращения, факты, оценка эффекта
+ragraf init C:\work\myproject         # कॉर्पस कॉन्फ़िगरेशन बनाएँ और उसका पथ दिखाएँ
+ragraf -p <config> register           # प्रोजेक्ट को रजिस्ट्री में दर्ज करें
+ragraf -p <config> index              # पूरी इंडेक्सिंग
+ragraf -p <config> reindex            # पुनः इंडेक्सिंग + बेमेल जर्नल का संग्रह
+ragraf -p <config> drift --scan       # बेमेल दर्ज करें, इंडेक्स बदले बिना
+ragraf -p <config> status             # स्थिति: रिविज़न, कवरेज, जर्नल का आकार
+ragraf -p <config> usage              # टेलीमेट्री: कॉल, तथ्य, प्रभाव का अनुमान
 ```
 
 ### MCP सर्वर के रूप में एजेंट से कनेक्ट करना
@@ -332,7 +308,7 @@ python tools/ragraf-admin.py --no-browser
 **इंटरनेट और सर्टिफ़िकेट के बारे में।** TLS-इंस्पेक्शन वाले नेटवर्क (कॉर्पोरेट प्रॉक्सी) में मॉडल डाउनलोड सर्टिफ़िकेट जाँच पर विफल होता है। इलाज `truststore` लगाना है:
 
 ```bash
-pip install truststore      # или: install.ps1 -WithTruststore
+pip install truststore      # या: install.ps1 -WithTruststore
 ```
 
 घरेलू नेटवर्क में पैकेज की ज़रूरत नहीं। मापा गया: उसके बिना — इनकार `certificate verify failed`, उसके साथ — 240 MB, 9,2 सेकंड में।
@@ -348,13 +324,13 @@ pip install truststore      # или: install.ps1 -WithTruststore
 | [ragraf.ru](https://ragraf.ru) | सार्वजनिक साइट: क्षमताएँ, मापे गए बेंचमार्क, एडमिन पैनल का एमुलेटर |
 | [विकी](https://github.com/paulmann/RAGRAF/wiki) | 15 पेज: शुरुआत, ऑपरेशन संदर्भ, CLI, MCP, CPG परत, डायग्नोस्टिक्स, FAQ |
 | [दस्तावेज़ (Pages)](https://paulmann.github.io/RAGRAF/) | यही दस्तावेज़-सेट खोज के साथ — `pages.yml` पाइपलाइन से बनता और प्रकाशित होता है |
-| [`docs/ru/02_architecture/ARCHITECTURE.md`](docs/ru/02_architecture/ARCHITECTURE.md) | सिद्धांत, घटक, स्टोर का स्कीमा, ऑपरेशन कॉन्ट्रैक्ट |
-| [`docs/ru/02_architecture/TZ.md`](docs/ru/02_architecture/TZ.md) | कार्यात्मक और गैर-कार्यात्मक आवश्यकताएँ, स्वीकृति मानदंड |
-| [`docs/ru/03_implementation/INTEGRATION.md`](docs/ru/03_implementation/INTEGRATION.md) | एजेंट से कनेक्शन: MCP, काम के नियम, विनियम |
-| [`docs/ru/03_implementation/CPG_INTEGRATION.md`](docs/ru/03_implementation/CPG_INTEGRATION.md) | कोड-प्रॉपर्टी ग्राफ़: Joern, JDK, डिग्रेडेशन मोड |
-| [`docs/ru/skills/ragraf-core/SKILL.md`](docs/ru/skills/ragraf-core/SKILL.md) | इंडेक्स के साथ काम का कौशल: ऑपरेशन चुनना, रिकवरी |
-| [`docs/ru/05_article/RAGRAF_ARTICLE.md`](docs/ru/05_article/RAGRAF_ARTICLE.md) | समीक्षा लेख: स्टैक, आर्किटेक्चर, माप |
-| [`docs/DEFECTS.md`](docs/DEFECTS.md) | मिले दोषों का रजिस्टर, हर खोज के साथ प्रमाण `file:line` |
+| [`docs/02_architecture/ARCHITECTURE.md`](docs/02_architecture/ARCHITECTURE.md) | सिद्धांत, घटक, स्टोर का स्कीमा, ऑपरेशन कॉन्ट्रैक्ट |
+| [`docs/02_architecture/TZ.md`](docs/02_architecture/TZ.md) | कार्यात्मक और गैर-कार्यात्मक आवश्यकताएँ, स्वीकृति मानदंड |
+| [`docs/03_implementation/INTEGRATION.md`](docs/03_implementation/INTEGRATION.md) | एजेंट से कनेक्शन: MCP, काम के नियम, विनियम |
+| [`docs/03_implementation/CPG_INTEGRATION.md`](docs/03_implementation/CPG_INTEGRATION.md) | कोड-प्रॉपर्टी ग्राफ़: Joern, JDK, डिग्रेडेशन मोड |
+| [`docs/skills/ragraf-core/SKILL.md`](docs/skills/ragraf-core/SKILL.md) | इंडेक्स के साथ काम का कौशल: ऑपरेशन चुनना, रिकवरी |
+| [`docs/05_article/RAGRAF_ARTICLE.md`](docs/05_article/RAGRAF_ARTICLE.md) | समीक्षा लेख: स्टैक, आर्किटेक्चर, माप |
+| [`docs/03_implementation/RELEASE-SOURCES.md`](docs/03_implementation/RELEASE-SOURCES.md) | डिलीवरी की हर फ़ाइल का स्रोत और हर अनुवाद की स्थिति |
 | [`ROADMAP.md`](ROADMAP.md) | स्थिर पहचानकर्ताओं (`R-*`) वाले नियोजित सुधार |
 
 ---
@@ -362,14 +338,14 @@ pip install truststore      # или: install.ps1 -WithTruststore
 ## विकास
 
 ```bash
-# тесты запускаются отдельными скриптами — единого раннера нет
+# टेस्ट अलग-अलग स्क्रिप्ट के रूप में चलते हैं — कोई साझा रनर नहीं है
 python tests/test_lang_routing.py
 python tests/test_watch.py
 
-# чекер конвенций проекта (14 проверок)
+# प्रोजेक्ट कन्वेंशन चेकर (14 जाँचें)
 pwsh -NoLogo -NoProfile -File tools/Invoke-ProjectDoctrine.ps1
 
-# актуализация индекса самого RAGRAF
+# RAGRAF के अपने इंडेक्स को अद्यतन करें
 python tools/ragraf.py ensure .
 ```
 
@@ -429,6 +405,8 @@ selftest» अपने आप में कुछ सिद्ध नहीं 
 ## लाइसेंस
 
 **[Business Source License 1.1](LICENSE)** (BUSL-1.1, Community)। शर्तें [`LICENSE`](LICENSE) फ़ाइल में; मशीन-पठनीय अभिव्यक्ति — `pyproject.toml` में `license = "BUSL-1.1"`। लाइसेंस बदलने का इतिहास (MIT → PolyForm Noncommercial → BUSL-1.1) [CHANGELOG.md](CHANGELOG.md) में दर्ज है।
+
+**लाइसेंस स्तर।** Community, Pro और Enterprise एक ही बंद डिलीवरी के स्तर हैं, तीन अलग संग्रह नहीं: स्तर तय करता है कि उसी फ़ाइल-समूह में क्या खुला है, और स्तर बदलना लाइसेंस सक्रिय करना है, इंस्टॉलेशन नहीं। शर्तें [`EULA.md`](EULA.md) में, और कौन-सी क्षमता किस स्तर की — `src/ragraf/edition_baseline.json` में; `connectors` और `fleet` किसी भी स्तर के विषय में नहीं हैं और विकास योजना में नामित हैं।
 
 > GitHub पर लाइसेंस बैज पर भरोसा नहीं करना चाहिए: हर अभिव्यक्ति पहचानी नहीं जाती, और BUSL-1.1 «Other» के रूप में दिख सकता है। सच के स्रोत — `LICENSE` फ़ाइल और `pyproject.toml` का `license` फ़ील्ड हैं।
 

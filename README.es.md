@@ -1,13 +1,15 @@
 # RAGRAF
 
 <!-- md-i18n:switcher -->
-**En otros idiomas:** [English](README.md) · [Deutsch](README.de.md) · [中文](README.zh.md) · [हिन्दी](README.hi.md) · Español · [Русский](README.ru.md)
+**En otros idiomas:** [Русский](README.md) · [Deutsch](README.de.md) · [中文](README.zh.md) · [हिन्दी](README.hi.md) · Español · [Русский (copia)](README.ru.md)
 
 **Base de conocimiento grafo-vectorial sobre el código para agentes LLM.**
 
 [**Sitio web**](https://ragraf.ru) · [**Wiki**](https://github.com/paulmann/RAGRAF/wiki) · [**Documentación (Pages)**](https://paulmann.github.io/RAGRAF/) · [**Versiones**](https://github.com/paulmann/RAGRAF/releases) · [**Debates**](https://github.com/paulmann/RAGRAF/discussions)
 
 ![RAGRAF — base de conocimiento grafo-vectorial sobre el código para agentes LLM: 61 herramientas MCP, hechos verificables con referencia archivo:línea, totalmente local](assets/social-preview.png)
+
+> **Esta traducción está incompleta y se detiene en la edición 0.3.x.** La lista de secciones y las cifras están contrastadas con el producto actual; el contenido no: faltan los niveles de licencia Community / Pro / Enterprise, el bróker de secretos, el bucle de calidad y el índice compartido, los `connectors` y `fleet` retirados, el análisis de documentos de Office y PDF, y las operaciones `route` y `neighbors`. El texto completo y vigente está en el documento principal [`README.md`](README.md) (en ruso); qué capacidades pertenecen a cada nivel de licencia consta en [`EULA.md`](EULA.md) y en `src/ragraf/edition_baseline.json`. El estado de esta traducción queda registrado en [`docs/03_implementation/RELEASE-SOURCES.md`](docs/03_implementation/RELEASE-SOURCES.md).
 
 Un asistente que responde a las preguntas del agente sobre la base de código — *dónde está esto, quién lo llama, qué se romperá al modificarlo, cómo se hizo algo parecido cerca* — con hechos verificables (`archivo:línea`) en lugar de un `rg` a ciegas y de la lectura de archivos completos. Python 3.13+, SQLite (grafo + FTS5 + vectores en un solo archivo), tree-sitter, embeddings locales sin torch. **Todo funciona en la máquina donde está el código**: no hace falta levantar ningún servicio y el índice no va a la nube: es un índice RAG local sobre su repositorio. La capa opcional de grafo de propiedades del código (Java + Joern) abre los cortes; sin ella el producto funciona y lo dice con honestidad.
 
@@ -65,7 +67,7 @@ Una advertencia importante que suele omitirse: **la ventaja de 2 a 3 veces se re
 | Revisa un diff ajeno | `diff`, `drift_report`, `live_read` | símbolos y aristas modificados, incluidas las regresiones, y el archivo actual con las divergencias marcadas |
 | Busca copias (`Files.php` … `Files7.php`) | `duplicates` | qué archivos son copias y cuál de ellas es **demostradamente** la activa |
 | «¿Cómo está hecho esto en otras partes del código?» | `search` (BM25 + vectores, de forma híbrida) | fragmentos del corpus ordenados; para las respuestas en sí no hace falta el modelo de embeddings |
-| Conecta el índice a un agente | **61 herramientas MCP** `ragraf_*` o la CLI | las mismas operaciones por stdio — véase [`docs/ru/03_implementation/INTEGRATION.md`](docs/ru/03_implementation/INTEGRATION.md) |
+| Conecta el índice a un agente | **61 herramientas MCP** `ragraf_*` o la CLI | las mismas operaciones por stdio — véase [`docs/03_implementation/INTEGRATION.md`](docs/03_implementation/INTEGRATION.md) |
 
 ---
 
@@ -109,45 +111,19 @@ Otros dos modos no son operaciones, sino una forma de respuesta: **`answer=true`
 Las mismas operaciones están disponibles como **61 herramientas MCP** (`ragraf_*`), para conectarlas a un agente como servidor, y mediante la CLI. Hay un grupo aparte de herramientas para la capa viva de bases de datos: `ragraf_db_schema`, `ragraf_db_table`, `ragraf_db_relations`, `ragraf_db_sample`, `ragraf_db_drift`, `ragraf_db_cross`.
 La vigésima cuarta es `use_project`: la elección de corpus cuando un solo servidor atiende varios proyectos. `context` responde qué corpus está elegido y con qué fundamento: sin ella, las respuestas sobre un proyecto ajeno eran indistinguibles de las respuestas sobre el propio.
 
-**Dieciséis lenguajes** se analizan con árbol (nodos y aristas del grafo): PHP, Python, JavaScript, TypeScript, Java, C#, C, C++, Ruby, Lua, Go, Perl, bash, PowerShell, CSS, HTML — trece perfiles comunes más extractores propios para PHP, CSS y HTML. Otros once se conectan como texto: los archivos aparecen en la búsqueda, pero no aportan nodos: Markdown, SQL, YAML, JSON, TOML, INI, XML, RST, Rust, batch, texto plano. En total se reconocen 55 extensiones.
+La tabla recoge solo las operaciones del nivel Community. Los niveles de pago no se describen aquí: es la parte que esta traducción no cubre — `quality_suite`, `quality_diff`, `quality_prune`, `shared_index_status`, `shared_index_publish`, `shared_index_query`, `broker_issue`, `broker_rotate`, `sso_login`, `sso_map_roles`, `siem_export`, `siem_test`, `license_offline`, `attest_bundle`. Su composición está en `src/ragraf/edition_baseline.json` y las condiciones en [`EULA.md`](EULA.md).
+
+**Veintinueve lenguas** se analizan mediante árbol de sintaxis (nodos y aristas del grafo), otras cuarenta se conectan como texto — los archivos se encuentran por búsqueda pero no producen nodos; en el registro de formatos hay **84** formatos. La lista completa de lenguas y formatos está en el documento principal [`README.md`](README.md).
 
 ---
 
 ## El proyecto en cifras
 
-Todas las cifras siguientes están medidas sobre el árbol publicado el **16.10.2026**, no copiadas de textos anteriores. Dos de las principales las vigila `Test-DocumentedNumbers` en [`tools/Invoke-ProjectDoctrine.ps1`](tools/Invoke-ProjectDoctrine.ps1): compara los documentos con el código.
+Las cifras no se copian en esta traducción: cambian de una etapa a otra y la traducción se quedaría atrás. Los valores comprobados están en el documento principal [`README.md`](README.md), en la sección «El proyecto en cifras y el banco de pruebas medido»; los vigila `Test-DocumentedNumbers` en [`tools/Invoke-ProjectDoctrine.ps1`](tools/Invoke-ProjectDoctrine.ps1).
 
-| Superficie | Cuánto | De dónde está medido |
-|---|---|---|
-| Operaciones de la fachada | **54** | `def op_*` en `src/ragraf/facade.py` |
-| Herramientas MCP | **61** — de ellas 6 son la capa viva de bases | nombres `ragraf_*` en `src/ragraf/mcp_server.py` |
-| Recursos / sugerencias MCP | 3 + 1 plantilla de URI / 2 | `ragraf://status`, `ragraf://catalog`, `ragraf://corpus/{name}/map`; sugerencias `ragraf-check`, `ragraf-repair` |
-| Subcomandos de la CLI / operaciones `query` | 21 / **50** | `add_parser(…)` y `OPS` en `src/ragraf/cli.py` |
-| Lenguajes analizados con árbol | **16** | `TREE_LANGS` en `src/ragraf/config.py` |
-| Lenguajes conectados como texto | **11** | los demás valores de `LANG_BY_EXT` |
-| Extensiones reconocidas | 55 | `LANG_BY_EXT` |
-| Rutas de la API del panel de administración | 32 | `src/ragraf/admin_server.py` |
-| Dependencias en tiempo de ejecución | 7 (+1 conjunto opcional `tls`) | `pyproject.toml` |
-| Python en `src/` | 67 archivos · 52 527 líneas | árbol publicado |
-| PowerShell: instalador, envoltorios, verificador | 5 archivos · 3 423 líneas | árbol publicado |
-| Markdown | 28 archivos (20 en `docs/`, de ellos 9 en ruso) + 15 páginas de la wiki | árbol publicado y wiki |
-| Conjuntos de pruebas portables | 6 conjuntos · **164 comprobaciones, 0 fallos** | cada conjunto se ejecutó por separado |
-| Registro de defectos | 61 hallazgos | [`docs/DEFECTS.md`](docs/DEFECTS.md); en el resumen de auditoría por importancia se tienen en cuenta 43 de ellos |
-| Árbol publicado | 136 archivos · 3,5 MB | árbol publicado |
+Contrastado con el registro de revisión activo `rev-0376` (27.10.2026): **54** operaciones de fachada, **61** herramientas MCP, **50** operaciones `query` con **21** subcomandos de CLI, **29** lenguas por árbol de sintaxis y **40** como texto, **84** formatos en el registro; el índice propio de RAGRAF — 858 archivos, 5 130 nodos, 67 428 aristas.
 
-Para dar escala: RAGRAF indexa su propio árbol de trabajo (648 archivos, 140 741 líneas, más que este subconjunto publicado) en 3 620 símbolos, 46 296 aristas y 3 417 fragmentos en **74 s**, de los cuales 63 s corresponden a la etapa opcional Joern/CPG (`rev-0156`, medición del 16.10.2026; `capability=full`, 0 archivos con error). El análisis detallado está en la [wiki → Benchmarks and Limits](https://github.com/paulmann/RAGRAF/wiki/11-Benchmarks-and-Limits).
-
-**Banco de pruebas medido, sin identificar.** En el registro hay **28 corpus, 25 indexados**: 10 con capa CPG y 15 en modo `degraded`. En 16 de ellos la entrada de revisión se leyó el 16.10.2026: **7 527 archivos, 94 528 símbolos, 791 871 aristas, 86 790 fragmentos**. Los nombres de los proyectos, las rutas y los dominios están ocultos a propósito: las etiquetas se ordenan por tamaño y solo las resuelve el mapa privado del autor.
-
-| Corpus | Tipo | Archivos | Símbolos | Aristas | Modo |
-|---|---|---|---|---|---|
-| C-02 | aplicación web en PHP | 2 722 | 32 761 | 355 192 | degraded |
-| C-04 | servicio / escritorio en C# | 1 274 | 20 331 | 98 605 | degraded |
-| C-05 | aplicación web en PHP | 928 | 17 381 | 99 029 | full |
-| C-18 | conjunto de automatización en PowerShell | 81 | 324 | 4 214 | degraded |
-| C-24 | Markdown + bash (el más pequeño) | 18 | 184 | 1 515 | degraded |
-
-La tabla completa de 16 filas, las reglas de anonimización y una salvedad sobre el recuento están en la [wiki → Benchmarks and Limits](https://github.com/paulmann/RAGRAF/wiki/11-Benchmarks-and-Limits). La salvedad importa al citar cifras: el registro de corpus y la entrada de revisión dan totales **distintos** para una misma revisión (medido en un mismo corpus: 8 721 frente a 4 498 símbolos, 41 201 frente a 56 106 aristas), por lo que todas las cifras anteriores proceden de la **entrada de revisión**, la que devuelve el sobre de respuesta.
+El banco de pruebas, el volumen de la entrega y las corridas de pruebas no se repiten aquí a propósito: cambian, y una cifra copiada sería más pronto falsa que correcta.
 
 ---
 
@@ -203,16 +179,16 @@ El script creará un entorno virtual en `~/.ragraf/venv`, instalará las depende
 Variantes útiles:
 
 ```powershell
-# установить и сразу подготовить корпус для своего проекта
+# instalar y preparar de inmediato un corpus para el propio proyecto
 pwsh -File scripts/install.ps1 -Project C:\work\myproject
 
-# то же плюс полная индексация (скачает модель эмбеддингов ~240 МБ)
+# lo mismo más la indexación completa (descarga el modelo de embeddings, ~240 MB)
 pwsh -File scripts/install.ps1 -Project C:\work\myproject -Index
 
-# индексация без векторов: модель не скачивается, лексический поиск работает
+# indexación sin vectores: no se descarga el modelo, la búsqueda léxica funciona
 pwsh -File scripts/install.ps1 -Project C:\work\myproject -Index -NoVectors
 
-# в сети с TLS-инспекцией (корпоративный прокси)
+# en una red con inspección TLS (proxy corporativo)
 pwsh -File scripts/install.ps1 -WithTruststore
 ```
 
@@ -225,7 +201,7 @@ git clone https://github.com/paulmann/RAGRAF.git
 cd RAGRAF
 python -m venv .venv
 . .venv/bin/activate            # Windows: .venv\Scripts\Activate.ps1
-pip install -e .                # или: pip install -r requirements.txt
+pip install -e .                # o: pip install -r requirements.txt
 ragraf --version
 ```
 
@@ -252,23 +228,23 @@ El archivo se guarda en `.tools/downloads/`; el script es idempotente. El conjun
 ## Primeros pasos
 
 ```bash
-# 1. Подготовить корпус: найти, досоздать, пересобрать отставший индекс.
-#    Корпус для незнакомого каталога создаётся этой же командой.
+# 1. Preparar el corpus: encontrarlo, crearlo si falta, reconstruir el índice atrasado.
+#    El corpus de un directorio desconocido lo crea este mismo comando.
 ragraf ensure C:\work\myproject
 
-# 2. Проверить окружение (отчёт по 11 компонентам).
-#    ВНИМАНИЕ: команда ВСЕГДА возвращает код 0 — это не гейт, читайте отчёт.
-ragraf -p <конфиг> selftest
+# 2. Comprobar el entorno (informe sobre 11 componentes).
+#    ATENCIÓN: el comando SIEMPRE devuelve el código 0 — no es una puerta, lea el informe.
+ragraf -p <config> selftest
 
-# 3. Спросить
-ragraf -p <конфиг> query search "задержка переиндексации"
-ragraf -p <конфиг> query symbol --name corpus_hash
-ragraf -p <конфиг> query code --name corpus_hash
-ragraf -p <конфиг> query callers --name dedupe
-ragraf -p <конфиг> query impact --target Facade --depth 2
+# 3. Preguntar
+ragraf -p <config> query search "retraso de reindexación"
+ragraf -p <config> query symbol --name corpus_hash
+ragraf -p <config> query code --name corpus_hash
+ragraf -p <config> query callers --name dedupe
+ragraf -p <config> query impact --target Facade --depth 2
 
-# 4. Свежесть: изменился ли код после индексации
-ragraf -p <конфиг> check
+# 4. Actualidad: ¿cambió el código después de la indexación?
+ragraf -p <config> check
 ```
 
 La lista completa de comandos está en `ragraf --help`. Importante: **las claves globales `--project/-p` y `--json` se colocan ANTES del subcomando** (`ragraf -p cfg query search ...`), y las claves propias del subcomando, después de él.
@@ -276,13 +252,13 @@ La lista completa de comandos está en `ragraf --help`. Importante: **las claves
 ### Gestión del corpus
 
 ```bash
-ragraf init C:\work\myproject         # создать конфигурацию корпуса и показать путь к ней
-ragraf -p <конфиг> register           # зарегистрировать разработку в реестре
-ragraf -p <конфиг> index              # полная индексация
-ragraf -p <конфиг> reindex            # переиндексация + архивация журнала расхождений
-ragraf -p <конфиг> drift --scan       # зарегистрировать различия, НЕ меняя индекс
-ragraf -p <конфиг> status             # состояние: ревизия, покрытие, размер журнала
-ragraf -p <конфиг> usage              # телеметрия: обращения, факты, оценка эффекта
+ragraf init C:\work\myproject         # crear la configuración del corpus y mostrar su ruta
+ragraf -p <config> register           # registrar el proyecto en el registro
+ragraf -p <config> index              # indexación completa
+ragraf -p <config> reindex            # reindexación + archivo del registro de divergencias
+ragraf -p <config> drift --scan       # registrar divergencias SIN tocar el índice
+ragraf -p <config> status             # estado: revisión, cobertura, tamaño del registro
+ragraf -p <config> usage              # telemetría: llamadas, hechos, estimación del efecto
 ```
 
 ### Conexión a un agente como servidor MCP
@@ -330,7 +306,7 @@ Se abre en `127.0.0.1:8777` y escucha solo en esa dirección. Muestra los corpus
 **Sobre Internet y los certificados.** En una red con inspección TLS (proxy corporativo) la descarga del modelo falla en la verificación del certificado. Se resuelve instalando `truststore`:
 
 ```bash
-pip install truststore      # или: install.ps1 -WithTruststore
+pip install truststore      # o: install.ps1 -WithTruststore
 ```
 
 En una red doméstica el paquete no hace falta. Medido: sin él, el rechazo `certificate verify failed`; con él, los 240 MB se descargan en 9,2 s.
@@ -346,13 +322,13 @@ En una red doméstica el paquete no hace falta. Medido: sin él, el rechazo `cer
 | [ragraf.ru](https://ragraf.ru) | sitio público: capacidades, benchmarks medidos, emulador del panel de administración |
 | [Wiki](https://github.com/paulmann/RAGRAF/wiki) | 15 páginas: primeros pasos, referencia de operaciones, CLI, MCP, capa CPG, diagnóstico, FAQ |
 | [Documentación (Pages)](https://paulmann.github.io/RAGRAF/) | este conjunto de documentación con búsqueda: se compila y se publica con el flujo `pages.yml` |
-| [`docs/ru/02_architecture/ARCHITECTURE.md`](docs/ru/02_architecture/ARCHITECTURE.md) | principios, componentes, esquema de los almacenes, contrato de operaciones |
-| [`docs/ru/02_architecture/TZ.md`](docs/ru/02_architecture/TZ.md) | requisitos funcionales y no funcionales, criterios de aceptación |
-| [`docs/ru/03_implementation/INTEGRATION.md`](docs/ru/03_implementation/INTEGRATION.md) | conexión a un agente: MCP, reglas de trabajo, reglamento |
-| [`docs/ru/03_implementation/CPG_INTEGRATION.md`](docs/ru/03_implementation/CPG_INTEGRATION.md) | grafo de propiedades del código: Joern, JDK, modos de degradación |
-| [`docs/ru/skills/ragraf-core/SKILL.md`](docs/ru/skills/ragraf-core/SKILL.md) | habilidad de trabajo con el índice: elección de la operación, recuperación |
-| [`docs/ru/05_article/RAGRAF_ARTICLE.md`](docs/ru/05_article/RAGRAF_ARTICLE.md) | artículo de repaso: pila tecnológica, arquitectura, mediciones |
-| [`docs/DEFECTS.md`](docs/DEFECTS.md) | registro de los defectos encontrados; cada hallazgo lleva su prueba `archivo:línea` |
+| [`docs/02_architecture/ARCHITECTURE.md`](docs/02_architecture/ARCHITECTURE.md) | principios, componentes, esquema de los almacenes, contrato de operaciones |
+| [`docs/02_architecture/TZ.md`](docs/02_architecture/TZ.md) | requisitos funcionales y no funcionales, criterios de aceptación |
+| [`docs/03_implementation/INTEGRATION.md`](docs/03_implementation/INTEGRATION.md) | conexión a un agente: MCP, reglas de trabajo, reglamento |
+| [`docs/03_implementation/CPG_INTEGRATION.md`](docs/03_implementation/CPG_INTEGRATION.md) | grafo de propiedades del código: Joern, JDK, modos de degradación |
+| [`docs/skills/ragraf-core/SKILL.md`](docs/skills/ragraf-core/SKILL.md) | habilidad de trabajo con el índice: elección de la operación, recuperación |
+| [`docs/05_article/RAGRAF_ARTICLE.md`](docs/05_article/RAGRAF_ARTICLE.md) | artículo de repaso: pila tecnológica, arquitectura, mediciones |
+| [`docs/03_implementation/RELEASE-SOURCES.md`](docs/03_implementation/RELEASE-SOURCES.md) | origen de cada archivo de la entrega y estado de cada traducción |
 | [`ROADMAP.md`](ROADMAP.md) | mejoras previstas con identificadores estables (`R-*`) |
 
 ---
@@ -360,14 +336,14 @@ En una red doméstica el paquete no hace falta. Medido: sin él, el rechazo `cer
 ## Desarrollo
 
 ```bash
-# тесты запускаются отдельными скриптами — единого раннера нет
+# las pruebas se ejecutan como scripts sueltos — no hay un runner común
 python tests/test_lang_routing.py
 python tests/test_watch.py
 
-# чекер конвенций проекта (14 проверок)
+# verificador de convenciones del proyecto (14 comprobaciones)
 pwsh -NoLogo -NoProfile -File tools/Invoke-ProjectDoctrine.ps1
 
-# актуализация индекса самого RAGRAF
+# actualizar el índice de RAGRAF mismo
 python tools/ragraf.py ensure .
 ```
 
@@ -423,6 +399,8 @@ Si esto le ha ahorrado una ventana de contexto, una estrella ayuda a que el sigu
 ## Licencia
 
 **[Business Source License 1.1](LICENSE)** (BUSL-1.1, Community). Las condiciones están en el archivo [`LICENSE`](LICENSE); la expresión legible por máquina es `license = "BUSL-1.1"` en `pyproject.toml`. La historia de los cambios de licencia (MIT → PolyForm Noncommercial → BUSL-1.1) está registrada en [CHANGELOG.md](CHANGELOG.md).
+
+**Niveles de licencia.** Community, Pro y Enterprise son niveles de **una** entrega cerrada, no tres conjuntos separados: el nivel decide qué queda abierto en la misma colección de archivos, y el paso entre niveles es una activación de licencia, no una instalación. Las condiciones están en [`EULA.md`](EULA.md) y la asignación de capacidades a los niveles en `src/ragraf/edition_baseline.json`; `connectors` y `fleet` no forman parte del objeto en ningún nivel y están nombrados en el plan de desarrollo.
 
 > No se puede confiar en la insignia de licencia de GitHub: no toda expresión se reconoce, y BUSL-1.1 puede mostrarse como «Other». Las fuentes de verdad son el archivo `LICENSE` y el campo `license` de `pyproject.toml`.
 

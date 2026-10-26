@@ -331,8 +331,6 @@ DECLARED: tuple[dict, ...] = tuple(
     dict(doc="docs/03_implementation/HARNESS_INTEGRATION.md", ref="src/ragraf/mcp_server.py:908-937", key="E"),
     # docs/03_implementation/RELEASE-SOURCES.md
     dict(doc="docs/03_implementation/RELEASE-SOURCES.md", ref=".github/workflows/ci.yml:125", key="C"),
-    dict(doc="docs/03_implementation/RELEASE-SOURCES.md", ref="community/README.ru.md:429", key="C"),
-    dict(doc="docs/03_implementation/RELEASE-SOURCES.md", ref="community/README.ru.md:431", key="C"),
     dict(doc="docs/03_implementation/RELEASE-SOURCES.md", ref="community/CITATION.cff:34", key="C"),
     dict(doc="docs/03_implementation/RELEASE-SOURCES.md", ref="community/mkdocs.yml:26", key="C"),
     dict(doc="docs/03_implementation/RELEASE-SOURCES.md", ref="community/CONTRIBUTING.md:73", key="C"),
