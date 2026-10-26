@@ -7,7 +7,7 @@
 
 [**官网**](https://ragraf.ru) · [**Wiki**](https://github.com/paulmann/RAGRAF/wiki) · [**文档（Pages）**](https://paulmann.github.io/RAGRAF/) · [**发行版**](https://github.com/paulmann/RAGRAF/releases) · [**讨论**](https://github.com/paulmann/RAGRAF/discussions)
 
-![RAGRAF — 面向 LLM 智能体的图-向量代码知识库：40 个 MCP 工具、带 file:line 引用的可验证事实、完全本地运行](assets/social-preview.png)
+![RAGRAF — 面向 LLM 智能体的图-向量代码知识库：61 个 MCP 工具、带 file:line 引用的可验证事实、完全本地运行](assets/social-preview.png)
 
 一个回答智能体关于代码库问题的助手——*代码在哪里、谁在调用它、改动会破坏什么、附近类似功能是怎么做的*——给出可验证的事实（`file:line`），而不是盲目的 `rg` 和整文件通读。Python 3.13+、SQLite（图 + FTS5 + 向量在同一个文件里）、tree-sitter、无 torch 的本地嵌入。**一切都在代码所在的机器上运行**：不需要启动服务，索引不会上传到云端——这就是针对你仓库的本地 RAG 索引。可选的代码属性图层（Java + Joern）解锁切片；没有它，产品照常工作，并如实说明这一点。
 
@@ -65,13 +65,13 @@ RAGRAF 用索引取代这条路径。智能体通过固定操作提问，得到�
 | 审别人的 diff | `diff`、`drift_report`、`live_read` | 变化的符号与边（含回归），以及带差异标注的当前文件 |
 | 找副本（`Files.php` … `Files7.php`） | `duplicates` | 哪些文件互为副本，哪一份**有证明地**是活跃版本 |
 | 「代码里别处是怎么做的？」 | `search`（BM25 + 向量，混合检索） | 语料的排序片段；回答本身不需要嵌入模型 |
-| 把索引接到智能体上 | **40 个 MCP 工具** `ragraf_*` 或 CLI | 同一批操作走 stdio——见 [`docs/ru/03_implementation/INTEGRATION.md`](docs/ru/03_implementation/INTEGRATION.md) |
+| 把索引接到智能体上 | **61 个 MCP 工具** `ragraf_*` 或 CLI | 同一批操作走 stdio——见 [`docs/ru/03_implementation/INTEGRATION.md`](docs/ru/03_implementation/INTEGRATION.md) |
 
 ---
 
 ## 功能
 
-**38 个操作**作用于仓库——固定集合，没有面向图的查询语言：
+**54 个操作**作用于仓库——固定集合，没有面向图的查询语言：
 
 | 操作 | 回答什么问题 |
 |---|---|
@@ -106,7 +106,7 @@ RAGRAF 用索引取代这条路径。智能体通过固定操作提问，得到�
 
 另外还有两种模式——不是操作，而是回答的形式：**`answer=true`** 返回带引用的成文回答，而不是结构化结果（P2-2）；`brief=true` 返回回答的简短外壳。`usage` 显示效果指标（`saved_calls`、`hit_rate`、`avg_ms`、`misses`、`stale_served`）。
 
-同一批操作也可以作为 **40 个 MCP 工具**（`ragraf_*`）使用——用于作为服务器接入智能体，也可以通过 CLI 使用。单独一组工具是数据库活层：`ragraf_db_schema`、`ragraf_db_table`、`ragraf_db_relations`、`ragraf_db_sample`、`ragraf_db_drift`、`ragraf_db_cross`。
+同一批操作也可以作为 **61 个 MCP 工具**（`ragraf_*`）使用——用于作为服务器接入智能体，也可以通过 CLI 使用。单独一组工具是数据库活层：`ragraf_db_schema`、`ragraf_db_table`、`ragraf_db_relations`、`ragraf_db_sample`、`ragraf_db_drift`、`ragraf_db_cross`。
 第二十四个是 `use_project`：当一个服务器服务多个项目时用来选择语料。`context` 回答选中了哪个语料、依据是什么：没有它，关于别的项目的回答与本项目的回答无法区分。
 
 **十六种语言**按树解析（图的节点与边）：PHP、Python、JavaScript、TypeScript、Java、C#、C、C++、Ruby、Lua、Go、Perl、bash、PowerShell、CSS、HTML——十三个通用剖面加上 PHP、CSS 和 HTML 的专用提取器。另有十一种以纯文本接入——文件能被搜到，但不产生节点：Markdown、SQL、YAML、JSON、TOML、INI、XML、RST、Rust、batch、普通文本。共映射 55 种扩展名。
@@ -119,16 +119,16 @@ RAGRAF 用索引取代这条路径。智能体通过固定操作提问，得到�
 
 | 面 | 数量 | 从哪里测得 |
 |---|---|---|
-| 门面操作 | **38** | `src/ragraf/facade.py` 中的 `def op_*` |
-| MCP 工具 | **40**——其中 6 个是数据库活层 | `src/ragraf/mcp_server.py` 中的 `ragraf_*` 名称 |
+| 门面操作 | **54** | `src/ragraf/facade.py` 中的 `def op_*` |
+| MCP 工具 | **61**——其中 6 个是数据库活层 | `src/ragraf/mcp_server.py` 中的 `ragraf_*` 名称 |
 | MCP 资源 / 提示 | 3 + 1 个 URI 模板 / 2 | `ragraf://status`、`ragraf://catalog`、`ragraf://corpus/{name}/map`；提示 `ragraf-check`、`ragraf-repair` |
-| CLI 子命令 / `query` 操作 | 14 / **39** | `src/ragraf/cli.py` 中的 `add_parser(…)` 和 `OPS` |
+| CLI 子命令 / `query` 操作 | 21 / **50** | `src/ragraf/cli.py` 中的 `add_parser(…)` 和 `OPS` |
 | 按树解析的语言 | **16** | `src/ragraf/config.py` 中的 `TREE_LANGS` |
 | 以纯文本接入的语言 | **11** | `LANG_BY_EXT` 的其余取值 |
 | 已映射的扩展名 | 55 | `LANG_BY_EXT` |
 | 管理面板 API 路由 | 32 | `src/ragraf/admin_server.py` |
 | 运行时依赖 | 7（+1 个可选 `tls` 集合） | `pyproject.toml` |
-| `src/` 中的 Python | 50 个文件 · 37 592 行 | 发布树 |
+| `src/` 中的 Python | 67 个文件 · 52 527 行 | 发布树 |
 | PowerShell——安装器、包装器、检查器 | 5 个文件 · 3 423 行 | 发布树 |
 | Markdown | 28 个文件（`docs/` 中 20 个，其中 9 个俄语）+ 15 个 wiki 页面 | 发布树与 wiki |
 | 可移植测试集 | 6 个集合 · **164 项检查，0 项失败** | 每个集合单独运行 |

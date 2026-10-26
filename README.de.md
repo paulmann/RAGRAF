@@ -7,7 +7,7 @@
 
 [**Webseite**](https://ragraf.ru) · [**Wiki**](https://github.com/paulmann/RAGRAF/wiki) · [**Dokumentation (Pages)**](https://paulmann.github.io/RAGRAF/) · [**Veröffentlichungen**](https://github.com/paulmann/RAGRAF/releases) · [**Diskussionen**](https://github.com/paulmann/RAGRAF/discussions)
 
-![RAGRAF — graph- und vektorbasierte Wissensdatenbank über Quellcode für LLM-Agenten: 40 MCP-Werkzeuge, überprüfbare Fakten mit der Angabe Datei:Zeile, vollständig lokal](assets/social-preview.png)
+![RAGRAF — graph- und vektorbasierte Wissensdatenbank über Quellcode für LLM-Agenten: 61 MCP-Werkzeuge, überprüfbare Fakten mit der Angabe Datei:Zeile, vollständig lokal](assets/social-preview.png)
 
 Ein Assistent, der die Fragen eines Agenten zur Codebasis beantwortet — *wo etwas liegt, wer es aufruft, was bei einer Änderung bricht, wie Ähnliches daneben gelöst ist* — mit überprüfbaren Fakten (`Datei:Zeile`) statt blindem `rg` und dem Lesen ganzer Dateien. Python 3.13+, SQLite (Graph + FTS5 + Vektoren in einer Datei), tree-sitter, lokale Einbettungen ohne torch. **Alles läuft auf der Maschine, auf der der Code liegt**: kein Dienst muss gestartet werden, der Index geht nicht in die Cloud — ein lokaler RAG-Index über Ihr Repository. Die optionale Schicht des Code-Property-Graphen (Java + Joern) eröffnet Schnitte; ohne sie arbeitet das Produkt und sagt das offen.
 
@@ -65,13 +65,13 @@ Ein wichtiger Vorbehalt, der meist weggelassen wird: **der Gewinn um den Faktor 
 | Sie arbeiten einen fremden Diff durch | `diff`, `drift_report`, `live_read` | geänderte Symbole und Kanten einschließlich Regressionen sowie die aktuelle Datei mit Kennzeichnung der Abweichungen |
 | Sie suchen Kopien (`Files.php` … `Files7.php`) | `duplicates` | welche Dateien Kopien sind und welche Kopie **belegt** die aktive ist |
 | „Wie ist das an anderen Stellen im Code gelöst?" | `search` (BM25 + Vektoren, hybrid) | rangierte Ausschnitte des Korpus; für die Antworten selbst ist kein Einbettungsmodell nötig |
-| Sie binden den Index an einen Agenten an | **40 MCP-Werkzeuge** `ragraf_*` oder die CLI | dieselben Operationen über stdio — siehe [`docs/ru/03_implementation/INTEGRATION.md`](docs/ru/03_implementation/INTEGRATION.md) |
+| Sie binden den Index an einen Agenten an | **61 MCP-Werkzeuge** `ragraf_*` oder die CLI | dieselben Operationen über stdio — siehe [`docs/ru/03_implementation/INTEGRATION.md`](docs/ru/03_implementation/INTEGRATION.md) |
 
 ---
 
 ## Funktionen
 
-**38 Operationen** auf dem Repository — ein fester Satz, ohne Abfragesprache für den Graphen:
+**54 Operationen** auf dem Repository — ein fester Satz, ohne Abfragesprache für den Graphen:
 
 | Operation | Beantwortet die Frage |
 |---|---|
@@ -106,7 +106,7 @@ Ein wichtiger Vorbehalt, der meist weggelassen wird: **der Gewinn um den Faktor 
 
 Zwei weitere Modi sind keine Operationen, sondern eine Form der Antwort: **`answer=true`** liefert eine formulierte Antwort mit Verweisen statt eines strukturellen Ergebnisses (P2-2), und `brief=true` eine knappe Hülle der Antwort. `usage` zeigt die Kennzahlen des Effekts (`saved_calls`, `hit_rate`, `avg_ms`, `misses`, `stale_served`).
 
-Dieselben Operationen sind als **40 MCP-Werkzeuge** (`ragraf_*`) verfügbar — zum Anbinden an einen Agenten als Server — und über die CLI. Eine eigene Gruppe von Werkzeugen ist die lebende Schicht der Datenbanken: `ragraf_db_schema`, `ragraf_db_table`, `ragraf_db_relations`, `ragraf_db_sample`, `ragraf_db_drift`, `ragraf_db_cross`.
+Dieselben Operationen sind als **61 MCP-Werkzeuge** (`ragraf_*`) verfügbar — zum Anbinden an einen Agenten als Server — und über die CLI. Eine eigene Gruppe von Werkzeugen ist die lebende Schicht der Datenbanken: `ragraf_db_schema`, `ragraf_db_table`, `ragraf_db_relations`, `ragraf_db_sample`, `ragraf_db_drift`, `ragraf_db_cross`.
 Das vierundzwanzigste ist `use_project`: die Wahl des Korpus, wenn ein Server mehrere Projekte bedient. `context` antwortet, welcher Korpus gewählt ist und auf welcher Grundlage: ohne es waren Antworten über ein fremdes Projekt nicht von Antworten über das eigene zu unterscheiden.
 
 **Sechzehn Sprachen** werden über einen Syntaxbaum zerlegt (Knoten und Kanten des Graphen): PHP, Python, JavaScript, TypeScript, Java, C#, C, C++, Ruby, Lua, Go, Perl, bash, PowerShell, CSS, HTML — dreizehn allgemeine Profile plus eigene Extraktoren für PHP, CSS und HTML. Elf weitere werden als Text angebunden — die Dateien sind über die Suche auffindbar, geben aber keine Knoten: Markdown, SQL, YAML, JSON, TOML, INI, XML, RST, Rust, batch, reiner Text. Insgesamt sind 55 Erweiterungen zugeordnet.
@@ -119,16 +119,16 @@ Alle Zahlen unten sind am veröffentlichten Baum am **16.10.2026** gemessen — 
 
 | Oberfläche | Anzahl | Woher gemessen |
 |---|---|---|
-| Operationen der Fassade | **38** | `def op_*` in `src/ragraf/facade.py` |
-| MCP-Werkzeuge | **40** — davon 6 für die lebende Schicht der Datenbanken | die Namen `ragraf_*` in `src/ragraf/mcp_server.py` |
+| Operationen der Fassade | **54** | `def op_*` in `src/ragraf/facade.py` |
+| MCP-Werkzeuge | **61** — davon 6 für die lebende Schicht der Datenbanken | die Namen `ragraf_*` in `src/ragraf/mcp_server.py` |
 | MCP-Ressourcen / Prompts | 3 + 1 URI-Vorlage / 2 | `ragraf://status`, `ragraf://catalog`, `ragraf://corpus/{name}/map`; die Prompts `ragraf-check`, `ragraf-repair` |
-| CLI-Unterbefehle / `query`-Operationen | 14 / **39** | `add_parser(…)` und `OPS` in `src/ragraf/cli.py` |
+| CLI-Unterbefehle / `query`-Operationen | 21 / **50** | `add_parser(…)` und `OPS` in `src/ragraf/cli.py` |
 | Sprachen, über den Syntaxbaum zerlegt | **16** | `TREE_LANGS` in `src/ragraf/config.py` |
 | Sprachen, als Text angebunden | **11** | die übrigen Werte von `LANG_BY_EXT` |
 | Zugeordnete Erweiterungen | 55 | `LANG_BY_EXT` |
 | API-Routen der Verwaltungsoberfläche | 32 | `src/ragraf/admin_server.py` |
 | Laufzeitabhängigkeiten | 7 (+1 optionaler Satz `tls`) | `pyproject.toml` |
-| Python in `src/` | 50 Dateien · 37 592 Zeilen | veröffentlichter Baum |
+| Python in `src/` | 67 Dateien · 52 527 Zeilen | veröffentlichter Baum |
 | PowerShell — Installationsprogramm, Hüllen, Prüfprogramm | 5 Dateien · 3 423 Zeilen | veröffentlichter Baum |
 | Markdown | 28 Dateien (20 in `docs/`, davon 9 russisch) + 15 Wiki-Seiten | veröffentlichter Baum und Wiki |
 | Übertragbare Testsätze | 6 Sätze · **164 Prüfungen, 0 Fehlschläge** | jeder Satz einzeln gestartet |

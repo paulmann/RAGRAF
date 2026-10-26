@@ -12,7 +12,7 @@ title: "RAGRAF: a graph-and-vector knowledge base of code for LLM agents"
 abstract: >-
   RAGRAF indexes a repository into three SQLite stores inside the indexed project — a
   symbol/call graph, an FTS5 lexicon with vectors, and a revision and drift ledger — and
-  answers an agent's questions through a fixed set of 38 operations (40 tools over MCP):
+  answers an agent's questions through a fixed set of 54 operations (61 tools over MCP):
   where a symbol is defined, who calls it, what a change affects, what is in a database
   table and who writes it, which files are copies, and whether a write matches the schema.
   Every fact carries a path:line reference and its provenance (stated or derived); an

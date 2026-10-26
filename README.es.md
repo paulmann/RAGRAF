@@ -7,7 +7,7 @@
 
 [**Sitio web**](https://ragraf.ru) · [**Wiki**](https://github.com/paulmann/RAGRAF/wiki) · [**Documentación (Pages)**](https://paulmann.github.io/RAGRAF/) · [**Versiones**](https://github.com/paulmann/RAGRAF/releases) · [**Debates**](https://github.com/paulmann/RAGRAF/discussions)
 
-![RAGRAF — base de conocimiento grafo-vectorial sobre el código para agentes LLM: 40 herramientas MCP, hechos verificables con referencia archivo:línea, totalmente local](assets/social-preview.png)
+![RAGRAF — base de conocimiento grafo-vectorial sobre el código para agentes LLM: 61 herramientas MCP, hechos verificables con referencia archivo:línea, totalmente local](assets/social-preview.png)
 
 Un asistente que responde a las preguntas del agente sobre la base de código — *dónde está esto, quién lo llama, qué se romperá al modificarlo, cómo se hizo algo parecido cerca* — con hechos verificables (`archivo:línea`) en lugar de un `rg` a ciegas y de la lectura de archivos completos. Python 3.13+, SQLite (grafo + FTS5 + vectores en un solo archivo), tree-sitter, embeddings locales sin torch. **Todo funciona en la máquina donde está el código**: no hace falta levantar ningún servicio y el índice no va a la nube: es un índice RAG local sobre su repositorio. La capa opcional de grafo de propiedades del código (Java + Joern) abre los cortes; sin ella el producto funciona y lo dice con honestidad.
 
@@ -65,13 +65,13 @@ Una advertencia importante que suele omitirse: **la ventaja de 2 a 3 veces se re
 | Revisa un diff ajeno | `diff`, `drift_report`, `live_read` | símbolos y aristas modificados, incluidas las regresiones, y el archivo actual con las divergencias marcadas |
 | Busca copias (`Files.php` … `Files7.php`) | `duplicates` | qué archivos son copias y cuál de ellas es **demostradamente** la activa |
 | «¿Cómo está hecho esto en otras partes del código?» | `search` (BM25 + vectores, de forma híbrida) | fragmentos del corpus ordenados; para las respuestas en sí no hace falta el modelo de embeddings |
-| Conecta el índice a un agente | **40 herramientas MCP** `ragraf_*` o la CLI | las mismas operaciones por stdio — véase [`docs/ru/03_implementation/INTEGRATION.md`](docs/ru/03_implementation/INTEGRATION.md) |
+| Conecta el índice a un agente | **61 herramientas MCP** `ragraf_*` o la CLI | las mismas operaciones por stdio — véase [`docs/ru/03_implementation/INTEGRATION.md`](docs/ru/03_implementation/INTEGRATION.md) |
 
 ---
 
 ## Capacidades
 
-**38 operaciones** sobre el repositorio: un conjunto fijo, sin lenguaje de consultas al grafo:
+**54 operaciones** sobre el repositorio: un conjunto fijo, sin lenguaje de consultas al grafo:
 
 | Operación | Responde a la pregunta |
 |---|---|
@@ -106,7 +106,7 @@ Una advertencia importante que suele omitirse: **la ventaja de 2 a 3 veces se re
 
 Otros dos modos no son operaciones, sino una forma de respuesta: **`answer=true`** entrega una respuesta redactada con referencias en lugar del resultado estructurado (P2-2), y `brief=true`, una envoltura breve de la respuesta. `usage` muestra las métricas del efecto (`saved_calls`, `hit_rate`, `avg_ms`, `misses`, `stale_served`).
 
-Las mismas operaciones están disponibles como **40 herramientas MCP** (`ragraf_*`), para conectarlas a un agente como servidor, y mediante la CLI. Hay un grupo aparte de herramientas para la capa viva de bases de datos: `ragraf_db_schema`, `ragraf_db_table`, `ragraf_db_relations`, `ragraf_db_sample`, `ragraf_db_drift`, `ragraf_db_cross`.
+Las mismas operaciones están disponibles como **61 herramientas MCP** (`ragraf_*`), para conectarlas a un agente como servidor, y mediante la CLI. Hay un grupo aparte de herramientas para la capa viva de bases de datos: `ragraf_db_schema`, `ragraf_db_table`, `ragraf_db_relations`, `ragraf_db_sample`, `ragraf_db_drift`, `ragraf_db_cross`.
 La vigésima cuarta es `use_project`: la elección de corpus cuando un solo servidor atiende varios proyectos. `context` responde qué corpus está elegido y con qué fundamento: sin ella, las respuestas sobre un proyecto ajeno eran indistinguibles de las respuestas sobre el propio.
 
 **Dieciséis lenguajes** se analizan con árbol (nodos y aristas del grafo): PHP, Python, JavaScript, TypeScript, Java, C#, C, C++, Ruby, Lua, Go, Perl, bash, PowerShell, CSS, HTML — trece perfiles comunes más extractores propios para PHP, CSS y HTML. Otros once se conectan como texto: los archivos aparecen en la búsqueda, pero no aportan nodos: Markdown, SQL, YAML, JSON, TOML, INI, XML, RST, Rust, batch, texto plano. En total se reconocen 55 extensiones.
@@ -119,16 +119,16 @@ Todas las cifras siguientes están medidas sobre el árbol publicado el **16.10.
 
 | Superficie | Cuánto | De dónde está medido |
 |---|---|---|
-| Operaciones de la fachada | **38** | `def op_*` en `src/ragraf/facade.py` |
-| Herramientas MCP | **40** — de ellas 6 son la capa viva de bases | nombres `ragraf_*` en `src/ragraf/mcp_server.py` |
+| Operaciones de la fachada | **54** | `def op_*` en `src/ragraf/facade.py` |
+| Herramientas MCP | **61** — de ellas 6 son la capa viva de bases | nombres `ragraf_*` en `src/ragraf/mcp_server.py` |
 | Recursos / sugerencias MCP | 3 + 1 plantilla de URI / 2 | `ragraf://status`, `ragraf://catalog`, `ragraf://corpus/{name}/map`; sugerencias `ragraf-check`, `ragraf-repair` |
-| Subcomandos de la CLI / operaciones `query` | 14 / **39** | `add_parser(…)` y `OPS` en `src/ragraf/cli.py` |
+| Subcomandos de la CLI / operaciones `query` | 21 / **50** | `add_parser(…)` y `OPS` en `src/ragraf/cli.py` |
 | Lenguajes analizados con árbol | **16** | `TREE_LANGS` en `src/ragraf/config.py` |
 | Lenguajes conectados como texto | **11** | los demás valores de `LANG_BY_EXT` |
 | Extensiones reconocidas | 55 | `LANG_BY_EXT` |
 | Rutas de la API del panel de administración | 32 | `src/ragraf/admin_server.py` |
 | Dependencias en tiempo de ejecución | 7 (+1 conjunto opcional `tls`) | `pyproject.toml` |
-| Python en `src/` | 50 archivos · 37 592 líneas | árbol publicado |
+| Python en `src/` | 67 archivos · 52 527 líneas | árbol publicado |
 | PowerShell: instalador, envoltorios, verificador | 5 archivos · 3 423 líneas | árbol publicado |
 | Markdown | 28 archivos (20 en `docs/`, de ellos 9 en ruso) + 15 páginas de la wiki | árbol publicado y wiki |
 | Conjuntos de pruebas portables | 6 conjuntos · **164 comprobaciones, 0 fallos** | cada conjunto se ejecutó por separado |
