@@ -18,7 +18,7 @@
     результат Ok=$true при нулевом осмотре считается ложным PASS и валит прогон.
 
     Ожидаемый baseline на момент передачи проекта: 0 ошибок, 0 предупреждений,
-    30 проверок — ровно столько, сколько записей в реестре `$script:CheckFunctions`;
+    31 проверка — ровно столько, сколько записей в реестре `$script:CheckFunctions`;
     это сверяет Test-DocumentedNumbers. Прежние две ошибки («запись прогона в реестр
     не покрывала путь ensure» и «документы называли 18 и 16 инструментов там, где
     в коде 23») закрыты
@@ -1443,7 +1443,7 @@ function Test-DocumentedNumbers {
         $headerMatch = [regex]::Match($checkerText, '(?s)<#(.*?)#>')
         $stated = @()
         if ($headerMatch.Success) {
-            $stated = @([regex]::Matches($headerMatch.Groups[1].Value, '(\d+)\s+проверок'))
+            $stated = @([regex]::Matches($headerMatch.Groups[1].Value, '(\d+)\s+проверк[а-я]{0,2}'))
         }
         $registryCount = @($script:CheckFunctions).Count
         if (-not $headerMatch.Success -or $stated.Count -eq 0) {
@@ -2750,6 +2750,67 @@ function Test-DocumentAddresses {
     return New-CheckResult -Name 'document addresses point at their object' -Ok ($problems.Count -eq 0) -Examined $examined -Details $problems
 }
 
+function Test-DeliveryVisibleToGit {
+    <#
+    .SYNOPSIS
+        Ни один файл поставки не скрыт от git правилом .gitignore.
+
+    .DESCRIPTION
+        Измеренный дефект (26.10.2026, публикация 0.3.1): файл
+        `tests/fixtures/proj/config/app.local.php` входил в сборку поставки, но
+        правило `config/` в `.gitignore` не пускало его в коммит. Сборщик переносил
+        файл, проверяльщик его видел, а опубликованное дерево отличалось от
+        проверенного на один файл. Свойство формулируется без имён файлов: состав
+        поставки берётся из манифеста, а у git спрашивается про КАЖДЫЙ его файл.
+
+        Разбор не повторяется здесь: за него отвечает
+        `tools/check_delivery_visible_to_git.py`, а чекер берёт наблюдения из его
+        машинного ответа. Две реализации одного правила расходятся — в этом проекте
+        так уже было.
+
+        Код 2 означает «не проверено» (git недоступен) и валит прогон: молчаливая
+        зелень после провала проверки была бы вторым дефектом.
+    #>
+    $problems = [System.Collections.Generic.List[string]]::new()
+
+    $toolPath = Join-Path $script:ProjectRoot 'tools/check_delivery_visible_to_git.py'
+    if (-not (Test-Path -LiteralPath $toolPath)) {
+        return New-CheckResult -Name 'delivery files are visible to git' -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: нет tools/check_delivery_visible_to_git.py — скрытые от git файлы поставки не проверяются')
+    }
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $python) {
+        return New-CheckResult -Name 'delivery files are visible to git' -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: python не найден в PATH')
+    }
+
+    $raw = & $python.Source $toolPath --json 2>&1
+    $code = $LASTEXITCODE
+    $payload = $null
+    try { $payload = ($raw | Out-String) | ConvertFrom-Json } catch { $payload = $null }
+    if (-not $payload) {
+        return New-CheckResult -Name 'delivery files are visible to git' -Ok $false -Examined 0 `
+            -Details @("машинный ответ проверки не разобран (код $code): " + (($raw | Out-String).Trim()))
+    }
+
+    $examined = [int]$payload.delivered
+    Write-Host ("    видимость поставки для git: файлов {0}, скрыто {1}, код {2}" -f `
+        $payload.delivered, $payload.ignored, $code)
+
+    foreach ($item in @($payload.failures)) {
+        $problems.Add("$($item.path) — скрыт правилом $($item.rule): файл не попадёт в коммит")
+    }
+    if ($code -eq 2) {
+        $problems.Add("не проверено: $($payload.error)")
+    }
+    if ($examined -eq 0) {
+        $problems.Add('ни одного файла поставки не осмотрено: «ноль проверенных» — это не PASS')
+    }
+
+    return New-CheckResult -Name 'delivery files are visible to git' -Ok ($problems.Count -eq 0) -Examined $examined -Details $problems
+}
+
+
 $script:CheckFunctions = @(
     'Test-ProjectLayout'
     'Test-SecretHygiene'
@@ -2781,6 +2842,7 @@ $script:CheckFunctions = @(
     'Test-ExternalAccess'
     'Test-OfflineAttestation'
     'Test-DocumentAddresses'
+    'Test-DeliveryVisibleToGit'
 )
 
 $script:CheckNames = @()
