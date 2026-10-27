@@ -18,7 +18,7 @@
     результат Ok=$true при нулевом осмотре считается ложным PASS и валит прогон.
 
     Ожидаемый baseline на момент передачи проекта: 0 ошибок, 0 предупреждений,
-    36 проверок — ровно столько, сколько записей в реестре `$script:CheckFunctions`;
+    37 проверок — ровно столько, сколько записей в реестре `$script:CheckFunctions`;
     это сверяет Test-DocumentedNumbers. Прежние две ошибки («запись прогона в реестр
     не покрывала путь ensure» и «документы называли 18 и 16 инструментов там, где
     в коде 23») закрыты
@@ -39,6 +39,14 @@
     ДАННЫМИ (docs/03_implementation/prose.json) и сняты замером — ноль по абзацам
     и ноль по предложениям. Граница названа и здесь: проверяется счёт, а не смысл
     предложения; проза в списках, таблицах и блоках команд не считается.
+
+    27.10.2026 добавлена проверка адресов переводов (Test-TranslationAddresses):
+    каждый внешний адрес и каждое изображение основного документа названы в
+    переводе ТЕМ ЖЕ текстом цели, а каждый якорь указывает на существующий
+    заголовок своего файла и стоит в том же порядке, что в README.md. Строгость и
+    допуск объявлены ДАННЫМИ (docs/03_implementation/addresses.json). Граница
+    названа и здесь: сравнивается текст цели и место раздела, а доступность адреса
+    по сети не проверяется — сети у проверки нет.
 
 .PARAMETER ProjectRoot
     Корень проекта. По умолчанию — каталог двумя уровнями выше скрипта, то есть
@@ -3304,6 +3312,161 @@ function Test-ProseProfile {
     return New-CheckResult -Name $checkName -Ok ($problems.Count -eq 0) -Examined $examined -Details $problems
 }
 
+function Test-TranslationAddresses {
+    <#
+    .SYNOPSIS
+        Внешние адреса и якоря переводов README: каждый адрес — поимённо.
+
+    .DESCRIPTION
+        Измеренный дефект (27.10.2026, этап И29). К этому моменту перевод
+        подтверждался пятью способами: состоянием (признак неполноты, шапка,
+        структура разделов, профиль раздела), ссылками на файлы поставки,
+        числами индекса, терминологией и прозой. Все пять называют одну и ту же
+        границу — смысл фраз не проверяется, — но между смыслом и структурой
+        оставался слой, который поддаётся проверке ПОЛНОСТЬЮ: АДРЕСА.
+
+        функция `relative_targets` в `tools/check_translations.py` (строка 227) отбрасывает всё,
+        что начинается с `http://`, `https://`, `mailto:`, `ftp://` и `#`, а
+        покрытие ссылок сравнивает только ОТНОСИТЕЛЬНЫЕ цели. Значит внешний
+        адрес и якорь не сторожил никто: перевод, где ссылка на GitHub заменена
+        на «см. репозиторий», а якорь `#installation` ведёт в никуда, проходил
+        зелёным. Замер 27.10.2026: в README.md восемь внешних адресов, пять
+        изображений и тринадцать якорей на одиннадцать заголовков — свойство
+        выполнялось во всех пяти переводах, но проверять его было нечем.
+
+        Свойства проверяет `tools/check_document_addresses.py`: разбирает
+        разметку, отдельно считает цели ссылок и источники изображений (включая
+        относительную обложку `assets/social-preview.png`, которую прежний замер
+        этапа И20 не видел вовсе), требует от перевода того же ТЕКСТА цели и
+        сверяет порядок якорей с порядком разделов основного документа. Разбор
+        вложенной разметки обязателен: на бейдже `[![CI](badge.svg)](url)`
+        простой шаблон теряет цель внешней ссылки, и черновой замер назвал шесть
+        адресов вместо восьми. Строгость объявлена ДАННЫМИ
+        (`docs/03_implementation/addresses.json`): виды адресов, перечень
+        основного документа числом, допуск на повторы и требование порядка по
+        языку; по всем трём видам допуск равен нулю и снят замером.
+
+        Здесь к ним добавляется то, что видно только PowerShell: языки из
+        объявления сверяются с осмотренными и с файлами в `community/`, а числа
+        внешних адресов, изображений и якорей из объявления — с тем, что
+        инструмент действительно назвал в выводе. Иначе новый перевод
+        `README.fr.md` или новый адрес в README.md остались бы непроверенными
+        при зелёном прогоне — ровно тот класс дефекта, ради которого этот чекер
+        написан.
+
+        Молчаливый пропуск запрещён: нет скрипта, нет python или ноль осмотренных
+        объектов — это провал, а не «нечего проверять».
+    #>
+    $problems = [System.Collections.Generic.List[string]]::new()
+    $checkName = 'translation addresses match the main document'
+
+    $toolPath = Join-Path $script:ProjectRoot 'tools/check_document_addresses.py'
+    if (-not (Test-Path -LiteralPath $toolPath)) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: нет tools/check_document_addresses.py')
+    }
+
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $python) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: python не найден в PATH')
+    }
+
+    $output = & $python.Source $toolPath --root $script:ProjectRoot 2>&1
+    $code = $LASTEXITCODE
+    $text = ($output | Out-String).Trim()
+    Write-Host "    адреса переводов: $text"
+
+    $lines = @($output | Where-Object { $_ -is [string] })
+    $examinedText = ([regex]::Match($text, 'осмотрено:\s*(\d+)')).Groups[1].Value
+    $examined = if ($examinedText) { [int]$examinedText } else { 0 }
+
+    if ($code -ne 0) {
+        foreach ($line in $lines) {
+            if ($line -match '^\s*FAIL:') { $problems.Add(($line -replace '^\s*FAIL:\s*', '')) }
+        }
+        if ($problems.Count -eq 0) {
+            $problems.Add("проверка адресов переводов завершилась кодом $code без расшифровки")
+        }
+    }
+
+    # Объявление адресов: языки, строгость и перечень основного документа.
+    $addressesPath = Join-Path $script:ProjectRoot 'docs/03_implementation/addresses.json'
+    $declared = @()
+    $baseline = $null
+    if (Test-Path -LiteralPath $addressesPath) {
+        $examined++
+        try {
+            $addresses = (Get-ProjectText $addressesPath) | ConvertFrom-Json
+            $declared = @($addresses.languages.PSObject.Properties.Name)
+            $baseline = $addresses.baseline
+        }
+        catch {
+            $problems.Add('docs/03_implementation/addresses.json не разобран: адреса объявлены, а осмотреть их нечем')
+            $declared = @()
+        }
+    }
+    else {
+        $problems.Add('нет docs/03_implementation/addresses.json: адреса переводов не объявлены данными')
+    }
+
+    $seen = @($lines | Where-Object { $_ -match '^язык:\s+\S' } |
+        ForEach-Object { (($_ -replace '^язык:\s+', '') -replace '\s+—.*$', '').Trim() })
+
+    if ($declared.Count -eq 0 -and $problems.Count -eq 0) {
+        $problems.Add('в объявлении нет ни одного языка: строгость пуста, а проверка объявлена')
+    }
+    foreach ($language in $declared) {
+        $examined++
+        if ($seen -notcontains $language) {
+            $problems.Add("язык '$language' объявлен в адресах, но проверка его не осмотрела: строки «язык: $language» в выводе нет")
+        }
+    }
+
+    # Числа объявленного перечня сверяются с тем, что инструмент осмотрел:
+    # адрес, добавленный в README.md без правки объявления, иначе прошёл бы молча.
+    if ($baseline) {
+        $pairs = @(
+            @{ Key = 'external'; Pattern = 'внешних адресов (\d+)'; Label = 'внешних адресов' }
+            @{ Key = 'images'; Pattern = 'изображений (\d+)'; Label = 'изображений' }
+            @{ Key = 'anchors'; Pattern = 'якорей (\d+)'; Label = 'якорей' }
+        )
+        foreach ($pair in $pairs) {
+            $examined++
+            $measured = ([regex]::Match($text, $pair.Pattern)).Groups[1].Value
+            if (-not $measured) {
+                $problems.Add("инструмент не называет число $($pair.Label): сверять объявление не с чем")
+                continue
+            }
+            $declaredValue = $baseline.($pair.Key)
+            if ([int]$measured -ne [int]$declaredValue) {
+                $problems.Add("адреса: объявлено $declaredValue $($pair.Label) в основном документе, а инструмент осмотрел $measured")
+            }
+        }
+    }
+
+    # Файлы в community/ сверяются с осмотренным: новый перевод не должен
+    # оставаться непроверенным даже там, где о нём молчит объявление.
+    $community = Join-Path $script:ProjectRoot 'community'
+    $translations = @(if (Test-Path -LiteralPath $community) {
+        Get-ChildItem -LiteralPath $community -File -Filter 'README.*.md' -ErrorAction SilentlyContinue
+    })
+    $examined++
+    if ($translations.Count -eq 0) {
+        $problems.Add('в community/ нет ни одного перевода README.*.md: адреса объявлено проверять, а сверять не с чем')
+    }
+    if ($translations.Count -gt 0 -and $seen.Count -ne $translations.Count) {
+        $problems.Add("инструмент осмотрел $($seen.Count) переводов, а в community/ их $($translations.Count): перечень и осмотр разошлись")
+    }
+
+    if ($examined -eq 0) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: ни одного объекта не осмотрено — это ложный PASS')
+    }
+
+    return New-CheckResult -Name $checkName -Ok ($problems.Count -eq 0) -Examined $examined -Details $problems
+}
+
 $script:CheckFunctions = @(
     'Test-ProjectLayout'
     'Test-SecretHygiene'
@@ -3341,6 +3504,7 @@ $script:CheckFunctions = @(
     'Test-TranslationStates'
     'Test-Glossary'
     'Test-ProseProfile'
+    'Test-TranslationAddresses'
 )
 
 $script:CheckNames = @()

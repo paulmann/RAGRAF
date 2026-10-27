@@ -88,11 +88,11 @@
 | community/CONTRIBUTING.md | https://github.com/paulmann/RAGRAF/blob/407974446ee0c3246f97b6b861dc3637f892e55f/CONTRIBUTING.md | 4702989e9f57c205f752d6e5977b692316fae0fa4c61c32355d5289e05d98689 | 4702989e9f57c205f752d6e5977b692316fae0fa4c61c32355d5289e05d98689 | да | CONTRIBUTING.md |
 | community/install.ps1 | https://github.com/paulmann/RAGRAF/blob/407974446ee0c3246f97b6b861dc3637f892e55f/install.ps1 | 5a55c8d88ba70066e43147d9b772d98352f46ca82a88ef18a2d8ada71509e8e0 | 5a55c8d88ba70066e43147d9b772d98352f46ca82a88ef18a2d8ada71509e8e0 | да | install.ps1 |
 | community/mkdocs.yml | https://github.com/paulmann/RAGRAF/blob/407974446ee0c3246f97b6b861dc3637f892e55f/mkdocs.yml | fafbfabe326de2139b7075cc831c358729070a28f0e1b90baa26dbf8bcd4a0e4 | fafbfabe326de2139b7075cc831c358729070a28f0e1b90baa26dbf8bcd4a0e4 | да | mkdocs.yml |
-| community/README.de.md | https://github.com/paulmann/RAGRAF/blob/407974446ee0c3246f97b6b861dc3637f892e55f/README.de.md | 46cfde3ddad3347fedec9da38c2758be19d35ded4ec057a7d98e770bd51d3f8c | 46cfde3ddad3347fedec9da38c2758be19d35ded4ec057a7d98e770bd51d3f8c | да | README.de.md |
-| community/README.es.md | https://github.com/paulmann/RAGRAF/blob/407974446ee0c3246f97b6b861dc3637f892e55f/README.es.md | eaf764dcfccfb822dd57ab711a7e78446ff9d117a4c816901ac7f73685aa7a7c | eaf764dcfccfb822dd57ab711a7e78446ff9d117a4c816901ac7f73685aa7a7c | да | README.es.md |
-| community/README.hi.md | https://github.com/paulmann/RAGRAF/blob/407974446ee0c3246f97b6b861dc3637f892e55f/README.hi.md | f6a19724a7c1fe210d2dc6a3654a9b8661e80a9129e96d998cdd41e7beb9617e | f6a19724a7c1fe210d2dc6a3654a9b8661e80a9129e96d998cdd41e7beb9617e | да | README.hi.md |
-| community/README.zh.md | https://github.com/paulmann/RAGRAF/blob/407974446ee0c3246f97b6b861dc3637f892e55f/README.zh.md | 0eb981f8e3583e7cf521e3ca510fb33456dcdb10edcf63fdd78d7690030c4b2d | 0eb981f8e3583e7cf521e3ca510fb33456dcdb10edcf63fdd78d7690030c4b2d | да | README.zh.md |
-| community/README.ru.md | https://github.com/paulmann/RAGRAF/blob/407974446ee0c3246f97b6b861dc3637f892e55f/README.ru.md | de015e09b6460203ac359206d7d70f9aa99bf9cfb328461c2f1821a92f172979 | de015e09b6460203ac359206d7d70f9aa99bf9cfb328461c2f1821a92f172979 | да | README.ru.md |
+| community/README.de.md | https://github.com/paulmann/RAGRAF/blob/407974446ee0c3246f97b6b861dc3637f892e55f/README.de.md | 46cfde3ddad3347fedec9da38c2758be19d35ded4ec057a7d98e770bd51d3f8c | e183b0c80a90d90ed2faaa4a4ce3053969133f43990b15a3aef109366bd86873 | нет | README.de.md |
+| community/README.es.md | https://github.com/paulmann/RAGRAF/blob/407974446ee0c3246f97b6b861dc3637f892e55f/README.es.md | eaf764dcfccfb822dd57ab711a7e78446ff9d117a4c816901ac7f73685aa7a7c | 8dfb43849c6dc09584288c8797de78f52f822f65958fc5a1cabcafb3cfe5fe65 | нет | README.es.md |
+| community/README.hi.md | https://github.com/paulmann/RAGRAF/blob/407974446ee0c3246f97b6b861dc3637f892e55f/README.hi.md | f6a19724a7c1fe210d2dc6a3654a9b8661e80a9129e96d998cdd41e7beb9617e | 0b3bc4edb2db92a2eec96d0254f0e18a2a7d8420980e157b223b2a94dcb388a3 | нет | README.hi.md |
+| community/README.zh.md | https://github.com/paulmann/RAGRAF/blob/407974446ee0c3246f97b6b861dc3637f892e55f/README.zh.md | 0eb981f8e3583e7cf521e3ca510fb33456dcdb10edcf63fdd78d7690030c4b2d | aeff01e8e0054c8f3626bdb14a600f302983450cdc19ef35c8930d905f864a2b | нет | README.zh.md |
+| community/README.ru.md | https://github.com/paulmann/RAGRAF/blob/407974446ee0c3246f97b6b861dc3637f892e55f/README.ru.md | de015e09b6460203ac359206d7d70f9aa99bf9cfb328461c2f1821a92f172979 | df58803403c8a39b3cf2e4e330907c314fa904b96f66a399017e7315a4a35c04 | нет | README.ru.md |
 | community/EULA.md | https://github.com/paulmann/RAGRAF/blob/407974446ee0c3246f97b6b861dc3637f892e55f/EULA.md | de3a473f73d39dedb64f362384554f25584979d62b51f8ea50c5d531bab75a3a | de3a473f73d39dedb64f362384554f25584979d62b51f8ea50c5d531bab75a3a | да | EULA.md |
 | community/ROADMAP.md | https://github.com/paulmann/RAGRAF/blob/407974446ee0c3246f97b6b861dc3637f892e55f/ROADMAP.md | 1973da88532a9dab0b96873df9acf57575b286af40f4904a36e87ccf5c6457be | 1973da88532a9dab0b96873df9acf57575b286af40f4904a36e87ccf5c6457be | да | ROADMAP.md |
 | community/SECURITY.md | https://github.com/paulmann/RAGRAF/blob/407974446ee0c3246f97b6b861dc3637f892e55f/SECURITY.md | dbc7d9c2bd4d3e2d1481a36d00655633c3b45603d1f6753a26c9357414495700 | dbc7d9c2bd4d3e2d1481a36d00655633c3b45603d1f6753a26c9357414495700 | да | SECURITY.md |
@@ -109,6 +109,15 @@
 | scripts/ragraf.ps1 | https://github.com/paulmann/RAGRAF/blob/5b98bccd3dc8f1904e930f03e39a55ba4a20d317/scripts/ragraf.ps1 | f7dbe0bb262b92456945a7863e6263bce3b4678f1cb04ae5f9e81c6a05488813 | f7dbe0bb262b92456945a7863e6263bce3b4678f1cb04ae5f9e81c6a05488813 | да | scripts/ragraf.ps1 |
 | scripts/install-joern.ps1 | https://github.com/paulmann/RAGRAF/blob/5b98bccd3dc8f1904e930f03e39a55ba4a20d317/scripts/install-joern.ps1 | c3ebcf0e2c344b95e1fc1d9c3f60937ac87fe6fac7d76351683c8b8faf4f8a27 | c3ebcf0e2c344b95e1fc1d9c3f60937ac87fe6fac7d76351683c8b8faf4f8a27 | да | scripts/install-joern.ps1 |
 | scripts/PSScriptAnalyzerSettings.psd1 | https://github.com/paulmann/RAGRAF/blob/5b98bccd3dc8f1904e930f03e39a55ba4a20d317/scripts/PSScriptAnalyzerSettings.psd1 | dd5fbe1cb5be2fa1bc9ca6f9fc5b45b3b1ec40cecb452ae5b2d938c6c9473657 | dd5fbe1cb5be2fa1bc9ca6f9fc5b45b3b1ec40cecb452ae5b2d938c6c9473657 | да | scripts/PSScriptAnalyzerSettings.psd1 |
+
+> **Изменение 27.10.2026 (этап И29).** Пять переводов README изменены в живом
+> дереве после переноса из публичного `main`: в каждом обновлены числа собственного
+> индекса RAGRAF (867 файлов, 5 212 узлов, 68 580 рёбер — запись `rev-0411`), больше
+> ничего.
+> Хэш в дереве поэтому не равен хэшу публичного `main`, и признак
+> «совпадает» стоит «нет»: это заявленное расхождение, а не порча переноса. Тем же
+> порядком, что и в прошлых этапах, таблица пересчитывается на голове публикации —
+> тогда признак возвращается в «да».
 
 > **Изменение 27.10.2026 (этап И28).** Пять переводов README изменены в живом
 > дереве после переноса из публичного `main`: в каждом обновлены числа собственного
@@ -325,6 +334,54 @@ Community / Pro / Enterprise вместо формулировки BUSL-1.1 с �
 находкой, и расширение допуска — решение владельца, названное числом в данных, а не
 правка проверки. Зелёный `check_prose_profile` означает «пропущенной прозы по счёту
 нет», а не «перевод верен».
+
+**Внешние адреса и якоря переводов стали проверяемыми (этап И29, 27.10.2026).**
+Тридцать седьмая проверка чекера (`Test-TranslationAddresses`) закрывает последний
+слой той же природы, что терминология и проза: АДРЕСА. Имя из задания этапа —
+`Test-DocumentAddresses` — уже занято проверкой ссылок `файл:строка` (она
+двадцать девятая), поэтому новая названа иначе: переименование работающей
+проверки сломало бы ссылки в документах и её собственную историю.
+
+Прежние проверки видели только ОТНОСИТЕЛЬНЫЕ цели: функция `relative_targets` в
+`tools/check_translations.py` (строка 227) отбрасывает всё, что начинается с `http://`, `https://`,
+`mailto:`, `ftp://` и `#`, а покрытие ссылок (строка 342 того файла) сравнивает
+относительные цели между собой. Значит внешний адрес и якорь в переводе не
+сторожил никто: перевод, где ссылка на вики заменена на «см. репозиторий», а
+якорь `#installation` ведёт в никуда, проходил зелёным. Замер до правки
+27.10.2026: в `README.md` восемь внешних адресов (четыре изображения-бейджа, три
+цели ссылок и две страницы вики), пять изображений (четыре бейджа и обложка
+`assets/social-preview.png`) и тринадцать якорей на одиннадцать заголовков — и всё
+это есть в каждом из пяти переводов, лишнего нет. Свойство выполнялось, но не
+проверялось: расхождение появилось бы молча.
+
+Разбор вынесен в `tools/check_document_addresses.py`. Он отдельно разбирает
+изображения и ссылки (включая вложенный бейдж `[![CI](badge.svg)](url)`) и требует
+от перевода того же ТЕКСТА цели — сравнение идёт по точному написанию адреса, а
+не по похожести, — а от якоря двух свойств: он указывает на существующий заголовок
+СВОЕГО файла (текст якоря не сравнивается: заголовки перевода переведены, и слаг у
+них свой — немецкий `#inhalt` против английского `#contents`) и стоит на том же
+месте, что в основном документе: k-й якорь ведёт в раздел с тем же номером. Второе
+свойство и есть проверка «ведёт туда, а не в никуда»: якорь в чужой раздел
+разрешается, но местом выдаёт себя.
+
+Объявление — ДАННЫЕ: `docs/03_implementation/addresses.json` (виды адресов,
+перечень основного документа числом, допуск на повторы и требование порядка по
+языку). По всем трём видам допуск равен нулю и снят замером, как у прозы. Там же
+записан дефект первого замера: черновой шаблон назвал ШЕСТЬ внешних адресов
+вместо восьми, потому что на бейдже совпадал с внутренним изображением и терял
+цель внешней ссылки. Проверено четырьмя порчами в песочнице: подмена внешнего
+адреса, удаление изображения, якорь в никуда и якорь в чужой раздел — каждая даёт
+ровно одну находку с номером строки и обоими адресами, откат возвращает зелёный
+прогон, пустой вход — провал.
+
+**Граница названа прямо и здесь:** доступность адреса по сети не проверяется —
+сети у проверки нет; проверяется совпадение текста цели и существование якоря в
+своём файле. `https://example.org/removed` пройдёт зелёным, если он назван так же,
+как в основном документе: это проверка ПОЛНОТЫ перевода, а не живости ссылки.
+Правило слагов повторено по документации GitHub, а не вызовом его кода, поэтому
+якорь сверяется с заголовками своего файла (там обе стороны считаются одним
+правилом), а совпадение с отрисовкой GitHub названо границей. Смысл фраз не
+проверяется и здесь.
 
 **Числа в переводах получили сторожа (этап И22).** До него числа индекса в четырёх
 переводах обновлялись вручную — этап И21 обновил их в шести файлах и записал это в отчёт,
