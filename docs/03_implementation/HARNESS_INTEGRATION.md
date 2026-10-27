@@ -107,7 +107,7 @@ UnicodeEncodeError: 'charmap' codec can't encode characters in position 97-105
 `search` + `live_read`) и локальная польза (CLI `feedback`, `analytics`,
 страница `/value`). Числа берутся из кода, а не из этого текста, и сверяются
 проверкой `Test-DocumentedNumbers`: сервер отдаёт **59 инструментов**,
-фасад — 54 операции, CLI — 21 подкоманда; чекер — 33 проверки.
+фасад — 54 операции, CLI — 21 подкоманда; чекер — 35 проверок.
 
 Настройка обоих агентов и полный каталог возможностей —
 `docs/03_implementation/AGENTS_SETUP_AND_CAPABILITIES.md`.

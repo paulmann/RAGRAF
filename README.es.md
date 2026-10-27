@@ -204,7 +204,7 @@ El archivo se guarda en `.tools/downloads/` — el script es idempotente. El con
 ## Primeros pasos
 
 ```bash
-# 1. Preparar el corpus: encontrarlo, crearlo si falta, reconstruir el índice atrasado.
+# 1. Preparar el corpus: encontrarlo, crearlo si falta, reconstruir el índice obsoleto.
 #    Para un directorio desconocido el corpus lo crea este mismo comando.
 ragraf ensure C:\work\myproject
 
@@ -359,11 +359,11 @@ El proyecto se construye para tareas concretas, por eso las propuestas de arquit
 
 ## El proyecto en cifras y el banco de pruebas medido
 
-Cifras publicadas (comprobadas el 26.10.2026; tamaños del índice según la entrada `rev-0397` de 27.10.2026): **54 operaciones** en la fachada, **61 herramientas MCP**, **21** subcomandos de CLI, **29** lenguajes analizados por árbol y **40** conectados como texto (incluido `document`), **84** formatos de datos en el registro (61 lenguajes, 9 familias de documentos, 10 tipos de datos, 4 sin analizador); el índice propio de RAGRAF — 861 archivos, 5 165 nodos y 67 914 aristas (el retrato se compara con la entrada de revisión activa mediante `Test-DocumentedNumbers`: las cifras de una revisión pasada producen un aviso que nombra su `rev_id` y su fecha, y en la publicación eso es una negativa — `tools/release/gate_release.py`; las cifras vivas salen de `python tools/ragraf.py -p config/ragraf.yaml status`).
+Cifras publicadas (comprobadas el 26.10.2026; tamaños del índice según la entrada `rev-0405` de 27.10.2026): **54 operaciones** en la fachada, **61 herramientas MCP**, **21** subcomandos de CLI, **29** lenguajes analizados por árbol y **40** conectados como texto (incluido `document`), **84** formatos de datos en el registro (61 lenguajes, 9 familias de documentos, 10 tipos de datos, 4 sin analizador); el índice propio de RAGRAF — 863 archivos, 5 178 nodos y 68 122 aristas (el retrato se compara con la entrada de revisión activa mediante `Test-DocumentedNumbers`: las cifras de una revisión pasada producen un aviso que nombra su `rev_id` y su fecha, y en la publicación eso es una negativa — `tools/release/gate_release.py`; las cifras vivas salen de `python tools/ragraf.py -p config/ragraf.yaml status`).
 
 **El banco de pruebas, anonimizado** (nombres de proyecto, rutas y dominios eliminados). Las cifras de esta sección son un **retrato del 16.10.2026**, no el estado actual: en ese momento el registro tenía **28 corpus, 25 indexados** — 10 con la capa CPG, 15 en modo `degraded`. Para 16 de ellos la entrada de revisión se leyó el mismo día: **7 527 archivos, 94 528 símbolos, 791 871 aristas, 86 790 fragmentos**.
 
-El tamaño actual del registro se mantiene aparte del retrato a propósito: cambia con cada proyecto conectado, y ponerlo en la tabla de abajo sería presentar la medición de ayer como la de hoy. Se nombra en su propia línea y se compara con `catalog/catalog.json` — **según el registro el 27.10.2026: 42 corpus, 33 indexados**. Una comprobación vigila esta cifra: si diverge del registro, es una observación, no una línea atrasada.
+El tamaño actual del registro se mantiene aparte del retrato a propósito: cambia con cada proyecto conectado, y ponerlo en la tabla de abajo sería presentar la medición de ayer como la de hoy. Se nombra en su propia línea y se compara con `catalog/catalog.json` — **según el registro el 27.10.2026: 42 corpus, 33 indexados**. Una comprobación vigila esta cifra: si diverge del registro, es una observación, no una línea obsoleta.
 
 | Corpus | Tipo | Archivos | Símbolos | Aristas | Modo |
 |---|---|---|---|---|---|

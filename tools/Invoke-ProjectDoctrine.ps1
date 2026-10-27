@@ -18,7 +18,7 @@
     результат Ok=$true при нулевом осмотре считается ложным PASS и валит прогон.
 
     Ожидаемый baseline на момент передачи проекта: 0 ошибок, 0 предупреждений,
-    34 проверки — ровно столько, сколько записей в реестре `$script:CheckFunctions`;
+    35 проверок — ровно столько, сколько записей в реестре `$script:CheckFunctions`;
     это сверяет Test-DocumentedNumbers. Прежние две ошибки («запись прогона в реестр
     не покрывала путь ensure» и «документы называли 18 и 16 инструментов там, где
     в коде 23») закрыты
@@ -26,6 +26,12 @@
     любая ошибка или новое предупреждение — находка. Ожидаемого красного
     состояния у чекера больше нет: если он падает — это либо новый дефект,
     либо сломанное исправление.
+
+    27.10.2026 добавлена проверка терминологии переводов (Test-Glossary): термин
+    основного документа назван в каждом переводе одним из разрешённых слов, и
+    объявлено это ДАННЫМИ (docs/03_implementation/glossary.json), а не словарём в
+    коде. Граница та же, что у состояний переводов: проверяется слово, а не смысл
+    фразы, — зелёный результат не означает «перевод верен».
 
 .PARAMETER ProjectRoot
     Корень проекта. По умолчанию — каталог двумя уровнями выше скрипта, то есть
@@ -1428,6 +1434,10 @@ function Test-DocumentedNumbers {
     }
 
     # Число проверок в шапке — против РЕЕСТРА, а не против литерала.
+    # Формы две: «34 проверки» и «35 проверок». Прежний образец требовал букву «к»
+    # сразу после «провер» и потому родительного падежа множественного числа не
+    # видел: шапка говорила «35 проверок», а проверка объявляла, что числа нет
+    # вовсе (измерено этапом И27 на переходе 34 → 35).
     # Измеренный дефект (25.10.2026): шапка заявляла «14 проверок» при
     # действующих 29, то есть чекер расходился с фактом о самом себе — ровно тот
     # класс, который он ловит в документах и не видел у себя. Свойство
@@ -1443,7 +1453,7 @@ function Test-DocumentedNumbers {
         $headerMatch = [regex]::Match($checkerText, '(?s)<#(.*?)#>')
         $stated = @()
         if ($headerMatch.Success) {
-            $stated = @([regex]::Matches($headerMatch.Groups[1].Value, '(\d+)\s+проверк[а-я]{0,2}'))
+            $stated = @([regex]::Matches($headerMatch.Groups[1].Value, '(\d+)\s+провер(?:ок|к[а-я]{0,2})'))
         }
         $registryCount = @($script:CheckFunctions).Count
         if (-not $headerMatch.Success -or $stated.Count -eq 0) {
@@ -3052,6 +3062,113 @@ function Test-TranslationStates {
     return New-CheckResult -Name $checkName -Ok ($problems.Count -eq 0) -Examined $examined -Details $problems
 }
 
+function Test-Glossary {
+    <#
+    .SYNOPSIS
+        Терминология переводов README объявлена данными и подтверждается вхождениями.
+
+    .DESCRIPTION
+        Измеренный дефект (27.10.2026, этап И27). `tools/check_translations.py`
+        подтверждал, что все пять переводов полные, и честно называл свою границу:
+        «полный» там означает «приведён к текущему продукту и подтверждён структурой,
+        ссылками и числами», а не «переведён без потерь». Смысл фраз машинной
+        проверке не поддаётся — но ТЕРМИНОЛОГИЯ поддаётся, и она расходилась молча.
+        Замер до правки: термин `stale` в русском переводе был назван «отставший
+        индекс» в шаге установки и «устаревшая строка» ниже в том же файле; в
+        немецком — «zurückgebliebener Index» против «veraltete Zeile»; в испанском
+        «índice atrasado» (отставание по времени) вместо состояния факта; в
+        китайском «过期» (истёк срок) и «过时» (устарел) для одного понятия. Подмена
+        слова на синоним проходила зелёной: ни одна проверка слова не считала.
+
+        Свойства проверяет `tools/check_glossary.py`: термин объявлен ДАННЫМИ
+        (`docs/03_implementation/glossary.json`), в каждом переводе назван одним из
+        разрешённых слов, канонический вариант встречается не реже синонимов, а
+        обязательный термин (операция, режим или объект продукта) назван вообще; одно
+        слово перевода не может обозначать два разных понятия (обратный дрейф).
+
+        Здесь к ним добавляется то, что видно только PowerShell: перечень терминов
+        из объявления сверяется с тем, что инструмент действительно осмотрел. Иначе
+        новый термин `quorum` появился бы в словаре и остался непроверенным, а прогон
+        остался бы зелёным — ровно тот класс «зелёной проверки, которая ничего не
+        осмотрела», из-за которого этот чекер и написан.
+
+        Молчаливый пропуск запрещён: нет скрипта, нет python или ноль осмотренных
+        объектов — это провал, а не «нечего проверять».
+    #>
+    $problems = [System.Collections.Generic.List[string]]::new()
+    $checkName = 'translation terminology is declared and holds'
+
+    $toolPath = Join-Path $script:ProjectRoot 'tools/check_glossary.py'
+    if (-not (Test-Path -LiteralPath $toolPath)) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: нет tools/check_glossary.py')
+    }
+
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $python) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: python не найден в PATH')
+    }
+
+    $output = & $python.Source $toolPath --root $script:ProjectRoot 2>&1
+    $code = $LASTEXITCODE
+    $text = ($output | Out-String).Trim()
+    Write-Host "    терминология переводов: $text"
+
+    $lines = @($output | Where-Object { $_ -is [string] })
+    $examinedText = ([regex]::Match($text, 'осмотрено:\s*(\d+)')).Groups[1].Value
+    $examined = if ($examinedText) { [int]$examinedText } else { 0 }
+
+    if ($code -ne 0) {
+        foreach ($line in $lines) {
+            if ($line -match '^\s*FAIL:') { $problems.Add(($line -replace '^\s*FAIL:\s*', '')) }
+        }
+        if ($problems.Count -eq 0) {
+            $problems.Add("проверка терминологии завершилась кодом $code без расшифровки")
+        }
+    }
+
+    # Перечень терминов из объявления сверяется с осмотренным. Инструмент печатает
+    # строку «термин: <имя>» на каждый термин, у которого есть форма в README.md;
+    # термин, которого в основном документе нет, назван находкой — и это не пропуск.
+    $glossaryPath = Join-Path $script:ProjectRoot 'docs/03_implementation/glossary.json'
+    $declared = @()
+    if (Test-Path -LiteralPath $glossaryPath) {
+        $examined++
+        try {
+            $glossary = (Get-ProjectText $glossaryPath) | ConvertFrom-Json
+            $declared = @($glossary.terms | ForEach-Object { [string]$_.term_en })
+        }
+        catch {
+            $problems.Add("docs/03_implementation/glossary.json не разобран: терминология объявлена, а осмотреть её нечем")
+            $declared = @()
+        }
+    }
+    else {
+        $problems.Add('нет docs/03_implementation/glossary.json: терминология переводов не объявлена данными')
+    }
+
+    $seen = @($lines | Where-Object { $_ -match '^термин:\s+\S' } |
+        ForEach-Object { (($_ -replace '^термин:\s+', '') -replace '\s+—.*$', '').Trim() })
+
+    if ($declared.Count -eq 0 -and $problems.Count -eq 0) {
+        $problems.Add('в объявлении нет ни одного термина: словарь пуст, а проверка объявлена')
+    }
+    foreach ($term in $declared) {
+        $examined++
+        if ($seen -notcontains $term) {
+            $problems.Add("термин '$term' объявлен в словаре, но проверка его не осмотрела: строка «термин: $term» в выводе отсутствует")
+        }
+    }
+
+    if ($examined -eq 0) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: ни одного объекта не осмотрено — это ложный PASS')
+    }
+
+    return New-CheckResult -Name $checkName -Ok ($problems.Count -eq 0) -Examined $examined -Details $problems
+}
+
 $script:CheckFunctions = @(
     'Test-ProjectLayout'
     'Test-SecretHygiene'
@@ -3087,6 +3204,7 @@ $script:CheckFunctions = @(
     'Test-RagrafIgnored'
     'Test-SingleDeliveryCopy'
     'Test-TranslationStates'
+    'Test-Glossary'
 )
 
 $script:CheckNames = @()

@@ -88,11 +88,11 @@
 | community/CONTRIBUTING.md | https://github.com/paulmann/RAGRAF/blob/8a7066479271b2ca3e32f74db370fb3087542ee1/CONTRIBUTING.md | 4702989e9f57c205f752d6e5977b692316fae0fa4c61c32355d5289e05d98689 | 4702989e9f57c205f752d6e5977b692316fae0fa4c61c32355d5289e05d98689 | да | CONTRIBUTING.md |
 | community/install.ps1 | https://github.com/paulmann/RAGRAF/blob/8a7066479271b2ca3e32f74db370fb3087542ee1/install.ps1 | 5a55c8d88ba70066e43147d9b772d98352f46ca82a88ef18a2d8ada71509e8e0 | 5a55c8d88ba70066e43147d9b772d98352f46ca82a88ef18a2d8ada71509e8e0 | да | install.ps1 |
 | community/mkdocs.yml | https://github.com/paulmann/RAGRAF/blob/8a7066479271b2ca3e32f74db370fb3087542ee1/mkdocs.yml | fafbfabe326de2139b7075cc831c358729070a28f0e1b90baa26dbf8bcd4a0e4 | fafbfabe326de2139b7075cc831c358729070a28f0e1b90baa26dbf8bcd4a0e4 | да | mkdocs.yml |
-| community/README.de.md | https://github.com/paulmann/RAGRAF/blob/8a7066479271b2ca3e32f74db370fb3087542ee1/README.de.md | 5287e028f1dbd5c0be3f6f58a43672d7ed09174ff418df288880a8ac25e697cc | 5287e028f1dbd5c0be3f6f58a43672d7ed09174ff418df288880a8ac25e697cc | да | README.de.md |
-| community/README.es.md | https://github.com/paulmann/RAGRAF/blob/8a7066479271b2ca3e32f74db370fb3087542ee1/README.es.md | 3c2a8b7ad78167b0b3cc04417fda53d162c817a83c175f5b8b7ac36eafb0087a | 3c2a8b7ad78167b0b3cc04417fda53d162c817a83c175f5b8b7ac36eafb0087a | да | README.es.md |
-| community/README.hi.md | https://github.com/paulmann/RAGRAF/blob/8a7066479271b2ca3e32f74db370fb3087542ee1/README.hi.md | adc9ae408aac23625209180014a72f590e391f52ed492279e868059b6ad38e2b | adc9ae408aac23625209180014a72f590e391f52ed492279e868059b6ad38e2b | да | README.hi.md |
-| community/README.zh.md | https://github.com/paulmann/RAGRAF/blob/8a7066479271b2ca3e32f74db370fb3087542ee1/README.zh.md | d437cbaac67095189507c2f3e550a7591ba8be45ca9c548b21567d385dece1fa | d437cbaac67095189507c2f3e550a7591ba8be45ca9c548b21567d385dece1fa | да | README.zh.md |
-| community/README.ru.md | https://github.com/paulmann/RAGRAF/blob/8a7066479271b2ca3e32f74db370fb3087542ee1/README.ru.md | fa6f6a76bcb03032b9c4961f2bb02d9b3fe0b48dad6e2ff6524bbbdfb6de1957 | fa6f6a76bcb03032b9c4961f2bb02d9b3fe0b48dad6e2ff6524bbbdfb6de1957 | да | README.ru.md |
+| community/README.de.md | https://github.com/paulmann/RAGRAF/blob/8a7066479271b2ca3e32f74db370fb3087542ee1/README.de.md | 5287e028f1dbd5c0be3f6f58a43672d7ed09174ff418df288880a8ac25e697cc | 0a970cab774a90c55c6206a7a728349382ef7c9bc72b44407f18da68fdf874fa | нет | README.de.md |
+| community/README.es.md | https://github.com/paulmann/RAGRAF/blob/8a7066479271b2ca3e32f74db370fb3087542ee1/README.es.md | 3c2a8b7ad78167b0b3cc04417fda53d162c817a83c175f5b8b7ac36eafb0087a | 099fe44fba023c5e442fecba7f982ba19b4da9604b4a4592f4ddcf946bab4783 | нет | README.es.md |
+| community/README.hi.md | https://github.com/paulmann/RAGRAF/blob/8a7066479271b2ca3e32f74db370fb3087542ee1/README.hi.md | adc9ae408aac23625209180014a72f590e391f52ed492279e868059b6ad38e2b | 995fa30a5ab4bd9de473e9b75a3c658bdd13d18f4f79efe1cde5205f75ed2212 | нет | README.hi.md |
+| community/README.zh.md | https://github.com/paulmann/RAGRAF/blob/8a7066479271b2ca3e32f74db370fb3087542ee1/README.zh.md | d437cbaac67095189507c2f3e550a7591ba8be45ca9c548b21567d385dece1fa | 21dfb0f6e48e5ac9ad5a912909381f26187d43abbf0bf85aab9dc3507d2763bc | нет | README.zh.md |
+| community/README.ru.md | https://github.com/paulmann/RAGRAF/blob/8a7066479271b2ca3e32f74db370fb3087542ee1/README.ru.md | fa6f6a76bcb03032b9c4961f2bb02d9b3fe0b48dad6e2ff6524bbbdfb6de1957 | ecdd91da6002313c3a6f6f89062b0c4322fc5a6a1d96559aec6e21b689985885 | нет | README.ru.md |
 | community/EULA.md | https://github.com/paulmann/RAGRAF/blob/8a7066479271b2ca3e32f74db370fb3087542ee1/EULA.md | de3a473f73d39dedb64f362384554f25584979d62b51f8ea50c5d531bab75a3a | de3a473f73d39dedb64f362384554f25584979d62b51f8ea50c5d531bab75a3a | да | EULA.md |
 | community/ROADMAP.md | https://github.com/paulmann/RAGRAF/blob/8a7066479271b2ca3e32f74db370fb3087542ee1/ROADMAP.md | 1973da88532a9dab0b96873df9acf57575b286af40f4904a36e87ccf5c6457be | 1973da88532a9dab0b96873df9acf57575b286af40f4904a36e87ccf5c6457be | да | ROADMAP.md |
 | community/SECURITY.md | https://github.com/paulmann/RAGRAF/blob/8a7066479271b2ca3e32f74db370fb3087542ee1/SECURITY.md | dbc7d9c2bd4d3e2d1481a36d00655633c3b45603d1f6753a26c9357414495700 | dbc7d9c2bd4d3e2d1481a36d00655633c3b45603d1f6753a26c9357414495700 | да | SECURITY.md |
@@ -253,6 +253,28 @@ Community / Pro / Enterprise вместо формулировки BUSL-1.1 с �
 восстановлен из сохранённой копии `editions/legacy-v0.1.0/assets/` (sha256
 сверен) и внесён в манифест поставки; проверка сторожит и это. Прогон
 27.10.2026: 33 проверки, 0 ошибок, 0 предупреждений.
+
+**Терминология переводов стала проверяемой (этап И27, 27.10.2026).** Тридцать пятая
+проверка чекера (`Test-Glossary`) закрывает то, чего не видели ни состояния переводов,
+ни сверка чисел: `tools/check_translations.py` подтверждает, что перевод полный, и сам
+называет границу — «полный» там означает «приведён к текущему продукту и подтверждён
+структурой, ссылками и числами», а не «переведён без потерь». Слово при этом не сторожил
+никто, и термин расходился молча. Замер до правки на одном термине `stale`: в русском
+переводе «отставший индекс» в шаге установки против «устаревшая строка» ниже в том же
+файле; в немецком — «zurückgebliebener Index» против «veraltete Zeile»; в испанском —
+«índice atrasado» и «línea atrasada», то есть отставание по времени там, где речь о
+состоянии факта; в китайском — «过期» (истёк срок) и «过时» (устарел) для одного понятия.
+Подмена слова на синоним проходила зелёной: ни одна проверка слово не считала.
+
+Объявление терминов вынесено в данные — `docs/03_implementation/glossary.json`: семь
+терминов (`corpus`, `degraded`, `slice`, `stale`, `provenance`, `break-even`, `delivery`),
+по языку список допустимых переводов, первый из которых канонический, и признак
+обязательности только там, где термин называет операцию, режим или объект продукта.
+Пять расхождений приведены к каноническому варианту правкой ОДНОГО слова в каждом месте,
+а не переписыванием абзацев. **Граница названа прямо и здесь:** проверяется СЛОВО, а не
+смысл фразы, поэтому пропущенное при сохранённой структуре раздела предложение не видит ни
+эта проверка, ни прежняя; зелёный `check_glossary` означает «термины названы одним словом»,
+а не «перевод верен».
 
 **Числа в переводах получили сторожа (этап И22).** До него числа индекса в четырёх
 переводах обновлялись вручную — этап И21 обновил их в шести файлах и записал это в отчёт,
