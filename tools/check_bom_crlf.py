@@ -62,6 +62,9 @@ FILES = [
     "tools/check_bom_crlf.py",
     # Этап И17: документы единственной поставки и два уровня лицензии.
     "tools/check_single_delivery.py",
+    # Этап И21: состояние переводов README (33-я проверка чекера). Новый файл
+    # вне списка остался бы вне штатной очистки — так уже было с i18n.py.
+    "tools/check_translations.py",
     # конфигурация корпусов
     "config/z-batteryservice.yaml",
     "config/revoap.yaml",

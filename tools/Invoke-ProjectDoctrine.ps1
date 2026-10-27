@@ -18,7 +18,7 @@
     результат Ok=$true при нулевом осмотре считается ложным PASS и валит прогон.
 
     Ожидаемый baseline на момент передачи проекта: 0 ошибок, 0 предупреждений,
-    32 проверки — ровно столько, сколько записей в реестре `$script:CheckFunctions`;
+    33 проверки — ровно столько, сколько записей в реестре `$script:CheckFunctions`;
     это сверяет Test-DocumentedNumbers. Прежние две ошибки («запись прогона в реестр
     не покрывала путь ensure» и «документы называли 18 и 16 инструментов там, где
     в коде 23») закрыты
@@ -2875,6 +2875,108 @@ function Test-SingleDeliveryCopy {
     return New-CheckResult -Name $checkName -Ok ($problems.Count -eq 0) -Examined $examined -Details $problems
 }
 
+function Test-TranslationStates {
+    <#
+    .SYNOPSIS
+        Состояние каждого перевода README объявлено и подтверждается деревом.
+
+    .DESCRIPTION
+        Измеренный дефект (27.10.2026, этап И21). Этап И20 привёл переводы к
+        решению «полный либо частичный», но решение держалось шапкой файла и
+        записью в `docs/03_implementation/RELEASE-SOURCES.md`, то есть не
+        проверялось ничем: зеркало `community/README.ru.md` могло разойтись с
+        `README.md` на одну строку, шапка частичного перевода — исчезнуть,
+        ссылка `docs/ru/**` — вернуться, и ни одна проверка этого не видела.
+        Тот же этап измерил и второй дефект: шапки четырёх переводов ссылались
+        на `assets/social-preview.png`, которого не было ни в живом дереве, ни в
+        поставке, а прежний замер ссылок исключал изображения шаблоном `(?<!!)`
+        — обложка была битой у читателя при зелёном замере.
+
+        Свойства проверяет `tools/check_translations.py`: равенство зеркала с
+        `README.md` плюс ровно пять строк шапки, признак неполноты на своём языке
+        у каждого частичного перевода, перечень недостающего (не менее трёх
+        пунктов), запрещённые пути `docs/ru/**` и `docs/DEFECTS.md`, русский
+        заполнитель команды, кириллица только в ярлыке «Русский» и разрешение
+        каждой относительной ссылки — включая изображения — против состава
+        поставки из манифеста.
+
+        Здесь к ним добавляется то, что видно только PowerShell: перечень
+        переводов в `community/` сверяется с тем, что инструмент действительно
+        осмотрел. Иначе новый файл `README.fr.md` появился бы в дереве и в
+        поставке непроверенным, а прогон остался бы зелёным — ровно тот класс
+        «зелёной проверки, которая ничего не осмотрела», из-за которого этот
+        чекер и написан.
+
+        Молчаливый пропуск запрещён: нет скрипта, нет python или ноль
+        осмотренных объектов — это провал, а не «нечего проверять».
+    #>
+    $problems = [System.Collections.Generic.List[string]]::new()
+    $checkName = 'translation states are declared and hold'
+
+    $toolPath = Join-Path $script:ProjectRoot 'tools/check_translations.py'
+    if (-not (Test-Path -LiteralPath $toolPath)) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: нет tools/check_translations.py')
+    }
+
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $python) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: python не найден в PATH')
+    }
+
+    $output = & $python.Source $toolPath --root $script:ProjectRoot 2>&1
+    $code = $LASTEXITCODE
+    $text = ($output | Out-String).Trim()
+    Write-Host "    состояния переводов: $text"
+
+    $lines = @($output | Where-Object { $_ -is [string] })
+    $examinedText = ([regex]::Match($text, 'осмотрено:\s*(\d+)')).Groups[1].Value
+    $examined = if ($examinedText) { [int]$examinedText } else { 0 }
+
+    if ($code -ne 0) {
+        foreach ($line in $lines) {
+            if ($line -match '^\s*FAIL:') { $problems.Add(($line -replace '^\s*FAIL:\s*', '')) }
+        }
+        if ($problems.Count -eq 0) {
+            $problems.Add("проверка состояний переводов завершилась кодом $code без расшифровки")
+        }
+    }
+
+    # Перечень переводов сверяется с осмотренным. Инструмент печатает строку
+    # «перевод: <путь>» на каждый файл, который действительно прочитал; здесь
+    # она сравнивается с фактическим составом community/.
+    $community = Join-Path $script:ProjectRoot 'community'
+    $translations = @(if (Test-Path -LiteralPath $community) {
+        Get-ChildItem -LiteralPath $community -File -Filter 'README.*.md' -ErrorAction SilentlyContinue
+    })
+    $seen = @($lines | Where-Object { $_ -match '^перевод:\s+\S' } |
+        ForEach-Object { ($_ -replace '^перевод:\s+', '').Trim() })
+
+    $examined++
+    if ($translations.Count -eq 0) {
+        $problems.Add('в community/ нет ни одного перевода README.*.md: состояние переводов объявлено, а осматривать нечего')
+    }
+    foreach ($file in $translations) {
+        $relative = Get-RelativePath $file.FullName
+        $examined++
+        if ($seen -notcontains $relative) {
+            $problems.Add("перевод $relative есть в дереве, но проверка о нём не знает: инструмент его не осмотрел")
+        }
+    }
+    $examined++
+    if ($translations.Count -gt 0 -and $seen.Count -ne $translations.Count) {
+        $problems.Add("инструмент сообщил об осмотре $($seen.Count) переводов, а в community/ их $($translations.Count): перечень и осмотр разошлись")
+    }
+
+    if ($examined -eq 0) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: ни одного объекта не осмотрено — это ложный PASS')
+    }
+
+    return New-CheckResult -Name $checkName -Ok ($problems.Count -eq 0) -Examined $examined -Details $problems
+}
+
 $script:CheckFunctions = @(
     'Test-ProjectLayout'
     'Test-SecretHygiene'
@@ -2908,6 +3010,7 @@ $script:CheckFunctions = @(
     'Test-DocumentAddresses'
     'Test-DeliveryVisibleToGit'
     'Test-SingleDeliveryCopy'
+    'Test-TranslationStates'
 )
 
 $script:CheckNames = @()

@@ -121,7 +121,7 @@ Die Tabelle nennt nur die Operationen der Stufe Community. Die bezahlten Stufen 
 
 Zahlen werden in dieser Übersetzung nicht abgeschrieben: sie ändern sich von Etappe zu Etappe, und die Übersetzung bliebe dahinter zurück. Die geprüften Werte stehen im Hauptdokument [`README.md`](README.md) im Abschnitt „Das Projekt in Zahlen und der gemessene Prüfstand“; sie bewacht `Test-DocumentedNumbers` in [`tools/Invoke-ProjectDoctrine.ps1`](tools/Invoke-ProjectDoctrine.ps1).
 
-Abgeglichen mit dem aktiven Revisionseintrag `rev-0377` (27.10.2026): **54** Fassadenoperationen, **61** MCP-Werkzeuge, **50** `query`-Operationen bei **21** CLI-Unterbefehlen, **29** Sprachen über den Syntaxbaum und **40** als Text, **84** Formate im Register; der eigene Index von RAGRAF — 858 Dateien, 5 130 Knoten, 67 413 Kanten.
+Abgeglichen mit dem aktiven Revisionseintrag `rev-0379` (27.10.2026): **54** Fassadenoperationen, **61** MCP-Werkzeuge, **50** `query`-Operationen bei **21** CLI-Unterbefehlen, **29** Sprachen über den Syntaxbaum und **40** als Text, **84** Formate im Register; der eigene Index von RAGRAF — 859 Dateien, 5 143 Knoten, 67 626 Kanten.
 
 Der Prüfstand, der Umfang der Lieferung und die Testläufe werden hier absichtlich nicht wiederholt: sie ändern sich, und eine abgeschriebene Zahl wäre schneller falsch als richtig.
 
