@@ -18,7 +18,7 @@
     результат Ok=$true при нулевом осмотре считается ложным PASS и валит прогон.
 
     Ожидаемый baseline на момент передачи проекта: 0 ошибок, 0 предупреждений,
-    37 проверок — ровно столько, сколько записей в реестре `$script:CheckFunctions`;
+    38 проверок — ровно столько, сколько записей в реестре `$script:CheckFunctions`;
     это сверяет Test-DocumentedNumbers. Прежние две ошибки («запись прогона в реестр
     не покрывала путь ensure» и «документы называли 18 и 16 инструментов там, где
     в коде 23») закрыты
@@ -47,6 +47,15 @@
     допуск объявлены ДАННЫМИ (docs/03_implementation/addresses.json). Граница
     названа и здесь: сравнивается текст цели и место раздела, а доступность адреса
     по сети не проверяется — сети у проверки нет.
+
+    27.10.2026 добавлена проверка блоков команд переводов (Test-CommandBlocks):
+    внутри блока команд сравнивается САМА КОМАНДА — её текст до хвостового
+    комментария, — а не только число блоков и строк, которое считал
+    section_profile в tools/check_translations.py. Комментарии переводить можно и
+    нужно: они в сравнение не входят. Правило разбора и строгость объявлены
+    ДАННЫМИ (docs/03_implementation/commands.json). Граница названа и здесь:
+    проверяется совпадение текста, а смысл команды и её выполнимость — нет;
+    запуска команд у проверки не происходит.
 
 .PARAMETER ProjectRoot
     Корень проекта. По умолчанию — каталог двумя уровнями выше скрипта, то есть
@@ -3467,6 +3476,173 @@ function Test-TranslationAddresses {
     return New-CheckResult -Name $checkName -Ok ($problems.Count -eq 0) -Examined $examined -Details $problems
 }
 
+function Test-CommandBlocks {
+    <#
+    .SYNOPSIS
+        Блоки команд переводов README: та же КОМАНДА, а не только её число.
+
+    .DESCRIPTION
+        Измеренный дефект (27.10.2026, этап И30). К этому моменту перевод
+        подтверждался шестью способами: состоянием, ссылками на файлы поставки,
+        числами индекса, терминологией, прозой и адресами. Все шесть называют
+        одну границу — смысл фраз не проверяется, — но внутри блоков команд
+        оставался слой, который поддаётся проверке ПОЛНОСТЬЮ: САМА КОМАНДА.
+
+        функция `section_profile` в `tools/check_translations.py` (строка 193)
+        считает блоки команд и строки таблиц на каждый заголовок `##`, то есть
+        блок проверяется ЧИСЛОМ. Поэтому перевод, где в команде
+        `ragraf -p <config> query search "reindex latency"` строка запроса
+        переведена, а подстановка `-p <config>` заменена на `-p <конфиг>`,
+        проходил зелёным: блок на месте, строк столько же. Замер 27.10.2026 до
+        правки: 15 расхождений в трёх переводах — русский 13, немецкий 1,
+        испанский 1; хинди и китайский 0. Свойство не выполнялось, и заметить это
+        было нечем.
+
+        Свойства проверяет `tools/check_command_blocks.py`: разбирает блок по
+        языку ограждения, отделяет комментарии (строка, начинающаяся с `#`, и
+        хвостовой комментарий после пробела) от команд, склеивает продолжения
+        строки `\` и сравнивает командные строки по позициям. Правило разбора и
+        строгость объявлены ДАННЫМИ (`docs/03_implementation/commands.json`):
+        языки ограждения, допуск на расхождение и перечень исключений с причиной
+        по языку; по всем языкам допуск равен нулю и снят замером.
+
+        Здесь к ним добавляется то, что видно только PowerShell: языки из
+        объявления сверяются с осмотренными и с файлами в `community/`, а числа
+        блоков, строк, комментариев и команд из объявления — с тем, что инструмент
+        действительно назвал в выводе. Иначе новый перевод `README.fr.md` или
+        новая команда в README.md остались бы непроверенными при зелёном прогоне.
+
+        Молчаливый пропуск запрещён: нет скрипта, нет python или ноль осмотренных
+        объектов — это провал, а не «нечего проверять».
+    #>
+    $problems = [System.Collections.Generic.List[string]]::new()
+    $checkName = 'translation command blocks match the main document'
+
+    $toolPath = Join-Path $script:ProjectRoot 'tools/check_command_blocks.py'
+    if (-not (Test-Path -LiteralPath $toolPath)) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: нет tools/check_command_blocks.py')
+    }
+
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $python) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: python не найден в PATH')
+    }
+
+    $output = & $python.Source $toolPath --root $script:ProjectRoot 2>&1
+    $code = $LASTEXITCODE
+    $text = ($output | Out-String).Trim()
+    Write-Host "    блоки команд переводов: $text"
+
+    $lines = @($output | Where-Object { $_ -is [string] })
+    $examinedText = ([regex]::Match($text, 'осмотрено:\s*(\d+)')).Groups[1].Value
+    $examined = if ($examinedText) { [int]$examinedText } else { 0 }
+
+    if ($examined -le 0) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: инструмент не осмотрел ни одного объекта — это ложный PASS')
+    }
+
+    if ($code -ne 0) {
+        foreach ($line in $lines) {
+            if ($line -match '^\s*FAIL:') { $problems.Add(($line -replace '^\s*FAIL:\s*', '')) }
+        }
+        if ($problems.Count -eq 0) {
+            $problems.Add("проверка блоков команд завершилась кодом $code без расшифровки")
+        }
+    }
+
+    # Объявление блоков команд: языки, строгость и перечень основного документа.
+    $declarationPath = Join-Path $script:ProjectRoot 'docs/03_implementation/commands.json'
+    $declared = @()
+    $baseline = $null
+    if (Test-Path -LiteralPath $declarationPath) {
+        $examined++
+        try {
+            $declaration = (Get-ProjectText $declarationPath) | ConvertFrom-Json
+            $declared = @($declaration.languages.PSObject.Properties.Name)
+            $baseline = $declaration.baseline
+        }
+        catch {
+            $problems.Add('docs/03_implementation/commands.json не разобран: блоки команд объявлены, а осмотреть их нечем')
+            $declared = @()
+        }
+    }
+    else {
+        $problems.Add('нет docs/03_implementation/commands.json: блоки команд переводов не объявлены данными')
+    }
+
+    $seen = @($lines | Where-Object { $_ -match '^язык:\s+\S' } |
+        ForEach-Object { (($_ -replace '^язык:\s+', '') -replace '\s+—.*$', '').Trim() })
+
+    if ($declared.Count -eq 0 -and $problems.Count -eq 0) {
+        $problems.Add('в объявлении нет ни одного языка: строгость пуста, а проверка объявлена')
+    }
+    foreach ($language in $declared) {
+        $examined++
+        if ($seen -notcontains $language) {
+            $problems.Add("язык '$language' объявлен в блоках команд, но проверка его не осмотрела: строки «язык: $language» в выводе нет")
+        }
+    }
+
+    # Числа объявленного перечня сверяются с тем, что инструмент осмотрел:
+    # команда, добавленная в README.md без правки объявления, иначе прошла бы молча.
+    if ($baseline) {
+        $pairs = @(
+            @{ Key = 'blocks'; Pattern = 'блоков:\s*(\d+)'; Label = 'блоков' }
+            @{ Key = 'lines'; Pattern = 'строк:\s*(\d+)'; Label = 'строк' }
+            @{ Key = 'comments'; Pattern = 'комментариев:\s*(\d+)'; Label = 'строк-комментариев' }
+            @{ Key = 'blank'; Pattern = 'пустых:\s*(\d+)'; Label = 'пустых строк' }
+            @{ Key = 'commands'; Pattern = 'команд:\s*(\d+)'; Label = 'команд' }
+        )
+        foreach ($pair in $pairs) {
+            $examined++
+            $measured = ([regex]::Match($text, $pair.Pattern)).Groups[1].Value
+            if (-not $measured) {
+                $problems.Add("инструмент не называет число $($pair.Label): сверять объявление не с чем")
+                continue
+            }
+            $declaredValue = $baseline.($pair.Key)
+            if ([int]$measured -ne [int]$declaredValue) {
+                $problems.Add("блоки команд: объявлено $declaredValue $($pair.Label) в основном документе, а инструмент осмотрел $measured")
+            }
+        }
+
+        # Языки ограждения — тоже объявленный перечень: блок с новым языком
+        # означает пример кода, который не осматривается вовсе.
+        $examined++
+        $dialectsText = ([regex]::Match($text, 'языки ограждения:\s*([^;\r\n]+)')).Groups[1].Value
+        $measuredDialects = @($dialectsText -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+        $declaredDialects = @($baseline.languages)
+        if ($measuredDialects.Count -eq 0) {
+            $problems.Add('инструмент не называет языки ограждения: сверять объявление не с чем')
+        }
+        else {
+            $unknown = @($measuredDialects | Where-Object { $declaredDialects -notcontains $_ })
+            if ($unknown.Count -gt 0) {
+                $problems.Add("блоки команд: язык ограждения '$($unknown -join ', ')' есть в README.md, но не объявлен в перечне основного документа")
+            }
+        }
+    }
+
+    # Файлы в community/ сверяются с осмотренным: новый перевод не должен
+    # оставаться непроверенным даже там, где о нём молчит объявление.
+    $community = Join-Path $script:ProjectRoot 'community'
+    $translations = @(if (Test-Path -LiteralPath $community) {
+        Get-ChildItem -LiteralPath $community -File -Filter 'README.*.md' -ErrorAction SilentlyContinue
+    })
+    $examined++
+    if ($translations.Count -eq 0) {
+        $problems.Add('в community/ нет ни одного перевода README.*.md: команды объявлено проверять, а сверять не с чем')
+    }
+    if ($translations.Count -gt 0 -and $seen.Count -ne $translations.Count) {
+        $problems.Add("инструмент осмотрел $($seen.Count) переводов, а в community/ их $($translations.Count): перечень и осмотр разошлись")
+    }
+
+    return New-CheckResult -Name $checkName -Ok ($problems.Count -eq 0) -Examined $examined -Details $problems
+}
+
 $script:CheckFunctions = @(
     'Test-ProjectLayout'
     'Test-SecretHygiene'
@@ -3505,6 +3681,7 @@ $script:CheckFunctions = @(
     'Test-Glossary'
     'Test-ProseProfile'
     'Test-TranslationAddresses'
+    'Test-CommandBlocks'
 )
 
 $script:CheckNames = @()
