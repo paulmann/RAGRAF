@@ -72,6 +72,13 @@
 побайтово равен файлу публичного `main`, то есть перенос выполнен без правки
 содержимого.
 
+**Правка 27.10.2026 (правило «`.ragraf` не попадает в git»).** Числа
+собственного индекса в переводах `README.{de,es,ru,hi,zh}.md` обновлены по записи
+`rev-0397` (861 файл / 5 165 узлов / 67 914 рёбер), поэтому пять переводов
+разошлись с публичным `main`: столбец «совпадает» у них стоит «нет» и это
+объявленное расхождение, а не забытая синхронизация. После публикации правки
+таблица пересчитывается на новой голове `main`, как это было с `d217aec`.
+
 | файл в дереве | источник (URL + коммит) | sha256 в публичном main | sha256 в дереве | совпадает | путь в поставке |
 |---|---|---|---|---|---|
 | community/CHANGELOG.md | https://github.com/paulmann/RAGRAF/blob/5d243e05266ebaaf66f730a31bbc952610beab1f/CHANGELOG.md | b5ea007e9b8bccf1e5cf8752c4543c6c909d5bef4972113b98cfdfe8a564abed | b5ea007e9b8bccf1e5cf8752c4543c6c909d5bef4972113b98cfdfe8a564abed | да | CHANGELOG.md |
@@ -80,11 +87,11 @@
 | community/CONTRIBUTING.md | https://github.com/paulmann/RAGRAF/blob/5d243e05266ebaaf66f730a31bbc952610beab1f/CONTRIBUTING.md | 4702989e9f57c205f752d6e5977b692316fae0fa4c61c32355d5289e05d98689 | 4702989e9f57c205f752d6e5977b692316fae0fa4c61c32355d5289e05d98689 | да | CONTRIBUTING.md |
 | community/install.ps1 | https://github.com/paulmann/RAGRAF/blob/5d243e05266ebaaf66f730a31bbc952610beab1f/install.ps1 | 5a55c8d88ba70066e43147d9b772d98352f46ca82a88ef18a2d8ada71509e8e0 | 5a55c8d88ba70066e43147d9b772d98352f46ca82a88ef18a2d8ada71509e8e0 | да | install.ps1 |
 | community/mkdocs.yml | https://github.com/paulmann/RAGRAF/blob/5d243e05266ebaaf66f730a31bbc952610beab1f/mkdocs.yml | fafbfabe326de2139b7075cc831c358729070a28f0e1b90baa26dbf8bcd4a0e4 | fafbfabe326de2139b7075cc831c358729070a28f0e1b90baa26dbf8bcd4a0e4 | да | mkdocs.yml |
-| community/README.de.md | https://github.com/paulmann/RAGRAF/blob/5d243e05266ebaaf66f730a31bbc952610beab1f/README.de.md | 28f4c1727ccaa89b24783d63f5a4daa5e617444cbc3fb413469523f73e46165f | 28f4c1727ccaa89b24783d63f5a4daa5e617444cbc3fb413469523f73e46165f | да | README.de.md |
-| community/README.es.md | https://github.com/paulmann/RAGRAF/blob/5d243e05266ebaaf66f730a31bbc952610beab1f/README.es.md | 7c10ee23a04468404e4919064b25a8b7ab53d15eaf3a42f72b97494399e66641 | 7c10ee23a04468404e4919064b25a8b7ab53d15eaf3a42f72b97494399e66641 | да | README.es.md |
-| community/README.hi.md | https://github.com/paulmann/RAGRAF/blob/5d243e05266ebaaf66f730a31bbc952610beab1f/README.hi.md | 73a67f4b27d1eb4ccb62ca221e96e69f0190671c26b91f85cab96afb94acecaf | 73a67f4b27d1eb4ccb62ca221e96e69f0190671c26b91f85cab96afb94acecaf | да | README.hi.md |
-| community/README.zh.md | https://github.com/paulmann/RAGRAF/blob/5d243e05266ebaaf66f730a31bbc952610beab1f/README.zh.md | 7918c4be3926f16d6b50d002a70c387ddfe1d744c82dd703ea14deb685031ebd | 7918c4be3926f16d6b50d002a70c387ddfe1d744c82dd703ea14deb685031ebd | да | README.zh.md |
-| community/README.ru.md | https://github.com/paulmann/RAGRAF/blob/5d243e05266ebaaf66f730a31bbc952610beab1f/README.ru.md | 10c884a8296aa1eb46684737ea97ba7cbb1564a45c52c38154c64eddd369eb0f | 10c884a8296aa1eb46684737ea97ba7cbb1564a45c52c38154c64eddd369eb0f | да | README.ru.md |
+| community/README.de.md | https://github.com/paulmann/RAGRAF/blob/5d243e05266ebaaf66f730a31bbc952610beab1f/README.de.md | 28f4c1727ccaa89b24783d63f5a4daa5e617444cbc3fb413469523f73e46165f | 5287e028f1dbd5c0be3f6f58a43672d7ed09174ff418df288880a8ac25e697cc | нет | README.de.md |
+| community/README.es.md | https://github.com/paulmann/RAGRAF/blob/5d243e05266ebaaf66f730a31bbc952610beab1f/README.es.md | 7c10ee23a04468404e4919064b25a8b7ab53d15eaf3a42f72b97494399e66641 | 3c2a8b7ad78167b0b3cc04417fda53d162c817a83c175f5b8b7ac36eafb0087a | нет | README.es.md |
+| community/README.hi.md | https://github.com/paulmann/RAGRAF/blob/5d243e05266ebaaf66f730a31bbc952610beab1f/README.hi.md | 73a67f4b27d1eb4ccb62ca221e96e69f0190671c26b91f85cab96afb94acecaf | adc9ae408aac23625209180014a72f590e391f52ed492279e868059b6ad38e2b | нет | README.hi.md |
+| community/README.zh.md | https://github.com/paulmann/RAGRAF/blob/5d243e05266ebaaf66f730a31bbc952610beab1f/README.zh.md | 7918c4be3926f16d6b50d002a70c387ddfe1d744c82dd703ea14deb685031ebd | 182194ab5979e8ffadaace48e40146f52547f57160fd7cfa8262109871b52c9c | нет | README.zh.md |
+| community/README.ru.md | https://github.com/paulmann/RAGRAF/blob/5d243e05266ebaaf66f730a31bbc952610beab1f/README.ru.md | 10c884a8296aa1eb46684737ea97ba7cbb1564a45c52c38154c64eddd369eb0f | fa6f6a76bcb03032b9c4961f2bb02d9b3fe0b48dad6e2ff6524bbbdfb6de1957 | нет | README.ru.md |
 | community/EULA.md | https://github.com/paulmann/RAGRAF/blob/5d243e05266ebaaf66f730a31bbc952610beab1f/EULA.md | de3a473f73d39dedb64f362384554f25584979d62b51f8ea50c5d531bab75a3a | de3a473f73d39dedb64f362384554f25584979d62b51f8ea50c5d531bab75a3a | да | EULA.md |
 | community/ROADMAP.md | https://github.com/paulmann/RAGRAF/blob/5d243e05266ebaaf66f730a31bbc952610beab1f/ROADMAP.md | 1973da88532a9dab0b96873df9acf57575b286af40f4904a36e87ccf5c6457be | 1973da88532a9dab0b96873df9acf57575b286af40f4904a36e87ccf5c6457be | да | ROADMAP.md |
 | community/SECURITY.md | https://github.com/paulmann/RAGRAF/blob/5d243e05266ebaaf66f730a31bbc952610beab1f/SECURITY.md | dbc7d9c2bd4d3e2d1481a36d00655633c3b45603d1f6753a26c9357414495700 | dbc7d9c2bd4d3e2d1481a36d00655633c3b45603d1f6753a26c9357414495700 | да | SECURITY.md |
@@ -139,7 +146,7 @@
 | `README.ru.md` | **полный на 0.4.0** — русский перевод (этап И23, 27.10.2026) | текущее, 27.10.2026 | ничего: те же разделы, те же числа, те же ссылки, что и в `README.md`; отличие только в языке текста и в шапке с переключателем языков | [`README.md`](https://github.com/paulmann/RAGRAF/blob/main/README.md) — основной документ на английском |
 | `README.de.md` | **полный на 0.4.0** — переведён целиком (этап И22, 27.10.2026) | текущее, 27.10.2026 | ничего: те же разделы, те же числа, те же ссылки, что и в `README.md`; отличие только в языке текста и в шапке с переключателем языков | [`README.md`](https://github.com/paulmann/RAGRAF/blob/main/README.md) — основной документ, он же образец для следующих языков |
 | `README.es.md` | **полный на 0.4.0** — переведён целиком (этап И24, 27.10.2026) | текущее, 27.10.2026 | ничего: те же разделы, те же числа, те же ссылки, что и в `README.md`; отличие только в языке текста и в шапке с переключателем языков | [`README.md`](https://github.com/paulmann/RAGRAF/blob/main/README.md) — основной документ на английском |
-| `README.hi.md` | **частичный перевод** | редакция 0.3.x (текст от 16.10.2026), числа поверхности и ссылки приведены к 0.4.0 27.10.2026 | уровни лицензии Community / Pro / Enterprise и порядок активации; брокер секретов; контур качества и общий индекс; операции SSO, SIEM, офлайн-лицензии и аттестации; снятые `connectors` и `fleet`; разбор документов Office/PDF; операции `route` и `neighbors` | [`README.md`](https://github.com/paulmann/RAGRAF/blob/main/README.md) — основной документ; состав возможностей по уровням — [`EULA.md`](https://github.com/paulmann/RAGRAF/blob/main/EULA.md) |
+| `README.hi.md` | **полный на 0.4.0** — переведён целиком (этап И25, 27.10.2026) | текущее, 27.10.2026 | ничего: те же разделы, те же числа, те же ссылки, что и в `README.md`; отличие только в языке текста и в шапке с переключателем языков | [`README.md`](https://github.com/paulmann/RAGRAF/blob/main/README.md) — основной документ на английском |
 | `README.zh.md` | **частичный перевод** | редакция 0.3.x (текст от 16.10.2026), числа поверхности и ссылки приведены к 0.4.0 27.10.2026 | уровни лицензии Community / Pro / Enterprise и порядок активации; брокер секретов; контур качества и общий индекс; операции SSO, SIEM, офлайн-лицензии и аттестации; снятые `connectors` и `fleet`; разбор документов Office/PDF; операции `route` и `neighbors` | [`README.md`](https://github.com/paulmann/RAGRAF/blob/main/README.md) — основной документ; состав возможностей по уровням — [`EULA.md`](https://github.com/paulmann/RAGRAF/blob/main/EULA.md) |
 
 **Основной документ — английский (этап И23, 27.10.2026).** До этого этапа `README.md`
@@ -164,7 +171,7 @@ GitHub пишется по-английски, — и распределение
 `README.md`; профиль каждого раздела — сколько в нём блоков команд и строк таблиц —
 совпадает по порядку; каждая относительная ссылка основного документа встречается и в
 переводе; числа индекса равны активной записи ревизии. Остальные два перевода (`hi`,
-`zh`) остаются частичными с прежним перечнем недостающего: этап менял состояние ОДНОГО
+`zh`) оставались частичными с прежним перечнем недостающего: этап менял состояние ОДНОГО
 языка, и объявление об этом живёт в одном месте — `docs/03_implementation/translations.json`.
 
 **Испанский перевод переведён целиком (этап И24, 27.10.2026).** Он был последним
@@ -178,7 +185,26 @@ GitHub пишется по-английски, — и распределение
 запись `es` в `docs/03_implementation/translations.json` переведена из `partial` в
 `full`, — и ни одна строка `tools/check_translations.py` ради этого не менялась. Это и
 было целью этапа И21: объявление живёт в данных, проверка только подтверждает его.
-Частичных переводов осталось два — `hi` и `zh`.
+Частичным остался один перевод — `zh`.
+
+**Хинди-перевод переведён целиком (этап И25, 27.10.2026).** Он был последним
+переводом, чья шапка честно называла недостающее содержание: текст стоял на
+редакции 0.3.x — без уровней лицензии, без брокера секретов, без контура качества
+и общего индекса, без операций SSO, SIEM, офлайн-лицензии и аттестации, без
+`route` и `neighbors`, без разбора документов Office/PDF, со старым разделом
+лицензии и старой таблицей документации. Теперь он повторяет `README.md` раздел
+в раздел: 12 разделов `##`, 7 подразделов `###`, 11 блоков команд и 91 строка
+таблиц — те же и в том же порядке, что в основном документе (проверяется профиль
+каждого раздела по числу блоков команд и строк таблиц, а не сходство слов). Шапка
+называет полный перевод, версию 0.4.0 и основной документ; признака неполноты нет;
+каждая относительная ссылка основного документа встречается и здесь; числа индекса
+равны активной записи ревизии. Состояние объявлено ПРАВКОЙ ДАННЫХ: запись `hi`
+в `docs/03_implementation/translations.json` переведена из `partial` в `full`, и ни
+одна строка `tools/check_translations.py` ради этого не менялась. Отдельно назван
+дефект ЧУЖОГО инструмента: линтер `ghagent doc` даёт на оглавлении хинди ложные
+`md.link-anchor`, потому что `_anchor_keep` отбрасывает знаки категории `Mc`, а к ним
+относятся знаки гласных деванагари; якоря в файле записаны в точном виде GitHub и
+совпадают с заголовками побайтово, под дефект линтера заголовки не переписывались.
 
 **Состояние перевода — проверяемое свойство, а не обещание (этап И21, 27.10.2026).**
 Тридцать третья проверка чекера (`Test-TranslationStates`) вызывает

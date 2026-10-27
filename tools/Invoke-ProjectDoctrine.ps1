@@ -18,7 +18,7 @@
     результат Ok=$true при нулевом осмотре считается ложным PASS и валит прогон.
 
     Ожидаемый baseline на момент передачи проекта: 0 ошибок, 0 предупреждений,
-    33 проверки — ровно столько, сколько записей в реестре `$script:CheckFunctions`;
+    34 проверки — ровно столько, сколько записей в реестре `$script:CheckFunctions`;
     это сверяет Test-DocumentedNumbers. Прежние две ошибки («запись прогона в реестр
     не покрывала путь ensure» и «документы называли 18 и 16 инструментов там, где
     в коде 23») закрыты
@@ -2811,6 +2811,81 @@ function Test-DeliveryVisibleToGit {
 }
 
 
+function Test-RagrafIgnored {
+    <#
+    .SYNOPSIS
+        Каталог .ragraf не попадает в git: правило в .gitignore, слой, который его
+        держит, и отсутствие отслеживаемых файлов.
+
+    .DESCRIPTION
+        Правило «.ragraf в корневом .gitignore» живёт в правилах проекта с
+        24.10.2026, но проверки не имело: чекер смотрел ОБРАТНОЕ свойство (файлы
+        поставки не скрыты от git), а сам .gitignore никто не сверял. Дефект
+        дешёвый и необратимый: `git add -A` забирает индекс в коммит, и из
+        истории он уже не убирается — 1,6 ГБ на корпусе revoap.com.
+
+        С 27.10.2026 на машине есть глобальный слой (`~/.gitignore_global`
+        через `core.excludesFile`), и он МАСКИРУЕТ отсутствие проектного
+        правила: `git check-ignore` отвечает «игнорируется», хотя в чужом клоне
+        правила нет. Поэтому проверка спрашивает ФАЙЛ, а не только git.
+
+        Разбор — в `tools/check_ragraf_ignored.py`; чекер берёт наблюдения из
+        его машинного ответа, чтобы не держать вторую реализацию правила.
+
+        Код 2 означает «не проверено» (нет git) и валит прогон: молчаливая
+        зелень после провала проверки была бы вторым дефектом.
+    #>
+    $problems = [System.Collections.Generic.List[string]]::new()
+    $checkName = 'ragraf index is out of git'
+
+    $toolPath = Join-Path $script:ProjectRoot 'tools/check_ragraf_ignored.py'
+    if (-not (Test-Path -LiteralPath $toolPath)) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: нет tools/check_ragraf_ignored.py — правило .ragraf/ в .gitignore не проверяется')
+    }
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $python) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: python не найден в PATH')
+    }
+
+    $raw = & $python.Source $toolPath --root $script:ProjectRoot --json 2>&1
+    $code = $LASTEXITCODE
+    $payload = $null
+    try { $payload = ($raw | Out-String) | ConvertFrom-Json } catch { $payload = $null }
+    if (-not $payload) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @("машинный ответ проверки не разобран (код $code): " + (($raw | Out-String).Trim()))
+    }
+
+    $examined = [int]$payload.examined
+    $ruleLine = 'нет'
+    if ($payload.PSObject.Properties['project_rule'] -and $payload.project_rule -and `
+        $payload.project_rule.PSObject.Properties['line'] -and $payload.project_rule.line) {
+        $ruleLine = "строка $($payload.project_rule.line)"
+    }
+    $gitChecked = if ($payload.PSObject.Properties['git_checked']) { $payload.git_checked } else { $false }
+    $trackedCount = if ($payload.PSObject.Properties['tracked']) { $payload.tracked } else { 'не проверялось' }
+    Write-Host ("    .ragraf и git: правило {0}, git-слой проверялся {1}, отслеживается файлов {2}, код {3}" -f `
+        $ruleLine, $gitChecked, $trackedCount, $code)
+
+    foreach ($note in @($payload.notes)) {
+        if ($note) { Write-Host "    $note" -ForegroundColor DarkGray }
+    }
+    foreach ($item in @($payload.failures)) {
+        if ($item) { $problems.Add("$($item.path) — $($item.rule)") }
+    }
+    if ($code -eq 2) {
+        $problems.Add("не проверено: $($payload.error)")
+    }
+    if ($examined -eq 0) {
+        $problems.Add('ни одного наблюдения не сделано: «ноль проверенных» — это не PASS')
+    }
+
+    return New-CheckResult -Name $checkName -Ok ($problems.Count -eq 0) -Examined $examined -Details $problems
+}
+
+
 function Test-SingleDeliveryCopy {
     <#
     .SYNOPSIS
@@ -3009,6 +3084,7 @@ $script:CheckFunctions = @(
     'Test-OfflineAttestation'
     'Test-DocumentAddresses'
     'Test-DeliveryVisibleToGit'
+    'Test-RagrafIgnored'
     'Test-SingleDeliveryCopy'
     'Test-TranslationStates'
 )
