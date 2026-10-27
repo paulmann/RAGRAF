@@ -1244,8 +1244,8 @@ function Test-DocumentedNumbers {
     # 18 инструментов, 2 подкоманды, 7 проверок и 13 языков дерева, при этом
     # читаются как действующее описание. `Kind` — из какого числа брать факт.
     $documents = @(
-        @{ Path = 'README.md'; Pattern = '\*\*(\d+)\s*(?:\*\*)?\s*операци'; Kind = 'ops'; Label = 'операций фасада' },
-        @{ Path = 'README.md'; Pattern = '\*\*(\d+)\s*(?:\*\*)?\s*инструмент'; Kind = 'tools'; Label = 'инструментов поверхности для агентов' },
+        @{ Path = 'README.md'; Pattern = '\*\*(\d+)\s*(?:\*\*)?\s*operations?\b'; Kind = 'ops'; Label = 'операций фасада' },
+        @{ Path = 'README.md'; Pattern = '\*\*(\d+)\s*(?:\*\*)?\s*MCP tools?\b'; Kind = 'tools'; Label = 'инструментов поверхности для агентов' },
         @{ Path = 'docs/03_implementation/INTEGRATION.md'; Pattern = '\*\*(\d+)\s*(?:\*\*)?\s*инструмент'; Kind = 'tools'; Label = 'инструментов поверхности для агентов' },
         @{ Path = 'docs/05_article/RAGRAF_ARTICLE.md'; Pattern = '(\d+)\s+операци'; Kind = 'ops'; Label = 'операций фасада' },
         @{ Path = 'docs/03_implementation/HARNESS_INTEGRATION.md'; Pattern = 'сервер отдаёт \*\*(\d+) инструмент'; Kind = 'tools'; Label = 'инструментов поверхности для агентов' },
@@ -1283,7 +1283,7 @@ function Test-DocumentedNumbers {
         }
         else {
             $subcommandDocs = @(
-                @{ Path = 'README.md'; Pattern = '\*\*(\d+)\*\*\s+подкоманд' },
+                @{ Path = 'README.md'; Pattern = '\*\*(\d+)\*\*\s+CLI subcommands' },
                 @{ Path = 'AGENTS.md'; Pattern = '(\d+)\s+подкоманд' },
                 @{ Path = 'docs/AGENTS-context.md'; Pattern = '(?m)^\*\*CLI\.\*\*\s+(\d+)\s+подкоманд' }
             )
@@ -1318,7 +1318,7 @@ function Test-DocumentedNumbers {
     if (Test-Path -LiteralPath $readmeForSnapshot) {
         $examined++
         $readmeText = (Get-ProjectText $readmeForSnapshot) -replace [char]0x00A0, ' '
-        $snapshot = [regex]::Match($readmeText, 'индекс RAGRAF — ([\d ]+?)\s*файл\w*,\s*([\d ]+?)\s*уз(?:ел|л)\w*\s+и\s+([\d ]+?)\s*р[её]б\w*')
+        $snapshot = [regex]::Match($readmeText, 'the RAGRAF index itself — ([\d ]+?)\s*files,\s*([\d ]+?)\s*nodes\s+and\s+([\d ]+?)\s*edges')
         if (-not $snapshot.Success) {
             $problems.Add('README не называет размеры собственного индекса: снимок нельзя сверить с фактом, а значит он не измерение')
         }
@@ -1482,8 +1482,8 @@ function Test-DocumentedNumbers {
     else {
         $examined++
         $readmeText = Get-ProjectText $readmePath
-        $live = [regex]::Match($readmeText, 'по реестру на (\d{2})\.(\d{2})\.(\d{4})[^\d]{0,80}?(\d+)\s+корпус\w*,\s*(\d+)\s+проиндексирован')
-        $snapshot = [regex]::Match($readmeText, 'снимок на (\d{2}\.\d{2}\.\d{4})')
+        $live = [regex]::Match($readmeText, 'by the registry on (\d{2})\.(\d{2})\.(\d{4})[^\d]{0,80}?(\d+)\s+corpora,\s*(\d+)\s+indexed')
+        $snapshot = [regex]::Match($readmeText, 'snapshot of (\d{2}\.\d{2}\.\d{4})')
 
         if (-not $snapshot.Success -and -not $live.Success) {
             $problems.Add('числа полигона в README не помечены ни снимком с датой, ни сверкой с реестром: читатель принимает их за текущее состояние')
@@ -1492,10 +1492,10 @@ function Test-DocumentedNumbers {
         if ($snapshot.Success) {
             $examined++
             $tail = $readmeText.Substring($snapshot.Index, [Math]::Min(600, $readmeText.Length - $snapshot.Index))
-            if ($tail -notmatch 'не текущее состояние') {
+            if ($tail -notmatch 'not the current state') {
                 $problems.Add('снимок полигона помечен датой, но не сказано, что числа не текущие: дата без этой оговорки не отделяет замер от сегодняшнего дня')
             }
-            if ($tail -match 'на сегодня|на текущий момент') {
+            if ($tail -match 'as of today|on the current date|на сегодня|на текущий момент') {
                 $problems.Add('рядом со снимком полигона стоит оборот текущего состояния: замер выдан за сегодняшний')
             }
         }
@@ -2898,7 +2898,7 @@ function Test-TranslationStates {
         пунктов), запрещённые пути `docs/ru/**` и `docs/DEFECTS.md`, русский
         заполнитель команды, кириллица только в ярлыке «Русский» и разрешение
         каждой относительной ссылки — включая изображения — против состава
-        поставки из манифеста.
+        поставки из манифеста. Состояние каждого перевода объявлено ДАННЫМИ (`docs/03_implementation/translations.json`), а не словарём в коде: следующий полный перевод объявляется правкой данных, и проверку ради этого править не нужно; числа индекса в каждом переводе сверяются с активной записью ревизии через `tools/rev_snapshot.py` — отставание выдаётся предупреждением с её `rev_id`, а в режиме `--strict` становится находкой (так его требует гейт публикации).
 
         Здесь к ним добавляется то, что видно только PowerShell: перечень
         переводов в `community/` сверяется с тем, что инструмент действительно

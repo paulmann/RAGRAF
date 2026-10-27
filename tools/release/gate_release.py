@@ -15,6 +15,11 @@
 предупреждение обходится тем, что публикацию просто запускают. Поэтому здесь
 отставание — отказ: на выход людям уходит только сверенный замер.
 
+То же требование распространено на ПЕРЕВОДЫ README (этап И22, 27.10.2026):
+числа индекса в каждом переводе сверяются с активной ревизией проверкой
+`tools/check_translations.py` в режиме `--strict`, где отставание — находка.
+Иначе перевод мог бы уехать читателю с числами прошлой ревизии при зелёном гейте.
+
 Пять обязательных порч (по одной на класс дефекта):
 
 1. `hash`     — байт подменён: файл есть, имя верное, содержимое чужое;
@@ -92,7 +97,7 @@ def first_failure(output: str) -> str:
 # (tools/Invoke-ProjectDoctrine.ps1, Test-DocumentedNumbers): одна форма на два
 # потребителя, иначе «чекер молчит» перестаёт что-либо значить для публикации.
 NUMBERS_RE = re.compile(
-    r"индекс RAGRAF — ([\d ]+?)\s*файл\w*,\s*([\d ]+?)\s*уз(?:ел|л)\w*\s+и\s+([\d ]+?)\s*р[её]б\w*"
+    r"the RAGRAF index itself — ([\d ]+?)\s*files,\s*([\d ]+?)\s*nodes\s+and\s+([\d ]+?)\s*edges"
 )
 
 
@@ -168,6 +173,33 @@ def check_numbers(source: Path) -> tuple[int, str]:
                f"{actual}; {hint}{note}")
 
 
+def check_translation_numbers(source: Path) -> tuple[int, str]:
+    """Числа в ПЕРЕВОДАХ README обязаны совпадать с активной ревизией — без «отстал».
+
+    Та же логика, что у чисел README, и тот же источник факта, но проверка не
+    повторяется здесь второй редакцией: её выполняет `tools/check_translations.py`
+    в режиме `--strict`, где отставание чисел становится находкой. Гейт требует
+    от него код 0 и называет первую находку — иначе читатель перевода получил бы
+    замер прошлой ревизии при зелёной публикации.
+    """
+    tool = source / "tools" / "check_translations.py"
+    if not tool.exists():
+        return 1, (f"нет {tool}: числа переводов сверить не с чем, а публикация без "
+                   f"этой сверки выпускает непроверенный замер")
+    completed = subprocess.run(
+        [PY, str(tool), "--root", str(source), "--strict"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
+    )
+    output = (completed.stdout or "") + (completed.stderr or "")
+    if completed.returncode == 0:
+        examined = re.search(r"осмотрено:\s*(\d+)", output)
+        return 0, (f"числа переводов сверены с активной ревизией "
+                   f"(осмотрено {examined.group(1) if examined else '?'} объектов)")
+    problem = next((line.strip() for line in output.splitlines() if line.startswith("FAIL: ")),
+                   "(проверка не назвала ни одного нарушения — это и есть дефект)")
+    return 1, f"переводы: {problem[:300]}"
+
+
 def verify(tree: Path, only: str, manifest: Path | None, source: Path) -> tuple[int, str]:
     args = ["--tree", str(tree), "--only", only, "--source", str(source)]
     if manifest is not None:
@@ -187,10 +219,22 @@ def main(argv: list[str] | None = None) -> int:
     numbers_code, numbers_message = check_numbers(source)
     if args.check_numbers:
         print(("OK: " if numbers_code == 0 else "FAIL: ") + numbers_message)
-        return numbers_code
+        if numbers_code != 0:
+            return numbers_code
+        words_code, words_message = check_translation_numbers(source)
+        print(("OK: " if words_code == 0 else "FAIL: ") + words_message)
+        return words_code
     print(f"числа публикации: код {numbers_code} — {numbers_message}")
     if numbers_code != 0:
         print("FAIL: публикация остановлена — числа README не совпадают с активной ревизией")
+        return 1
+
+    # Числа ПЕРЕВОДОВ: у них до этапа И22 сторожа не было, и отставший перевод
+    # уезжал читателю при зелёной публикации (rg 'rev-0' по community/*.md).
+    words_code, words_message = check_translation_numbers(source)
+    print(f"числа переводов: код {words_code} — {words_message}")
+    if words_code != 0:
+        print("FAIL: публикация остановлена — числа переводов не совпадают с активной ревизией")
         return 1
 
     root = Path(tempfile.mkdtemp(prefix="ragraf-gate-"))

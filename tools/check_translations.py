@@ -1,122 +1,98 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Состояние переводов README: «полный» или «частичный» — проверяемое свойство.
+"""Состояние переводов README: объявлено ДАННЫМИ, подтверждено деревом.
 
-Задача, из которой проверка выросла (этап И21, 27.10.2026). Этап И20 привёл
-переводы к решению «полный либо частичный», но само решение держалось шапкой
+Задача, из которой проверка выросла (этапы И21 и И22, 27.10.2026). Этап И20
+привёл переводы к решению «полный либо частичный», но решение держалось шапкой
 файла и записью в `docs/03_implementation/RELEASE-SOURCES.md`, то есть не
-проверялось ничем: расхождение видел читатель, а не чекер. Здесь объявленное
-состояние превращается в свойство, которое падает при нарушении.
+проверялось ничем. Этап И21 сделал состояние проверяемым, но объявил его
+словарём ВНУТРИ ЭТОГО ФАЙЛА: чтобы перевести очередной язык целиком, нужно было
+править проверку — то есть проверка объявляла состояние, а не подтверждала его.
+Этап И22 перевёл `README.de.md` целиком и потому перенёс объявление в данные:
+`docs/03_implementation/translations.json` называет состояние каждого перевода,
+а здесь оно только проверяется.
 
-Проверяются свойства, а не написание строк:
+Состояний два, и каждое проверяется ФАКТОМ, а не доверием к шапке. Третье,
+`mirror` (побайтовая копия основного документа), снято на этапе И23: основной
+`README.md` переведён на английский, и русский файл перестал быть его копией —
+он стал таким же переводом, как немецкий. Правило, которое никем не объявлено,
+хуже отсутствующего: оно выглядит защитой, ничего не защищая.
 
-1. `community/README.ru.md` — ЗЕРКАЛО основного документа: он обязан совпадать
-   с `README.md` плюс ровно пять строк шапки, а шапка обязана называть файл
-   копией основного документа. Равенство проверяемо, качество перевода — нет;
-   поэтому состояние «полный» выражено равенством.
-2. `community/README.de.md`, `.es.md`, `.hi.md`, `.zh.md` — ЧАСТИЧНЫЕ переводы:
-   у каждого в шапке свой признак неполноты на своём языке, и шапка обязана
-   назвать не менее трёх недостающих пунктов из перечня этапа И20.
-3. Ни в одном переводе нет ссылок `docs/ru/**` и `docs/DEFECTS.md` (этих путей
-   в поставке нет), нет заполнителя команды `<конфиг>`, и КАЖДАЯ относительная
-   ссылка — включая изображения — указывает на файл, который действительно
-   попадает в поставку.
-4. Кириллица в переводе допустима только в ярлыке «Русский» переключателя
-   языков и не встречается внутри блоков команд.
+1. `full` — перевод, приведённый к текущему продукту целиком. Проверяется:
+   * признака неполноты нет (ни одного маркера, объявленного частичными
+     переводами), иначе «полный» объявлен, а текст говорит обратное;
+   * шапка называет состояние (полный перевод), версию продукта и основной
+     документ — по образцам из данных;
+   * структура совпадает с `README.md`: число разделов `##`, число подразделов
+     `###` и профиль каждого раздела — сколько в нём блоков команд и строк
+     таблиц. Переводятся слова, а не устройство документа, поэтому расхождение
+     профиля — это пропавший раздел, таблица или пример, а не стиль;
+   * каждая относительная ссылка `README.md` встречается и в переводе: полный
+     перевод не может перестать называть документ, который называет оригинал.
+3. `partial` — частичный перевод. Проверяется признак неполноты на своём языке
+   и перечень недостающего: не менее объявленного порога пунктов.
 
-Одна порча — одна находка. Поэтому предусловия (нет файла, не читается
-манифест) отделены от наблюдений, зависимые свойства не проверяются при
-отсутствии того, от чего зависят, а строка, уже названная русским заполнителем,
-не пересчитывается как «кириллица в блоке команд». Иначе разбор прогона
-начинается с подсчёта копий одного и того же дефекта.
+Сверх состояния проверяются одинаковые для всех свойства: запрещённые пути
+(`docs/ru/**`, `docs/DEFECTS.md`), русский заполнитель команды `<конфиг>`,
+кириллица только в ярлыке «Русский», каждый блок команд непустой и каждая
+относительная ссылка — включая изображения — разрешается против СОСТАВА
+ПОСТАВКИ из `tools/release/manifest.toml`, а не против живого дерева.
+
+**Числа индекса.** До этапа И22 у чисел в переводах сторожа не было: этап И21
+обновил их вручную в шести файлах и записал это в отчёт. Теперь числа каждого
+перевода сверяются с АКТИВНОЙ записью ревизии через штатный
+`tools/rev_snapshot.py` — того же инструмента, которым сверяются числа `README.md`
+(одна реализация чтения истории ревизий, а не вторая). Правило то же, что у
+`Test-DocumentedNumbers`:
+
+* числа равны активной ревизии — наблюдение;
+* числа равны ОДНОЙ ИЗ ПРОШЛЫХ ревизий — предупреждение с её `rev_id` и датой:
+  документ отстал, а не соврал (при `--strict` это отказ: на публикации уходит
+  только сверенный замер);
+* таких чисел не было ни в одной ревизии — находка: документ называет
+  состояние, которого не было.
+
+Ревизия, которая ещё запечатывается, снимком не является: сверка откладывается
+явным наблюдением, а не выдаётся за PASS и не объявляется провалом (урок
+25.10.2026: прогон в 12:51 получил нули и объявил ложный FAIL).
+
+Одна порча — одна находка. Предусловия (нет файла, нет объявления, не читается
+манифест, не прочитана ревизия) отделены от наблюдений, зависимые свойства не
+проверяются при отсутствии того, от чего зависят, а строка, уже названная
+русским заполнителем, не пересчитывается как «кириллица в блоке команд».
 
 Границы, названные честно:
 
-* «полный» проверяется равенством с `README.md`, а не качеством текста: язык
-  перевода машинной проверке не поддаётся, а расхождение зеркала — поддаётся;
-* зеркало русского документа кириллицу содержит по определению, и заполнитель
-  `<конфиг>` приходит в него из `README.md` — основного документа, который
-  решено писать по-русски. Оба свойства заменены равенством (пункт 1), а не
-  отключены молча: наблюдение об этом делается явно и попадает в счёт осмотренного;
-* «не менее трёх недостающих пунктов» — порог, а не полный перечень: шапки
-  четырёх переводов называют шесть пунктов из семи (в них не названы операции
-  SSO, SIEM, офлайн-лицензии и аттестации, хотя `RELEASE-SOURCES.md` их
-  перечисляет). Перечень в шапке — текст перевода, и правка его здесь была бы
-  правкой содержания; поэтому проверяется порог, а расхождение с документом
-  названо в отчёте этапа;
-* ссылки разрешаются против СОСТАВА ПОСТАВКИ (`tools/release/manifest.toml`),
-  а не против живого дерева: в поставке перевод лежит в корне репозитория, а в
-  живом дереве — в `community/`. Сверка с живым деревом дала бы ложную зелень
-  на `EULA.md` (он есть в `community/`) и на `assets/**`. Измерено 27.10.2026:
-  шапки четырёх переводов ссылаются на `assets/social-preview.png`, которого не
-  было НИ в живом дереве, НИ в поставке — прежний замер ссылок
-  (`stage-i20/links.py`) изображения не видел, потому что исключал их шаблоном
-  `(?<!!)`, и обложка была битой у читателя при зелёном замере. Здесь это первая
-  находка проверки, а не повод её ослабить: файл восстановлен из сохранённой
-  копии `editions/legacy-v0.1.0/assets/` и внесён в манифест тем же этапом;
-* проверяется НАЛИЧИЕ цели, а не её содержимое: картинка может быть устаревшей,
-  и это не нарушение состояния перевода.
+* качество перевода машинной проверке не поддаётся: проверяется соответствие
+  структуры и чисел, а не смысл фраз. «Полный» здесь означает «приведён к
+  текущему продукту и подтверждён структурой», а не «переведён без потерь»;
+* порядок разделов по смыслу не сверяется (у языков он выражается разными
+  словами) — сверяется профиль каждого раздела по порядку;
+* подпись `rev-XXXX` в тексте перевода информационная: сверяются числа, как и в
+  `Test-DocumentedNumbers`. Иначе каждая переиндексация требовала бы правки
+  пяти документов ради подписи, а не ради измерения;
+* проверяется НАЛИЧИЕ цели ссылки, а не её содержимое: картинка может быть
+  устаревшей, и это не нарушение состояния перевода.
 
-Запуск: `python tools/check_translations.py [--root <дерево>]`
+Запуск:
+    python tools/check_translations.py [--root <дерево>] [--project <конфиг>] [--strict]
 Коды возврата: 0 — свойства выполняются, 1 — есть нарушения (в том числе «ноль
-осмотренных объектов»: это провал, а не PASS).
+осмотренных объектов»: это провал, а не PASS), 2 — не прочитаны аргументы.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import posixpath
 import re
+import subprocess
 import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 MAIN = "README.md"
-MIRROR = "community/README.ru.md"
-MIRROR_HEADER_LINES = 5
-
-#: Признак неполноты в шапке — на языке перевода. Ключ словаря: путь файла.
-PARTIAL = {
-    "community/README.de.md": ("de", "Diese Übersetzung ist unvollständig"),
-    "community/README.es.md": ("es", "Esta traducción está incompleta"),
-    "community/README.hi.md": ("hi", "यह अनुवाद अधूरा है"),
-    "community/README.zh.md": ("zh", "本译本不完整"),
-}
-
-#: Шапка перевода — первые строки после заголовка. Замер 27.10.2026: примечание
-#: о неполноте стоит строкой 12 у всех четырёх переводов (после переключателя
-#: языков, девиза, ссылок и обложки). Окно шире факта намеренно: шапка может
-#: сдвинуться на строку-две без потери смысла, но не уехать в середину файла.
-HEADER_WINDOW = 13
-
-#: Недостающие пункты из перечня этапа И20. Проверяется, что шапка называет
-#: НЕ МЕНЕЕ ТРЁХ из них — по признакам на всех языках перевода, потому что
-#: перевод пишется на своём языке, а не по-русски.
-GAPS = (
-    ("уровни лицензии", re.compile(
-        r"(?i)(Lizenzstufen|niveles de licencia|licen[cs]ias?\b|लाइसेंस\s*स्तर"
-        r"|许可证(层级|分层)?|уровн[а-яё]* лицензи)")),
-    ("брокер секретов", re.compile(
-        r"(?i)(Secret[- ]Broker|br[óo]ker de secretos|ब्रोकर|机密代理|密钥代理"
-        r"|брокер[а-яё]* секрет)")),
-    ("контур качества и общий индекс", re.compile(
-        r"(?i)(Qualitätsschleife|bucle de calidad|control de calidad|गुणवत्ता"
-        r"|质量(回路|循环|闭环)|контур[а-яё]* качества"
-        r"|gemeinsame[nr]? Index|índice compartido|साझा\s*(इंडेक्स|सूचकांक)|共享索引"
-        r"|общ[а-яё]* индекс)")),
-    ("снятые connectors и fleet", re.compile(
-        r"(?i)(`?connectors`?|`?fleet`?|कनेक्टर|连接器)")),
-    ("разбор документов Office/PDF", re.compile(
-        r"(?i)(Office|PDF|ऑफ़िस|文档解析|разбор[а-яё]* документ)")),
-    ("операции route и neighbors", re.compile(
-        r"(?i)(`route`|`neighbors`|\broute\b|\bneighbors\b)")),
-    ("операции SSO, SIEM, офлайн-лицензии и аттестации", re.compile(
-        r"(?i)(\bSSO\b|\bSIEM\b|Offline[- ]?Lizenz|licencia (sin conexión|offline)"
-        r"|ऑफ़लाइन|离线|офлайн|Attestierung|attestation|अटेस्टेशन|认证|аттестаци)")),
-)
-
-#: Минимум названных недостающих пунктов у частичного перевода.
-MIN_GAPS = 3
+STATES_FILE = "docs/03_implementation/translations.json"
 
 #: Пути, которых в поставке нет: ссылка на них — обещание 404.
 FORBIDDEN_LINKS = ("docs/ru/", "docs/DEFECTS.md")
@@ -124,17 +100,22 @@ FORBIDDEN_LINKS = ("docs/ru/", "docs/DEFECTS.md")
 #: Заполнитель команды, оставшийся с русского оригинала.
 FORBIDDEN_PLACEHOLDERS = ("<конфиг>", "-конфиг-")
 
-#: Ссылка И изображение: `[т](цель)` и `![т](цель)`. Прежний замер исключал
-#: изображения (`(?<!!)`), поэтому битая обложка не находилась.
+#: Ссылка И изображение: `[т](цель)` и `![т](цель)`. Прежний замер этапа И20
+#: исключал изображения (`(?<!!)`), поэтому битая обложка не находилась.
 LINK = re.compile(r"!?\[[^\]\n]*\]\(([^)\n]+)\)")
 FENCE = re.compile(r"^\s*(```|~~~)")
 CYRILLIC = re.compile(r"[\u0400-\u04FF]")
 SWITCHER_LABEL = "Русский"
 REMOTE_PREFIXES = ("http://", "https://", "mailto:", "#", "ftp://")
 
+DEFAULT_HEADER_LINES = 13
+DEFAULT_MIN_GAPS = 3
+
 EXAMINED = 0
 FAILURES: list[str] = []
+WARNINGS: list[str] = []
 OBSERVED: list[str] = []
+STRICT = False
 
 
 def expect(condition: bool, message: str, ok_note: str | None = None) -> None:
@@ -153,13 +134,150 @@ def fail(message: str) -> None:
     FAILURES.append(message)
 
 
+def warn(message: str) -> None:
+    """Отставание, а не ложь. При --strict становится находкой."""
+    if STRICT:
+        FAILURES.append(message)
+    else:
+        WARNINGS.append(message)
+
+
 def read(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="replace")
 
 
-def header_lines(lines: list[str]) -> list[str]:
-    """Шапка перевода: первые строки после заголовка первого уровня."""
-    return lines[1 : 1 + HEADER_WINDOW]
+def flat(text: str) -> str:
+    """Неразрывные пробелы приводятся к обычным: числа печатают и так, и так."""
+    return text.replace("\u00a0", " ")
+
+
+def header_of(lines: list[str], size: int) -> str:
+    """Шапка: первые строки после заголовка первого уровня."""
+    return "\n".join(lines[1 : 1 + size])
+
+
+# --- объявление состояний ---------------------------------------------------
+
+
+def load_states(root: Path) -> tuple[dict | None, list[str]]:
+    """Объявление состояний из данных. None — объявления нет или оно не читается."""
+    path = root / STATES_FILE
+    if not path.is_file():
+        return None, [
+            f"нет {STATES_FILE} — состояние переводов не объявлено данными, "
+            f"проверять нечего (объявление в коде запрещено: иначе следующий "
+            f"полный перевод нельзя объявить, не правя проверку)"
+        ]
+    try:
+        data = json.loads(read(path))
+    except json.JSONDecodeError as error:
+        return None, [f"{STATES_FILE} не разобран: {error}"]
+    states = data.get("states")
+    if not isinstance(states, list) or not states:
+        return None, [f"{STATES_FILE}: список состояний пуст — проверять нечего"]
+    for index, state in enumerate(states):
+        if not isinstance(state, dict) or "path" not in state or "state" not in state:
+            return None, [f"{STATES_FILE}: запись {index + 1} не называет путь или состояние"]
+        if state["state"] not in ("full", "partial"):
+            return None, [
+                f"{STATES_FILE}: у «{state.get('path')}» состояние "
+                f"{state['state']!r}, а известно два: full, partial"
+            ]
+    return data, []
+
+
+# --- структура и числа ------------------------------------------------------
+
+
+def section_profile(lines: list[str]) -> list[tuple[int, int]]:
+    """Профиль разделов: (блоков команд, строк таблиц) на каждый заголовок `##`."""
+    profile: list[tuple[int, int]] = []
+    started = False
+    current = [0, 0]
+    in_fence = False
+    for line in lines:
+        if line.startswith("## "):
+            if started:
+                profile.append((current[0], current[1]))
+            started = True
+            current = [0, 0]
+            continue
+        if not started:
+            continue
+        if FENCE.match(line):
+            if not in_fence:
+                current[0] += 1
+            in_fence = not in_fence
+            continue
+        if line.startswith("|"):
+            current[1] += 1
+    if started:
+        profile.append((current[0], current[1]))
+    return profile
+
+
+def POSIX_BASENAME(path: str) -> str:
+    """Имя файла без каталога — для сравнения «ссылка ведёт на самого себя»."""
+    return path.rsplit("/", 1)[-1]
+
+def count_headings(lines: list[str], prefix: str) -> int:
+    return sum(1 for line in lines if line.startswith(prefix))
+
+
+def relative_targets(text: str) -> list[tuple[int, str]]:
+    """Относительные ссылки и изображения файла: (строка, цель)."""
+    found: list[tuple[int, str]] = []
+    for index, line in enumerate(text.splitlines(), 1):
+        for target in LINK.findall(line):
+            target = target.strip()
+            if target.lower().startswith(REMOTE_PREFIXES):
+                continue
+            found.append((index, target))
+    return found
+
+
+def numbers_of(text: str, pattern: str) -> tuple[int, int, int] | None:
+    """Числа индекса по образцу перевода: (файлов, узлов, рёбер)."""
+    match = re.search(pattern, flat(text))
+    if not match:
+        return None
+    try:
+        files, nodes, edges = (int(part.replace(" ", "")) for part in match.groups()[:3])
+    except (ValueError, TypeError):  # pragma: no cover — образец совпал, число не разобралось
+        return None
+    return files, nodes, edges
+
+
+def run_snapshot(root: Path, project: Path, match: str | None = None) -> tuple[dict | None, str]:
+    """Ответ `tools/rev_snapshot.py`: (запись, причина отказа)."""
+    tool = root / "tools" / "rev_snapshot.py"
+    if not tool.is_file():
+        return None, f"нет {tool.relative_to(root).as_posix()} — активную запись ревизии не прочитать"
+    if not project.is_file():
+        return None, (
+            f"нет {project} — запись ревизии не прочитать: числа переводов сверять не с чем"
+        )
+    command = [sys.executable, str(tool), "--project", str(project)]
+    if match:
+        command += ["--match", match]
+    completed = subprocess.run(
+        command, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False
+    )
+    payload = None
+    for line in reversed((completed.stdout or "").splitlines()):
+        if line.strip().startswith("{"):
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                payload = None
+            break
+    if payload is None:
+        detail = (completed.stderr or completed.stdout or "").strip().splitlines()
+        return None, f"снимок ревизии не разобран: {detail[-1][:200] if detail else 'пустой ответ'}"
+    return payload, ""
+
+
+# --- свойства ---------------------------------------------------------------
 
 
 def delivered_targets(root: Path) -> tuple[set[str] | None, list[str]]:
@@ -201,107 +319,132 @@ def resolve(target: str, delivered: set[str]) -> bool:
     return any(path.startswith(prefix) for path in delivered)
 
 
-def links_of(text: str) -> list[tuple[int, str]]:
-    """Относительные ссылки и изображения файла: (строка, цель)."""
-    found: list[tuple[int, str]] = []
-    for index, line in enumerate(text.splitlines(), 1):
-        for target in LINK.findall(line):
-            target = target.strip()
-            if target.lower().startswith(REMOTE_PREFIXES):
-                continue
-            found.append((index, target))
-    return found
+def check_header(relative: str, header: str, requires: list[dict]) -> None:
+    """Шапка называет то, что объявлено данными. Одна находка на все образцы."""
+    missing = [item["name"] for item in requires if not re.search(item["pattern"], header)]
+    expect(
+        not missing,
+        f"{relative}: шапка не называет: {'; '.join(missing)} — по шапке состояние не "
+        f"отличить от другого",
+    )
 
 
-def check_mirror(root: Path, main_lines: list[str]) -> None:
-    path = root / MIRROR
-    if not path.is_file():
-        fail(f"нет {MIRROR} — зеркало основного документа отсутствует")
+def check_no_partial_marker(relative: str, header: str, markers: list[tuple[str, str]]) -> None:
+    """У полного перевода нет ни одного признака неполноты. Одна находка на все маркеры."""
+    present = [f"{language}: «{marker}»" for language, marker in markers if marker in header]
+    expect(
+        not present,
+        f"{relative}: в шапке стоит признак неполноты ({'; '.join(present)}), а перевод "
+        f"объявлен полным",
+    )
+
+
+def check_link_coverage(relative: str, text: str, main_text: str) -> None:
+    """Полный перевод называет все документы, которые называет основной.
+
+    Ссылка на самого себя не требуется: в списке целей `README.md` стоит
+    `README.ru.md` (переключатель языка), и требовать её от русского файла
+    значило бы требовать самоссылку — формальность вместо свойства.
+    """
+    own = POSIX_BASENAME(relative)
+    required = {
+        target.split("#", 1)[0].strip()
+        for _, target in relative_targets(main_text)
+        if target.split("#", 1)[0].strip() != own
+    }
+    present = {target.split("#", 1)[0].strip() for _, target in relative_targets(text)}
+    missing = sorted(target for target in required if target and target not in present)
+    expect(
+        not missing,
+        f"{relative}: полный перевод не называет {len(missing)} документ(ов) из {MAIN}: "
+        f"{', '.join(missing[:5])}",
+    )
+
+
+def active_revision(payload: dict | None) -> dict | None:
+    """Активная запись ревизии из ответа инструмента.
+
+    Две формы ответа: `tools/rev_snapshot.py` без `--match` печатает саму запись
+    (`rev_id`, `files`, `nodes`, `edges`), с `--match` — обёртку
+    (`queried`, `active`, `match`). Обе означают одно и то же измерение, и
+    разбирать их в двух местах значило бы завести две правды об одном ответе.
+    Запись, которая ещё запечатывается, содержит `status`, а не размеры: это
+    не снимок, и путать его с нулями нельзя.
+    """
+    if not payload:
+        return None
+    candidate = payload.get("active") if "active" in payload else payload
+    if isinstance(candidate, dict) and {"files", "nodes", "edges"} <= set(candidate):
+        return candidate
+    return None
+
+
+def check_numbers(relative: str, text: str, state: dict, snapshot: dict | None,
+                  snapshot_problem: str, root: Path, project: Path) -> None:
+    """Числа индекса в переводе — против активной записи ревизии."""
+    pattern = state.get("numbers_pattern")
+    if not pattern:
+        fail(f"{relative}: числа не объявлены в {STATES_FILE} — сверять нечем, "
+             f"а число без сторожа стареет молча")
         return
-    lines = read(path).splitlines()
-    print(f"перевод: {MIRROR}")
-    expect(
-        len(lines) == len(main_lines) + MIRROR_HEADER_LINES,
-        f"{MIRROR}: строк {len(lines)}, а должно быть {len(main_lines) + MIRROR_HEADER_LINES} "
-        f"({MAIN} {len(main_lines)} + шапка {MIRROR_HEADER_LINES}): зеркало разошлось",
-    )
-    expect(
-        bool(lines) and bool(main_lines) and lines[0] == main_lines[0],
-        f"{MIRROR}: первый заголовок не совпадает с {MAIN}",
-    )
-    body = lines[1 + MIRROR_HEADER_LINES :]
-    reference = main_lines[1:]
-    differences = [
-        (index, left, right)
-        for index, (left, right) in enumerate(zip(body, reference), 1)
-        if left != right
-    ]
-    if body == reference:
-        expect(True, "")
-    else:
-        where = (
-            f", первое в строке {differences[0][0] + 1 + MIRROR_HEADER_LINES}: "
-            f"{differences[0][1][:70]!r} против {differences[0][2][:70]!r}"
-            if differences
-            else ""
-        )
-        expect(
-            False,
-            f"{MIRROR}: текст не совпадает с {MAIN} — расхождений {len(differences)}{where}",
-        )
-    header = "\n".join(header_lines(lines))
-    expect(
-        bool(re.search(r"копи(?:я|ей)", header))
-        and MAIN in header
-        and bool(re.search(r"основн", header)),
-        f"{MIRROR}: шапка не называет файл копией основного документа ({MAIN})",
-    )
-    expect(
-        True,
-        "",
-        ok_note=(
-            f"{MIRROR}: кириллица и заполнитель <конфиг> — не нарушение: файл объявлен "
-            f"копией русского {MAIN}, их сторожит равенство"
-        ),
-    )
-
-
-def check_partial(root: Path, relative: str, language: str, marker: str,
-                  delivered: set[str] | None) -> None:
-    path = root / relative
-    if not path.is_file():
-        fail(f"нет {relative} — перевод {language} отсутствует, а состояние объявлено")
+    numbers = numbers_of(text, pattern)
+    if numbers is None:
+        fail(f"{relative}: числа индекса не найдены по объявленному образцу — "
+             f"документ перестал называть размер собственного индекса")
         return
-    text = read(path)
-    lines = text.splitlines()
-    header = "\n".join(header_lines(lines))
-
-    declared = marker in header
-    expect(
-        declared,
-        f"{relative}: в шапке нет признака неполноты «{marker}» — частичный перевод "
-        f"выдаётся за полный",
+    if snapshot_problem:
+        expect(True, "", ok_note=f"{relative}: {snapshot_problem}")
+        return
+    active = active_revision(snapshot)
+    if not active:
+        status = (snapshot or {}).get("status")
+        if status == "in_progress":
+            expect(True, "", ok_note=(
+                f"{relative}: ревизия {(snapshot or {}).get('rev_id')} ещё запечатывается — "
+                f"сверка чисел отложена, а не объявлена провалом"
+            ))
+            return
+        fail(f"{relative}: активная ревизия не прочитана — числа перевода сверить не с чем")
+        return
+    stated = numbers
+    actual = (int(active["files"]), int(active["nodes"]), int(active["edges"]))
+    if stated == actual:
+        expect(True, "", ok_note=(
+            f"{relative}: числа {stated[0]} / {stated[1]} / {stated[2]} совпадают с активной "
+            f"ревизией {active['rev_id']}"
+        ))
+        return
+    match_payload, problem = run_snapshot(
+        root, project, match=f"{stated[0]},{stated[1]},{stated[2]}"
     )
-    if declared:
-        named = [name for name, pattern in GAPS if pattern.search(header)]
-        expect(
-            len(named) >= MIN_GAPS,
-            f"{relative}: шапка называет недостающих пунктов {len(named)} из {len(GAPS)} "
-            f"({', '.join(named) or 'ни одного'}), а требуется не менее {MIN_GAPS}: "
-            f"частичность без перечня — обещание, а не состояние",
-        )
+    where = (match_payload or {}).get("match")
+    if problem or not match_payload:
+        fail(f"{relative}: числа {stated[0]} / {stated[1]} / {stated[2]} не совпадают с "
+             f"активной ревизией {active['rev_id']} ({actual[0]} / {actual[1]} / {actual[2]}), "
+             f"а историю ревизий прочитать не удалось: {problem}")
+        return
+    if where:
+        warn(f"{relative}: числа {stated[0]} / {stated[1]} / {stated[2]} верны на "
+             f"{where['rev_id']} ({where['created_at']}), активная ревизия "
+             f"{active['rev_id']} — {actual[0]} / {actual[1]} / {actual[2]}: это отставание, "
+             f"обновить перед публикацией")
     else:
-        # Зависимое свойство: без шапки перечень проверять не в чем. Находка о
-        # шапке уже есть, и вторая про тот же дефект была бы счётом копий.
-        expect(
-            True,
-            "",
-            ok_note=(
-                f"{relative}: перечень недостающего не проверялся — шапки нет, "
-                f"об этом одна находка, а не две"
-            ),
-        )
+        fail(f"{relative}: числа {stated[0]} / {stated[1]} / {stated[2]} — такого состояния "
+             f"не было ни в одной из {match_payload.get('rows')} ревизий "
+             f"({match_payload.get('oldest')}…{match_payload.get('newest')}); активная ревизия "
+             f"{active['rev_id']} — {actual[0]} / {actual[1]} / {actual[2]}: документ называет "
+             f"состояние, которого не было")
 
+
+def check_common(relative: str, lines: list[str], text: str,
+                 delivered: set[str] | None, native_cyrillic: bool = False) -> list[int]:
+    """Свойства, одинаковые для любого состояния перевода.
+
+    Два из них — «кириллица вне ярлыка» и «русский заполнитель в командах» —
+    ловят ОСТАТКИ русского оригинала в переводе на другой язык. Для перевода, у
+    которого русский и есть язык (`native_cyrillic` в объявлении), они
+    превращаются в наблюдение: иначе правило объявляло бы дефектом сам файл.
+    """
     for forbidden in FORBIDDEN_LINKS:
         hits = [index for index, line in enumerate(lines, 1) if forbidden in line]
         expect(
@@ -315,11 +458,50 @@ def check_partial(root: Path, relative: str, language: str, marker: str,
         for index, line in enumerate(lines, 1)
         if any(item in line for item in FORBIDDEN_PLACEHOLDERS)
     ]
-    expect(
-        not placeholder_lines,
-        f"{relative}:{placeholder_lines[0] if placeholder_lines else 0}: в примерах команд "
-        f"остался русский заполнитель (строк {len(placeholder_lines)})",
-    )
+    if not native_cyrillic:
+        expect(
+            not placeholder_lines,
+            f"{relative}:{placeholder_lines[0] if placeholder_lines else 0}: в примерах команд "
+            f"остался русский заполнитель (строк {len(placeholder_lines)})",
+        )
+
+    if native_cyrillic:
+        expect(True, "", ok_note=(
+            f"{relative}: кириллица — язык этого перевода, правило о кириллице вне "
+            f"ярлыка к нему не применяется"
+        ))
+        expect(True, "", ok_note=(
+            f"{relative}: заполнитель <конфиг> — часть русской команды, правило о "
+            f"заполнителе к этому переводу не применяется"
+        ))
+        in_fence = False
+        code_blocks = 0
+        for line in lines:
+            if FENCE.match(line):
+                in_fence = not in_fence
+                if in_fence:
+                    code_blocks += 1
+        expect(
+            code_blocks > 0,
+            f"{relative}: не найдено ни одного блока команд — проверять нечего, а это "
+            f"документ с примерами",
+        )
+        links = relative_targets(text)
+        if delivered is None:
+            expect(
+                False,
+                f"{relative}: ссылки не проверены — состав поставки неизвестен "
+                f"(переводов со ссылками {len(links)})",
+            )
+        else:
+            for index, target in links:
+                if forbidden_path(target):
+                    continue
+                expect(
+                    resolve(target, delivered),
+                    f"{relative}:{index}: ссылка {target!r} не указывает на файл поставки",
+                )
+        return placeholder_lines
 
     in_fence = False
     code_blocks = 0
@@ -354,7 +536,7 @@ def check_partial(root: Path, relative: str, language: str, marker: str,
         f"перевод с примерами",
     )
 
-    links = links_of(text)
+    links = relative_targets(text)
     if delivered is None:
         expect(
             False,
@@ -370,46 +552,207 @@ def check_partial(root: Path, relative: str, language: str, marker: str,
                 resolve(target, delivered),
                 f"{relative}:{index}: ссылка {target!r} не указывает на файл поставки",
             )
+    return placeholder_lines
+
+
+def resolve_source(root: Path, declared: str) -> Path:
+    """Файл перевода: в живом дереве `community/…`, в поставке — в корне."""
+    direct = root / declared
+    if direct.is_file():
+        return direct
+    return root / Path(declared).name
+
+
+def check_state(root: Path, state: dict, markers: list[tuple[str, str]],
+                main_text: str | None, main_lines: list[str] | None,
+                delivered: set[str] | None, snapshot: dict | None, snapshot_problem: str,
+                project: Path) -> None:
+    declared = state["path"]
+    kind = state["state"]
+    path = resolve_source(root, declared)
+    if not path.is_file():
+        fail(f"нет {declared} — перевод {state.get('language')} отсутствует, "
+             f"а состояние объявлено")
+        return
+    text = read(path)
+    lines = text.splitlines()
+    size = int(state.get("header_lines") or DEFAULT_HEADER_LINES)
+    header = header_of(lines, size)
+
+    if kind == "full":
+        check_no_partial_marker(declared, header, markers)
+        check_header(declared, header, state.get("header_requires") or [])
+        if main_lines is None or main_text is None:
+            expect(True, "", ok_note=f"{declared}: структура не сверялась — нет {MAIN}")
+        else:
+            sections = count_headings(lines, "## ")
+            main_sections = count_headings(main_lines, "## ")
+            expect(
+                sections == main_sections,
+                f"{declared}: разделов ## {sections}, а в {MAIN} их {main_sections}: "
+                f"раздел пропал или добавился",
+            )
+            subsections = count_headings(lines, "### ")
+            main_subsections = count_headings(main_lines, "### ")
+            expect(
+                subsections == main_subsections,
+                f"{declared}: подразделов ### {subsections}, а в {MAIN} их {main_subsections}",
+            )
+            profile = section_profile(lines)
+            main_profile = section_profile(main_lines)
+            difference = next(
+                (
+                    (index, left, right)
+                    for index, (left, right) in enumerate(zip(profile, main_profile))
+                    if left != right
+                ),
+                None,
+            )
+            if difference is not None:
+                index, left, right = difference
+                expect(
+                    False,
+                    f"{declared}: в разделе {index + 1} блоков команд {left[0]} и строк таблиц "
+                    f"{left[1]}, а в {MAIN} — {right[0]} и {right[1]}: раздел переведён не целиком",
+                )
+            else:
+                expect(
+                    len(profile) == len(main_profile),
+                    f"{declared}: разделов с содержимым {len(profile)}, а в {MAIN} их "
+                    f"{len(main_profile)}",
+                )
+            check_link_coverage(declared, text, main_text)
+        check_common(declared, lines, text, delivered,
+                     bool(state.get("native_cyrillic")))
+
+    else:  # partial
+        marker = state.get("partial_marker") or ""
+        presented = marker in header
+        expect(
+            presented,
+            f"{declared}: в шапке нет признака неполноты «{marker}» — частичный перевод "
+            f"выдаётся за полный",
+        )
+        if presented:
+            gaps = state.get("_gaps") or []
+            named = [name for name, pattern in gaps if re.search(pattern, header)]
+            threshold = int(state.get("min_gaps") or DEFAULT_MIN_GAPS)
+            expect(
+                len(named) >= threshold,
+                f"{declared}: шапка называет недостающих пунктов {len(named)} из {len(gaps)} "
+                f"({', '.join(named) or 'ни одного'}), а требуется не менее {threshold}: "
+                f"частичность без перечня — обещание, а не состояние",
+            )
+        else:
+            # Зависимое свойство: без шапки перечень проверять не в чем. Находка о
+            # шапке уже есть, и вторая про тот же дефект была бы счётом копий.
+            expect(
+                True,
+                "",
+                ok_note=(
+                    f"{declared}: перечень недостающего не проверялся — шапки нет, "
+                    f"об этом одна находка, а не две"
+                ),
+            )
+        check_common(declared, lines, text, delivered,
+                     bool(state.get("native_cyrillic")))
+
+    check_numbers(declared, text, state, snapshot, snapshot_problem, root, project)
 
 
 def main() -> int:
+    global STRICT
     parser = argparse.ArgumentParser(description="Состояние переводов README")
-    parser.add_argument("--root", default=str(REPO), help="корень живого дерева")
+    parser.add_argument("--root", default=str(REPO), help="корень проверяемого дерева")
+    parser.add_argument(
+        "--project",
+        default=None,
+        help="конфиг корпуса для записи ревизии (по умолчанию <root>/config/ragraf.yaml)",
+    )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="отставание чисел считать находкой (режим публикации: tools/release/gate_release.py)",
+    )
     args = parser.parse_args()
+    STRICT = bool(args.strict)
     root = Path(args.root)
+    project = Path(args.project) if args.project else root / "config" / "ragraf.yaml"
 
-    main_path = root / MAIN
-    main_lines = read(main_path).splitlines() if main_path.is_file() else None
-    if main_lines is None:
-        fail(f"нет {MAIN} — сверять зеркало и переводы не с чем")
-    else:
-        check_mirror(root, main_lines)
-
-    delivered, problems = delivered_targets(root)
+    data, problems = load_states(root)
     for problem in problems:
         fail(problem)
 
-    for relative, (language, marker) in PARTIAL.items():
-        check_partial(root, relative, language, marker, delivered)
-        if (root / relative).is_file():
-            print(f"перевод: {relative}")
+    main_path = root / MAIN
+    main_text = read(main_path) if main_path.is_file() else None
+    main_lines = main_text.splitlines() if main_text is not None else None
+    if main_lines is None:
+        fail(f"нет {MAIN} — сверять переводы не с чем")
+
+    delivered, delivery_problems = delivered_targets(root)
+    for problem in delivery_problems:
+        fail(problem)
+
+    snapshot: dict | None = None
+    snapshot_problem = ""
+    if data is not None:
+        parsed, snapshot_problem = run_snapshot(root, project)
+        snapshot = parsed
+        if parsed is not None and not parsed.get("active"):
+            snapshot_problem = ""
+
+    if data is not None:
+        gaps = [
+            (item["name"], item["pattern"])
+            for item in (data.get("gaps") or [])
+            if isinstance(item, dict) and "name" in item and "pattern" in item
+        ]
+        # Перечень признаков неполноты — свойство ЯЗЫКА, а не текущего состояния:
+        # иначе маркер языка, ставшего полным, выпадает из перечня, и вернуть его
+        # в файл можно незаметно (измерено на порче «вернуть маркер в de»).
+        markers = [
+            (item.get("language", "?"), item["marker"])
+            for item in (data.get("incomplete_markers") or [])
+            if isinstance(item, dict) and item.get("marker")
+        ]
+        if not markers:
+            markers = [
+                (state.get("language", "?"), state["partial_marker"])
+                for state in data["states"]
+                if state.get("partial_marker")
+            ]
+        if not gaps:
+            fail(f"{STATES_FILE}: перечень недостающих пунктов не объявлен — "
+                 f"частичность нечем проверить")
+        for state in data["states"]:
+            state["_gaps"] = gaps
+            check_state(root, state, markers, main_text, main_lines, delivered,
+                        snapshot, snapshot_problem, project)
+            print(f"перевод: {state['path']}")
+            print(f"состояние: {state['state']}"
+                  + (f" (версия {state['version']})" if state.get("version") else ""))
 
     if EXAMINED == 0:
-        FAILURES.append("ни одного объекта не осмотрено: «ноль проверенного» — это не PASS")
+        fail("ни одного объекта не осмотрено: «ноль проверенного» — это не PASS")
     report()
     return 1 if FAILURES else 0
 
 
 def report() -> None:
     print(
-        "граница: зеркало README.ru.md русское по решению, поэтому кириллица и <конфиг> "
-        "в нём проверяются равенством с README.md, а не запретом"
+        "граница: состояние подтверждается структурой разделов, ссылками и числами; "
+        "смысл перевода машинной проверке не поддаётся и здесь не проверяется"
     )
+    print(f"объявление состояний: {STATES_FILE}")
     for note in OBSERVED:
         print(f"наблюдение: {note}")
+    for warning in WARNINGS:
+        print(f"WARN: {warning}")
     for failure in FAILURES:
         print(f"FAIL: {failure}")
     print(f"осмотрено: {EXAMINED}")
+    if WARNINGS and not FAILURES:
+        print(f"предупреждений: {len(WARNINGS)}")
     if FAILURES:
         print(f"нарушений: {len(FAILURES)}")
 

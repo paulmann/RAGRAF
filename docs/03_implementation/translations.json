@@ -1,0 +1,144 @@
+{
+  "schema": 1,
+  "product": "RAGRAF",
+  "version": "0.4.0",
+  "declared_at": "2026-10-27",
+  "stage": "И22",
+  "main": "README.md",
+  "note": "Единственное место, где объявлено состояние каждого перевода README. Состояний два: full (переведён целиком — проверяются отсутствие признака неполноты, шапка, структура разделов и числа) и partial (частичный — проверяются признак неполноты и перечень недостающего). Третье состояние, `mirror` (побайтовая копия основного документа), снято на этапе И23: основной README.md переведён на английский, и русский файл больше не может быть его копией, а стал таким же переводом. tools/check_translations.py не держит словаря состояний в коде: объявить следующий полный перевод можно правкой этого файла, не правя код.",
+  "gaps": [
+    {
+      "name": "уровни лицензии",
+      "pattern": "(?i)(Lizenzstufen|niveles de licencia|licen[cs]ias?\\b|लाइसेंस\\s*स्तर|许可证(层级|分层)?|уровн[а-яё]* лицензи)"
+    },
+    {
+      "name": "брокер секретов",
+      "pattern": "(?i)(Secret[- ]Broker|br[óo]ker de secretos|ब्रोकर|机密代理|密钥代理|брокер[а-яё]* секрет)"
+    },
+    {
+      "name": "контур качества и общий индекс",
+      "pattern": "(?i)(Qualitätsschleife|bucle de calidad|control de calidad|गुणवत्ता|质量(回路|循环|闭环)|контур[а-яё]* качества|gemeinsame[nr]? Index|índice compartido|साझा\\s*(इंडेक्स|सूचकांक)|共享索引|общ[а-яё]* индекс)"
+    },
+    {
+      "name": "снятые connectors и fleet",
+      "pattern": "(?i)(`?connectors`?|`?fleet`?|कनेक्टर|连接器)"
+    },
+    {
+      "name": "разбор документов Office/PDF",
+      "pattern": "(?i)(Office|PDF|ऑफ़िस|文档解析|разбор[а-яё]* документ)"
+    },
+    {
+      "name": "операции route и neighbors",
+      "pattern": "(?i)(`route`|`neighbors`|\\broute\\b|\\bneighbors\\b)"
+    },
+    {
+      "name": "операции SSO, SIEM, офлайн-лицензии и аттестации",
+      "pattern": "(?i)(\\bSSO\\b|\\bSIEM\\b|Offline[- ]?Lizenz|licencia (sin conexión|offline)|ऑफ़लाइन|离线|офлайн|Attestierung|attestation|अटेटेशन|认证|аттестаци)"
+    }
+  ],
+  "incomplete_markers": [
+    {
+      "language": "en",
+      "marker": "This translation is incomplete"
+    },
+    {
+      "language": "ru",
+      "marker": "неполный перевод"
+    },
+    {
+      "language": "de",
+      "marker": "Diese Übersetzung ist unvollständig"
+    },
+    {
+      "language": "es",
+      "marker": "Esta traducción está incompleta"
+    },
+    {
+      "language": "hi",
+      "marker": "यह अनुवाद अधूरा है"
+    },
+    {
+      "language": "zh",
+      "marker": "本译本不完整"
+    }
+  ],
+  "states": [
+    {
+      "path": "community/README.ru.md",
+      "language": "ru",
+      "state": "full",
+      "version": "0.4.0",
+      "native_cyrillic": true,
+      "note": "русская версия: основной README.md переведён на английский (этап И23, 27.10.2026), и русский текст стал самостоятельным переводом, а не копией. Состояние «полный» подтверждается структурой, ссылками и числами, а не шапкой",
+      "header_lines": 13,
+      "header_requires": [
+        {
+          "pattern": "[Рр]усская версия",
+          "name": "сказано, что это русская версия основного документа"
+        },
+        {
+          "pattern": "0\\.4\\.0",
+          "name": "названа версия 0.4.0"
+        },
+        {
+          "pattern": "README\\.md",
+          "name": "назван основной документ README.md"
+        }
+      ],
+      "numbers_pattern": "индекс RAGRAF: файлов — ([\\d ]+?), узлов — ([\\d ]+?), рёбер — (\\d[\\d ]*\\d|\\d)"
+    },
+    {
+      "path": "community/README.de.md",
+      "language": "de",
+      "state": "full",
+      "version": "0.4.0",
+      "note": "переведён целиком на 0.4.0 (этап И22, 27.10.2026): структура разделов и числа сверяются с README.md и с активной записью ревизии, а не берутся из шапки",
+      "header_lines": 13,
+      "header_requires": [
+        {
+          "pattern": "[Vv]ollständige Übersetzung",
+          "name": "сказано, что перевод полный"
+        },
+        {
+          "pattern": "0\\.4\\.0",
+          "name": "названа версия 0.4.0"
+        },
+        {
+          "pattern": "[Hh]auptdokument",
+          "name": "назван основной документ"
+        }
+      ],
+      "numbers_pattern": "([\\d ]+?)\\s*Dateien,\\s*([\\d ]+?)\\s*Knoten\\s+und\\s+([\\d ]+?)\\s*Kanten"
+    },
+    {
+      "path": "community/README.es.md",
+      "language": "es",
+      "state": "partial",
+      "note": "остановлен на редакции 0.3.x; числа приведены к 0.4.0",
+      "header_lines": 13,
+      "partial_marker": "Esta traducción está incompleta",
+      "min_gaps": 3,
+      "numbers_pattern": "([\\d ]+?)\\s*archivos,\\s*([\\d ]+?)\\s*nodos,\\s*([\\d ]+?)\\s*aristas"
+    },
+    {
+      "path": "community/README.hi.md",
+      "language": "hi",
+      "state": "partial",
+      "note": "остановлен на редакции 0.3.x; числа приведены к 0.4.0",
+      "header_lines": 13,
+      "partial_marker": "यह अनुवाद अधूरा है",
+      "min_gaps": 3,
+      "numbers_pattern": "([\\d ]+?)\\s*फ़ाइलें,\\s*([\\d ]+?)\\s*नोड,\\s*([\\d ]+?)\\s*किनारे"
+    },
+    {
+      "path": "community/README.zh.md",
+      "language": "zh",
+      "state": "partial",
+      "note": "остановлен на редакции 0.3.x; числа приведены к 0.4.0",
+      "header_lines": 13,
+      "partial_marker": "本译本不完整",
+      "min_gaps": 3,
+      "numbers_pattern": "([\\d ]+?)\\s*个文件、([\\d ]+?)\\s*个节点、([\\d ]+?)\\s*条边"
+    }
+  ]
+}
