@@ -18,7 +18,7 @@
     результат Ok=$true при нулевом осмотре считается ложным PASS и валит прогон.
 
     Ожидаемый baseline на момент передачи проекта: 0 ошибок, 0 предупреждений,
-    39 проверок — ровно столько, сколько записей в реестре `$script:CheckFunctions`;
+    40 проверок — ровно столько, сколько записей в реестре `$script:CheckFunctions`;
     это сверяет Test-DocumentedNumbers. Прежние две ошибки («запись прогона в реестр
     не покрывала путь ensure» и «документы называли 18 и 16 инструментов там, где
     в коде 23») закрыты
@@ -66,6 +66,17 @@
     объявлены ДАННЫМИ (docs/03_implementation/tables.json). Граница названа и
     здесь: смысл и правильность ячейки не проверяются, отрисовка таблицы GitHub
     не воспроизводится.
+    27.10.2026 добавлена проверка пунктов списков переводов (Test-ListItems):
+    сравниваются САМИ ПУНКТЫ в том же порядке — позиция, отступ, вид и номер
+    маркера, обрамлённый код, адреса ссылок, числа (значением) и число
+    разделителей `<br>`, — а не только число пунктов в разделе, которое считал
+    section_profile в tools/check_translations.py. Пропавший пункт при совпавшем
+    числе виден только так, склейка двух пунктов видна по числу. Якоря оглавления
+    сверить с README.md нельзя (заголовки переведены), поэтому они объявлены по
+    языку и сверяются ПОЗИЦИЕЙ. Правило разбора, виды пунктов и строгость
+    объявлены ДАННЫМИ (docs/03_implementation/lists.json). Граница названа и
+    здесь: смысл пункта не проверяется, отрисовка списка GitHub не
+    воспроизводится, а куда ведёт якорь оглавления — предмет следующего слоя.
 
 .PARAMETER ProjectRoot
     Корень проекта. По умолчанию — каталог двумя уровнями выше скрипта, то есть
@@ -3852,6 +3863,229 @@ function Test-TableRows {
 
     return New-CheckResult -Name $checkName -Ok ($problems.Count -eq 0) -Examined $examined -Details $problems
 }
+function Test-ListItems {
+    <#
+    .SYNOPSIS
+        Строки списков переводов README: те же ПУНКТЫ в том же порядке.
+
+    .DESCRIPTION
+        Измеренный дефект (27.10.2026, этап И32). К этому моменту перевод был
+        проверяем на восьми уровнях: состояние, ссылки на файлы поставки, числа
+        индекса, терминология, проза, адреса, блоки команд (этап И30) и ячейки
+        таблиц (этап И31). У всех граница названа честно, но последний слой той
+        же природы оставался без сторожа: СТРОКИ СПИСКОВ.
+
+        функция `section_profile` в `tools/check_translations.py` считает строки
+        списков на каждый заголовок `##`, то есть список проверяется ЧИСЛОМ.
+        Поэтому перевод, где пункт списка ПРОПАЛ, а соседний пункт склеен с ним,
+        проходил зелёным: число пунктов верхнего уровня в разделе при этом может
+        совпасть. Замер 27.10.2026 до правки: списков 4 в каждом из шести файлов,
+        пунктов 22 (нумерованных 3), всего по шести файлам 132 пункта; пунктов с
+        обрамлённым кодом 8, с числом 3, со ссылкой 11 — и все 11 ссылок это
+        якоря оглавления. Свойство сегодня выполняется во всех пяти переводах, но
+        не проверялось ничем: пропавший пункт при совпавшем числе увидел бы
+        только глаз.
+
+        Свойства проверяет `tools/check_list_items.py`: разбирает списки, склеивает
+        переносы строк в пункт, сверяет ПОЗИЦИИ пунктов, отступ, вид и номер
+        маркера и защищённые части — обрамлённый код (точно и по порядку), адреса
+        ссылок, числа (значением, набором с учётом кратности) и число разделителей
+        `<br>`. Переводимый текст не сравнивается. Якоря оглавления сверить с
+        README.md нельзя — заголовки переведены, — поэтому они объявлены по языку
+        и сверяются ПОЗИЦИЕЙ: перестановка двух пунктов оглавления видна именно
+        так. Правило разбора, виды пунктов, перечень списков и строгость объявлены
+        ДАННЫМИ (`docs/03_implementation/lists.json`); по всем языкам допуск равен
+        нулю, объявленных исключений нет.
+
+        Здесь к ним добавляется то, что видно только PowerShell: языки из
+        объявления сверяются с осмотренными и с файлами в `community/`, числа
+        списков, пунктов и нумерованных пунктов из объявления — с тем, что
+        инструмент назвал в выводе, перечень пунктов по спискам — со своей суммой,
+        виды списков — с объявленным словарём видов, а число объявленных якорей —
+        с числом пунктов списков вида anchor. Иначе новый перевод `README.fr.md`
+        или новый список в README.md остались бы непроверенными при зелёном
+        прогоне.
+
+        Молчаливый пропуск запрещён: нет скрипта, нет python или ноль осмотренных
+        объектов — это провал, а не «нечего проверять».
+    #>
+    $problems = [System.Collections.Generic.List[string]]::new()
+    $checkName = 'translation list items match the main document'
+
+    $toolPath = Join-Path $script:ProjectRoot 'tools/check_list_items.py'
+    if (-not (Test-Path -LiteralPath $toolPath)) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: нет tools/check_list_items.py')
+    }
+
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $python) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: python не найден в PATH')
+    }
+
+    $output = & $python.Source $toolPath --root $script:ProjectRoot 2>&1
+    $code = $LASTEXITCODE
+    $text = ($output | Out-String).Trim()
+    Write-Host "    пункты списков переводов: $text"
+
+    $lines = @($output | Where-Object { $_ -is [string] })
+    $examinedText = ([regex]::Match($text, 'осмотрено:\s*(\d+)')).Groups[1].Value
+    $examined = if ($examinedText) { [int]$examinedText } else { 0 }
+
+    if ($examined -le 0) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: инструмент не осмотрел ни одного объекта — это ложный PASS')
+    }
+
+    if ($code -ne 0) {
+        foreach ($line in $lines) {
+            if ($line -match '^\s*FAIL:') { $problems.Add(($line -replace '^\s*FAIL:\s*', '')) }
+        }
+        if ($problems.Count -eq 0) {
+            $problems.Add("проверка пунктов списков завершилась кодом $code без расшифровки")
+        }
+    }
+
+    # Объявление пунктов: языки, строгость, виды пунктов, перечень списков, якоря.
+    $declarationPath = Join-Path $script:ProjectRoot 'docs/03_implementation/lists.json'
+    $declared = @()
+    $baseline = $null
+    $kinds = @()
+    $declaredLists = @()
+    $anchorsByLanguage = @{}
+    $declaration = $null
+    if (Test-Path -LiteralPath $declarationPath) {
+        $examined++
+        try {
+            $declaration = (Get-ProjectText $declarationPath) | ConvertFrom-Json
+            $declared = @($declaration.languages.PSObject.Properties.Name)
+            $baseline = $declaration.baseline
+            $kinds = @($declaration.item_kinds | ForEach-Object { $_.name })
+            $declaredLists = @($declaration.lists)
+            foreach ($language in $declared) {
+                $entry = $declaration.languages.$language
+                $anchors = @()
+                if ($entry.PSObject.Properties.Name -contains 'anchors') { $anchors = @($entry.anchors) }
+                $anchorsByLanguage[$language] = $anchors
+            }
+        }
+        catch {
+            $problems.Add('docs/03_implementation/lists.json не разобран: пункты списков объявлены, а осмотреть их нечем')
+            $declared = @()
+            $declaredLists = @()
+        }
+    }
+    else {
+        $problems.Add('нет docs/03_implementation/lists.json: пункты списков переводов не объявлены данными')
+    }
+
+    $seen = @($lines | Where-Object { $_ -match '^язык:\s+\S' } |
+        ForEach-Object { (($_ -replace '^язык:\s+', '') -replace '\s+—.*$', '').Trim() })
+
+    if ($declared.Count -eq 0 -and $problems.Count -eq 0) {
+        $problems.Add('в объявлении нет ни одного языка: строгость пуста, а проверка объявлена')
+    }
+    foreach ($language in $declared) {
+        $examined++
+        if ($seen -notcontains $language) {
+            $problems.Add("язык '$language' объявлен в пунктах списков, но проверка его не осмотрела: строки «язык: $language» в выводе нет")
+        }
+    }
+
+    # Числа объявленного перечня сверяются с тем, что инструмент осмотрел: список
+    # или пункт, добавленный в README.md без правки объявления, иначе прошёл бы молча.
+    if ($baseline) {
+        $pairs = @(
+            @{ Key = 'lists'; Pattern = 'списков:\s*(\d+)'; Label = 'списков' }
+            @{ Key = 'items'; Pattern = 'пунктов:\s*(\d+)'; Label = 'пунктов' }
+            @{ Key = 'ordered'; Pattern = 'нумерованных\s*(\d+)'; Label = 'нумерованных пунктов' }
+        )
+        foreach ($pair in $pairs) {
+            $examined++
+            $measured = ([regex]::Match($text, $pair.Pattern)).Groups[1].Value
+            if (-not $measured) {
+                $problems.Add("инструмент не называет число $($pair.Label): сверять объявление не с чем")
+                continue
+            }
+            $declaredValue = $baseline.($pair.Key)
+            if ([int]$measured -ne [int]$declaredValue) {
+                $problems.Add("пункты списков: объявлено $declaredValue $($pair.Label) в основном документе, а инструмент осмотрел $measured")
+            }
+        }
+
+        # Перечень пунктов по спискам: сумма обязана сходиться с объявленным числом
+        # пунктов, а длина перечня — с числом списков. Иначе объявление описывает
+        # не тот документ, и вид списка проверяется на съехавшем перечне.
+        $examined++
+        $itemsPerList = @($baseline.items_per_list)
+        $sumItems = 0
+        foreach ($item in $itemsPerList) { $sumItems += [int]$item }
+        if ($sumItems -ne [int]$baseline.items) {
+            $problems.Add("пункты списков: сумма пунктов по спискам ($sumItems) не равна объявленному числу пунктов ($($baseline.items))")
+        }
+        if ($itemsPerList.Count -ne [int]$baseline.lists) {
+            $problems.Add("пункты списков: перечень пунктов описывает $($itemsPerList.Count) списков, а объявлено $($baseline.lists)")
+        }
+
+        $countsText = ([regex]::Match($text, 'пунктов по спискам:\s*([\d,\s]+)')).Groups[1].Value
+        $measuredCounts = @($countsText -split ',' | ForEach-Object { $_.Trim() } |
+            Where-Object { $_ } | ForEach-Object { [int]$_ })
+        $examined++
+        if ($measuredCounts.Count -eq 0) {
+            $problems.Add('инструмент не называет число пунктов по спискам: сверять виды списков не с чем')
+        }
+        elseif (($itemsPerList -join ',') -ne ($measuredCounts -join ',')) {
+            $problems.Add("пункты списков: пунктов по спискам объявлено $($itemsPerList -join ', '), а измерено $($measuredCounts -join ', ')")
+        }
+
+        # Виды списков: каждый обязан быть из объявленного словаря — опечатка иначе
+        # разрешила бы списку не проверяться вовсе.
+        foreach ($entry in $declaredLists) {
+            $examined++
+            $kind = $entry.kind
+            if ($kinds -notcontains $kind) {
+                $problems.Add("пункты списков: список №$($entry.order) объявлен видом '$kind', которого нет в словаре видов ($($kinds -join ', '))")
+            }
+        }
+
+        # Якоря оглавления объявлены по языку: их число обязано совпасть с числом
+        # пунктов списков вида anchor, иначе часть пунктов не сверялась бы.
+        $examined++
+        $anchorItems = 0
+        foreach ($entry in $declaredLists) {
+            if ($entry.kind -eq 'anchor') { $anchorItems += [int]$entry.items }
+        }
+        if ($anchorItems -gt 0) {
+            foreach ($language in $declared) {
+                $examined++
+                $count = @($anchorsByLanguage[$language]).Count
+                if ($count -ne $anchorItems) {
+                    $problems.Add("пункты списков: у языка '$language' объявлено якорей $count, а пунктов в списках вида anchor — $anchorItems")
+                }
+            }
+        }
+        else {
+            $problems.Add('в объявлении нет ни одного списка вида anchor, хотя оглавление проверяется по языку: якоря объявлены, а сверять их не с чем')
+        }
+    }
+
+    # Файлы в community/ сверяются с осмотренным: новый перевод не должен
+    # оставаться непроверенным даже там, где о нём молчит объявление.
+    $community = Join-Path $script:ProjectRoot 'community'
+    $translations = @(if (Test-Path -LiteralPath $community) {
+        Get-ChildItem -LiteralPath $community -File -Filter 'README.*.md' -ErrorAction SilentlyContinue
+    })
+    $examined++
+    if ($translations.Count -eq 0) {
+        $problems.Add('в community/ нет ни одного перевода README.*.md: пункты списков объявлено проверять, а сверять не с чем')
+    }
+    if ($translations.Count -gt 0 -and $seen.Count -ne $translations.Count) {
+        $problems.Add("инструмент осмотрел $($seen.Count) переводов, а в community/ их $($translations.Count): перечень и осмотр разошлись")
+    }
+
+    return New-CheckResult -Name $checkName -Ok ($problems.Count -eq 0) -Examined $examined -Details $problems
+}
 
 $script:CheckFunctions = @(
     'Test-ProjectLayout'
@@ -3893,6 +4127,7 @@ $script:CheckFunctions = @(
     'Test-TranslationAddresses'
     'Test-CommandBlocks'
     'Test-TableRows'
+    'Test-ListItems'
 )
 
 $script:CheckNames = @()

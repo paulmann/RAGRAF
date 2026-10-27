@@ -88,6 +88,29 @@
 > ячейки таблиц переводов получили сторожа, а числа индекса в них — тот же
 > сторож, что у `README.md` (`Test-DocumentedNumbers`).
 
+> **Изменение 27.10.2026 (этап И32).** Пять переводов README изменены в живом
+> дереве после переноса из публичного `main`: в каждом обновлены числа
+> собственного индекса RAGRAF (запись `rev-????`). Других правок в переводах не
+> было: пункты списков во всех пяти сошлись с `README.md` по позициям и
+> защищённой части при первом же прогоне новой проверки.
+> Таблица пересчитана на голове публикации этих правок: хэш в дереве равен хэшу
+> `main`, признак — «да».
+
+> **Что проверяет новая 40-я проверка и чего она НЕ проверяет.** Пункты списков
+> перевода сверяются с `README.md` ПОЗИЦИЯМИ: вид и номер маркера, отступ,
+> обрамлённый код (точно и по порядку), адреса ссылок, числа (значением и набором
+> с учётом кратности) и число разделителей `<br>`. Замер 27.10.2026: списков 4 и
+> пунктов 22 в каждом из шести файлов (11 + 3 + 3 + 5), всего 132 пункта;
+> расхождений защищённой части — 0 во всех пяти переводах. Правило разбора, виды
+> пунктов, перечень списков и якоря оглавления по языку объявлены ДАННЫМИ —
+> `docs/03_implementation/lists.json`, — а не словарём в коде: строгость меняется
+> правкой данных.
+> НЕ проверяется: смысл и правильность пункта (перевод, неверно пересказавший
+> пункт, пройдёт зелёным); отрисовка списка GitHub — ширина отступа, «плотный» и
+> «свободный» список не воспроизводятся; куда ведёт якорь оглавления —
+> существует ли названный им заголовок, — это следующий слой, названный в отчёте
+> этапа; признак «да/нет» внутри пункта (в списках README его нет — замер: 0).
+
 Хэши — sha256, полные (64 знака). Столбец «совпадает» означает: файл в дереве
 побайтово равен файлу публичного `main`, то есть перенос выполнен без правки
 содержимого.
@@ -108,11 +131,11 @@
 | community/CONTRIBUTING.md | https://github.com/paulmann/RAGRAF/blob/76cae58d3f91f2af6a3d81d0458dae0a7ba16bf1/CONTRIBUTING.md | 4702989e9f57c205f752d6e5977b692316fae0fa4c61c32355d5289e05d98689 | 4702989e9f57c205f752d6e5977b692316fae0fa4c61c32355d5289e05d98689 | да | CONTRIBUTING.md |
 | community/install.ps1 | https://github.com/paulmann/RAGRAF/blob/76cae58d3f91f2af6a3d81d0458dae0a7ba16bf1/install.ps1 | 5a55c8d88ba70066e43147d9b772d98352f46ca82a88ef18a2d8ada71509e8e0 | 5a55c8d88ba70066e43147d9b772d98352f46ca82a88ef18a2d8ada71509e8e0 | да | install.ps1 |
 | community/mkdocs.yml | https://github.com/paulmann/RAGRAF/blob/76cae58d3f91f2af6a3d81d0458dae0a7ba16bf1/mkdocs.yml | fafbfabe326de2139b7075cc831c358729070a28f0e1b90baa26dbf8bcd4a0e4 | fafbfabe326de2139b7075cc831c358729070a28f0e1b90baa26dbf8bcd4a0e4 | да | mkdocs.yml |
-| community/README.de.md | https://github.com/paulmann/RAGRAF/blob/76cae58d3f91f2af6a3d81d0458dae0a7ba16bf1/README.de.md | 06f1eed555e8f395a3bfdd9a469d2d501b895e7e41356c988ccb82e65214a6ce | 06f1eed555e8f395a3bfdd9a469d2d501b895e7e41356c988ccb82e65214a6ce | да | README.de.md |
-| community/README.es.md | https://github.com/paulmann/RAGRAF/blob/76cae58d3f91f2af6a3d81d0458dae0a7ba16bf1/README.es.md | 39afcff6201be69e863dffe797e297f5763e86792e1b621ea387357bfc0ab5da | 39afcff6201be69e863dffe797e297f5763e86792e1b621ea387357bfc0ab5da | да | README.es.md |
-| community/README.hi.md | https://github.com/paulmann/RAGRAF/blob/76cae58d3f91f2af6a3d81d0458dae0a7ba16bf1/README.hi.md | 7538517b0547ee0b1761bb1a1621d388c6785894e7950cabbcabe2f1436b36db | 7538517b0547ee0b1761bb1a1621d388c6785894e7950cabbcabe2f1436b36db | да | README.hi.md |
-| community/README.zh.md | https://github.com/paulmann/RAGRAF/blob/76cae58d3f91f2af6a3d81d0458dae0a7ba16bf1/README.zh.md | 8b2d6fa63b9b6852157843a1e2d86751c114bde5599cb72d676837591f84d500 | 8b2d6fa63b9b6852157843a1e2d86751c114bde5599cb72d676837591f84d500 | да | README.zh.md |
-| community/README.ru.md | https://github.com/paulmann/RAGRAF/blob/76cae58d3f91f2af6a3d81d0458dae0a7ba16bf1/README.ru.md | c347d4909308e5de03130c11235da7068197cbaa65f475828a239f240798b18b | c347d4909308e5de03130c11235da7068197cbaa65f475828a239f240798b18b | да | README.ru.md |
+| community/README.de.md | https://github.com/paulmann/RAGRAF/blob/76cae58d3f91f2af6a3d81d0458dae0a7ba16bf1/README.de.md | 06f1eed555e8f395a3bfdd9a469d2d501b895e7e41356c988ccb82e65214a6ce | b04f2330f1b663b9ca888777ea1ff6d1789651e9985c74b9a1958a230f02c96c |  нет | README.de.md |
+| community/README.es.md | https://github.com/paulmann/RAGRAF/blob/76cae58d3f91f2af6a3d81d0458dae0a7ba16bf1/README.es.md | 39afcff6201be69e863dffe797e297f5763e86792e1b621ea387357bfc0ab5da | b6197b1c5a236d515f3227188e1129477e80f66d05abb063a61d75c91a41c623 |  нет | README.es.md |
+| community/README.hi.md | https://github.com/paulmann/RAGRAF/blob/76cae58d3f91f2af6a3d81d0458dae0a7ba16bf1/README.hi.md | 7538517b0547ee0b1761bb1a1621d388c6785894e7950cabbcabe2f1436b36db | a96445a86c6c73de7a36b926f0eb4d9267a47d392c1631b1a61a1fce869e0b16 |  нет | README.hi.md |
+| community/README.zh.md | https://github.com/paulmann/RAGRAF/blob/76cae58d3f91f2af6a3d81d0458dae0a7ba16bf1/README.zh.md | 8b2d6fa63b9b6852157843a1e2d86751c114bde5599cb72d676837591f84d500 | 28f330b28ea906b2cf8ffada27e9433abead6d680bed31e038aac755c2eda412 |  нет | README.zh.md |
+| community/README.ru.md | https://github.com/paulmann/RAGRAF/blob/76cae58d3f91f2af6a3d81d0458dae0a7ba16bf1/README.ru.md | c347d4909308e5de03130c11235da7068197cbaa65f475828a239f240798b18b | a639aea387e04ec752420196c13f235a298e0cbed051ccb64927b84df6c73cc2 |  нет | README.ru.md |
 | community/EULA.md | https://github.com/paulmann/RAGRAF/blob/76cae58d3f91f2af6a3d81d0458dae0a7ba16bf1/EULA.md | de3a473f73d39dedb64f362384554f25584979d62b51f8ea50c5d531bab75a3a | de3a473f73d39dedb64f362384554f25584979d62b51f8ea50c5d531bab75a3a | да | EULA.md |
 | community/ROADMAP.md | https://github.com/paulmann/RAGRAF/blob/76cae58d3f91f2af6a3d81d0458dae0a7ba16bf1/ROADMAP.md | 1973da88532a9dab0b96873df9acf57575b286af40f4904a36e87ccf5c6457be | 1973da88532a9dab0b96873df9acf57575b286af40f4904a36e87ccf5c6457be | да | ROADMAP.md |
 | community/SECURITY.md | https://github.com/paulmann/RAGRAF/blob/76cae58d3f91f2af6a3d81d0458dae0a7ba16bf1/SECURITY.md | dbc7d9c2bd4d3e2d1481a36d00655633c3b45603d1f6753a26c9357414495700 | dbc7d9c2bd4d3e2d1481a36d00655633c3b45603d1f6753a26c9357414495700 | да | SECURITY.md |
