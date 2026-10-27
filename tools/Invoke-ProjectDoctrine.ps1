@@ -18,7 +18,7 @@
     результат Ok=$true при нулевом осмотре считается ложным PASS и валит прогон.
 
     Ожидаемый baseline на момент передачи проекта: 0 ошибок, 0 предупреждений,
-    38 проверок — ровно столько, сколько записей в реестре `$script:CheckFunctions`;
+    39 проверок — ровно столько, сколько записей в реестре `$script:CheckFunctions`;
     это сверяет Test-DocumentedNumbers. Прежние две ошибки («запись прогона в реестр
     не покрывала путь ensure» и «документы называли 18 и 16 инструментов там, где
     в коде 23») закрыты
@@ -56,6 +56,16 @@
     ДАННЫМИ (docs/03_implementation/commands.json). Граница названа и здесь:
     проверяется совпадение текста, а смысл команды и её выполнимость — нет;
     запуска команд у проверки не происходит.
+
+    27.10.2026 добавлена проверка ячеек таблиц переводов (Test-TableRows):
+    внутри таблицы сравниваются ЗАЩИЩЁННЫЕ ЧАСТИ ЯЧЕЙКИ — обрамлённый код,
+    адреса ссылок, числа (значением, а не текстом) и число разделителей `<br>`, —
+    а не только число строк, которое считал section_profile в
+    tools/check_translations.py (строка 193). Переводимый текст свободен, строка
+    заголовка данными не считается. Правило разбора, виды колонок и строгость
+    объявлены ДАННЫМИ (docs/03_implementation/tables.json). Граница названа и
+    здесь: смысл и правильность ячейки не проверяются, отрисовка таблицы GitHub
+    не воспроизводится.
 
 .PARAMETER ProjectRoot
     Корень проекта. По умолчанию — каталог двумя уровнями выше скрипта, то есть
@@ -3643,6 +3653,200 @@ function Test-CommandBlocks {
     return New-CheckResult -Name $checkName -Ok ($problems.Count -eq 0) -Examined $examined -Details $problems
 }
 
+function Test-TableRows {
+    <#
+    .SYNOPSIS
+        Строки таблиц переводов README: те же ЯЧЕЙКИ, а не только их число.
+
+    .DESCRIPTION
+        Измеренный дефект (27.10.2026, этап И31). К этому моменту перевод был
+        проверяем на семи уровнях: состояние, ссылки на файлы поставки, числа
+        индекса, терминология, проза, адреса и блоки команд (этап И30). У всех
+        граница названа честно, но внутри таблиц оставался слой той же природы,
+        что и команды: СОДЕРЖИМОЕ ЯЧЕЙКИ.
+
+        функция `section_profile` в `tools/check_translations.py` (строка 193)
+        считает строки таблиц на каждый заголовок `##`, то есть таблица
+        проверяется ЧИСЛОМ. Поэтому перевод, где в таблице метрик ячейка
+        `2.0 / 3.1` стала `3,1 / 2,0`, а идентификатор операции `search` заменён
+        переводом, проходил зелёным: число строк совпало. Замер 27.10.2026 до
+        правки: таблиц 8 в каждом из шести файлов, содержательных строк 83, ячеек
+        197, столбцов от 2 до 6; расхождений защищённой части 5 в четырёх
+        переводах (ru 1, de 1, es 1, hi 1, zh 2). Свойство не выполнялось, и
+        заметить это было нечем.
+
+        Свойства проверяет `tools/check_table_rows.py`: разбирает таблицы, делит
+        ячейки по `|` с учётом обратных кавычек, сравнивает защищённые части —
+        обрамлённый код, адреса ссылок, ЧИСЛА (значением, а не текстом) и число
+        разделителей `<br>`. Переводимый текст не сравнивается. Строка заголовка
+        данными не считается: `Operation` → `Операция` — правильный перевод, а
+        `search` → `поиск` в том же столбце — находка. Правило разбора, виды
+        колонок и строгость объявлены ДАННЫМИ
+        (`docs/03_implementation/tables.json`); по всем языкам допуск равен нулю,
+        и три объявленных исключения названы с причиной (переведённая подпись
+        формата ссылки `file:line`).
+
+        Здесь к ним добавляется то, что видно только PowerShell: языки из
+        объявления сверяются с осмотренными и с файлами в `community/`, числа
+        таблиц, строк и ячеек из объявления — с тем, что инструмент назвал в
+        выводе, перечень строк по таблицам — со своей суммой, а виды колонок — с
+        объявленным словарём. Иначе новый перевод `README.fr.md` или новая
+        таблица в README.md остались бы непроверенными при зелёном прогоне.
+
+        Молчаливый пропуск запрещён: нет скрипта, нет python или ноль осмотренных
+        объектов — это провал, а не «нечего проверять».
+    #>
+    $problems = [System.Collections.Generic.List[string]]::new()
+    $checkName = 'translation table cells match the main document'
+
+    $toolPath = Join-Path $script:ProjectRoot 'tools/check_table_rows.py'
+    if (-not (Test-Path -LiteralPath $toolPath)) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: нет tools/check_table_rows.py')
+    }
+
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $python) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: python не найден в PATH')
+    }
+
+    $output = & $python.Source $toolPath --root $script:ProjectRoot 2>&1
+    $code = $LASTEXITCODE
+    $text = ($output | Out-String).Trim()
+    Write-Host "    ячейки таблиц переводов: $text"
+
+    $lines = @($output | Where-Object { $_ -is [string] })
+    $examinedText = ([regex]::Match($text, 'осмотрено:\s*(\d+)')).Groups[1].Value
+    $examined = if ($examinedText) { [int]$examinedText } else { 0 }
+
+    if ($examined -le 0) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: инструмент не осмотрел ни одного объекта — это ложный PASS')
+    }
+
+    if ($code -ne 0) {
+        foreach ($line in $lines) {
+            if ($line -match '^\s*FAIL:') { $problems.Add(($line -replace '^\s*FAIL:\s*', '')) }
+        }
+        if ($problems.Count -eq 0) {
+            $problems.Add("проверка ячеек таблиц завершилась кодом $code без расшифровки")
+        }
+    }
+
+    # Объявление ячеек: языки, строгость, словарь видов и перечень основного документа.
+    $declarationPath = Join-Path $script:ProjectRoot 'docs/03_implementation/tables.json'
+    $declared = @()
+    $baseline = $null
+    $kinds = @()
+    $columns = @()
+    if (Test-Path -LiteralPath $declarationPath) {
+        $examined++
+        try {
+            $declaration = (Get-ProjectText $declarationPath) | ConvertFrom-Json
+            $declared = @($declaration.languages.PSObject.Properties.Name)
+            $baseline = $declaration.baseline
+            $kinds = @($declaration.cell_kinds | ForEach-Object { $_.name })
+            $columns = @($declaration.baseline.columns)
+        }
+        catch {
+            $problems.Add('docs/03_implementation/tables.json не разобран: ячейки таблиц объявлены, а осмотреть их нечем')
+            $declared = @()
+        }
+    }
+    else {
+        $problems.Add('нет docs/03_implementation/tables.json: ячейки таблиц переводов не объявлены данными')
+    }
+
+    $seen = @($lines | Where-Object { $_ -match '^язык:\s+\S' } |
+        ForEach-Object { (($_ -replace '^язык:\s+', '') -replace '\s+—.*$', '').Trim() })
+
+    if ($declared.Count -eq 0 -and $problems.Count -eq 0) {
+        $problems.Add('в объявлении нет ни одного языка: строгость пуста, а проверка объявлена')
+    }
+    foreach ($language in $declared) {
+        $examined++
+        if ($seen -notcontains $language) {
+            $problems.Add("язык '$language' объявлен в ячейках таблиц, но проверка его не осмотрела: строки «язык: $language» в выводе нет")
+        }
+    }
+
+    # Числа объявленного перечня сверяются с тем, что инструмент осмотрел:
+    # таблица, добавленная в README.md без правки объявления, иначе прошла бы молча.
+    if ($baseline) {
+        $pairs = @(
+            @{ Key = 'tables'; Pattern = 'таблиц:\s*(\d+)'; Label = 'таблиц' }
+            @{ Key = 'rows'; Pattern = 'строк:\s*(\d+)'; Label = 'содержательных строк' }
+            @{ Key = 'cells'; Pattern = 'ячеек:\s*(\d+)'; Label = 'ячеек' }
+        )
+        foreach ($pair in $pairs) {
+            $examined++
+            $measured = ([regex]::Match($text, $pair.Pattern)).Groups[1].Value
+            if (-not $measured) {
+                $problems.Add("инструмент не называет число $($pair.Label): сверять объявление не с чем")
+                continue
+            }
+            $declaredValue = $baseline.($pair.Key)
+            if ([int]$measured -ne [int]$declaredValue) {
+                $problems.Add("ячейки таблиц: объявлено $declaredValue $($pair.Label) в основном документе, а инструмент осмотрел $measured")
+            }
+        }
+
+        # Перечень строк по таблицам: сумма обязана сходиться с объявленным числом
+        # строк, а длина перечня — с числом таблиц. Иначе объявление описывает
+        # не тот документ, и вид колонки проверяется на съехавшей таблице.
+        $examined++
+        $rowsPerTable = @($baseline.rows_per_table)
+        $sumRows = 0
+        foreach ($item in $rowsPerTable) { $sumRows += [int]$item }
+        if ($sumRows -ne [int]$baseline.rows) {
+            $problems.Add("ячейки таблиц: сумма строк по таблицам ($sumRows) не равна объявленному числу строк ($($baseline.rows))")
+        }
+        if ($rowsPerTable.Count -ne [int]$baseline.tables) {
+            $problems.Add("ячейки таблиц: перечень строк описывает $($rowsPerTable.Count) таблиц, а объявлено $($baseline.tables)")
+        }
+
+        # Виды колонок: число столбцов по таблицам сверяется с выводом, а каждый
+        # вид обязан быть из объявленного словаря — опечатка иначе разрешила бы
+        # колонке не проверяться вовсе.
+        $examined++
+        $declaredWidths = @($columns | ForEach-Object { @($_).Count })
+        $widthsText = ([regex]::Match($text, 'столбцов по таблицам:\s*([\d,\s]+)')).Groups[1].Value
+        $measuredWidths = @($widthsText -split ',' | ForEach-Object { $_.Trim() } |
+            Where-Object { $_ } | ForEach-Object { [int]$_ })
+        if ($measuredWidths.Count -eq 0) {
+            $problems.Add('инструмент не называет число столбцов по таблицам: сверять виды колонок не с чем')
+        }
+        elseif (($declaredWidths -join ',') -ne ($measuredWidths -join ',')) {
+            $problems.Add("ячейки таблиц: столбцов по таблицам объявлено $($declaredWidths -join ', '), а измерено $($measuredWidths -join ', ')")
+        }
+        foreach ($column in $columns) {
+            $examined++
+            foreach ($kind in @($column)) {
+                if ($kinds -notcontains $kind) {
+                    $problems.Add("ячейки таблиц: объявлен вид колонки '$kind', которого нет в словаре видов ($($kinds -join ', '))")
+                }
+            }
+        }
+    }
+
+    # Файлы в community/ сверяются с осмотренным: новый перевод не должен
+    # оставаться непроверенным даже там, где о нём молчит объявление.
+    $community = Join-Path $script:ProjectRoot 'community'
+    $translations = @(if (Test-Path -LiteralPath $community) {
+        Get-ChildItem -LiteralPath $community -File -Filter 'README.*.md' -ErrorAction SilentlyContinue
+    })
+    $examined++
+    if ($translations.Count -eq 0) {
+        $problems.Add('в community/ нет ни одного перевода README.*.md: ячейки объявлено проверять, а сверять не с чем')
+    }
+    if ($translations.Count -gt 0 -and $seen.Count -ne $translations.Count) {
+        $problems.Add("инструмент осмотрел $($seen.Count) переводов, а в community/ их $($translations.Count): перечень и осмотр разошлись")
+    }
+
+    return New-CheckResult -Name $checkName -Ok ($problems.Count -eq 0) -Examined $examined -Details $problems
+}
+
 $script:CheckFunctions = @(
     'Test-ProjectLayout'
     'Test-SecretHygiene'
@@ -3682,6 +3886,7 @@ $script:CheckFunctions = @(
     'Test-ProseProfile'
     'Test-TranslationAddresses'
     'Test-CommandBlocks'
+    'Test-TableRows'
 )
 
 $script:CheckNames = @()
