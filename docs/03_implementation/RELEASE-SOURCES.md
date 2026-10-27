@@ -88,11 +88,11 @@
 | community/CONTRIBUTING.md | https://github.com/paulmann/RAGRAF/blob/e6e3b2faa3348acc762db467dad3cb472dfb3146/CONTRIBUTING.md | 4702989e9f57c205f752d6e5977b692316fae0fa4c61c32355d5289e05d98689 | 4702989e9f57c205f752d6e5977b692316fae0fa4c61c32355d5289e05d98689 | да | CONTRIBUTING.md |
 | community/install.ps1 | https://github.com/paulmann/RAGRAF/blob/e6e3b2faa3348acc762db467dad3cb472dfb3146/install.ps1 | 5a55c8d88ba70066e43147d9b772d98352f46ca82a88ef18a2d8ada71509e8e0 | 5a55c8d88ba70066e43147d9b772d98352f46ca82a88ef18a2d8ada71509e8e0 | да | install.ps1 |
 | community/mkdocs.yml | https://github.com/paulmann/RAGRAF/blob/e6e3b2faa3348acc762db467dad3cb472dfb3146/mkdocs.yml | fafbfabe326de2139b7075cc831c358729070a28f0e1b90baa26dbf8bcd4a0e4 | fafbfabe326de2139b7075cc831c358729070a28f0e1b90baa26dbf8bcd4a0e4 | да | mkdocs.yml |
-| community/README.de.md | https://github.com/paulmann/RAGRAF/blob/e6e3b2faa3348acc762db467dad3cb472dfb3146/README.de.md | 0a970cab774a90c55c6206a7a728349382ef7c9bc72b44407f18da68fdf874fa | 0a970cab774a90c55c6206a7a728349382ef7c9bc72b44407f18da68fdf874fa | да | README.de.md |
-| community/README.es.md | https://github.com/paulmann/RAGRAF/blob/e6e3b2faa3348acc762db467dad3cb472dfb3146/README.es.md | 099fe44fba023c5e442fecba7f982ba19b4da9604b4a4592f4ddcf946bab4783 | 099fe44fba023c5e442fecba7f982ba19b4da9604b4a4592f4ddcf946bab4783 | да | README.es.md |
-| community/README.hi.md | https://github.com/paulmann/RAGRAF/blob/e6e3b2faa3348acc762db467dad3cb472dfb3146/README.hi.md | 995fa30a5ab4bd9de473e9b75a3c658bdd13d18f4f79efe1cde5205f75ed2212 | 995fa30a5ab4bd9de473e9b75a3c658bdd13d18f4f79efe1cde5205f75ed2212 | да | README.hi.md |
-| community/README.zh.md | https://github.com/paulmann/RAGRAF/blob/e6e3b2faa3348acc762db467dad3cb472dfb3146/README.zh.md | 21dfb0f6e48e5ac9ad5a912909381f26187d43abbf0bf85aab9dc3507d2763bc | 21dfb0f6e48e5ac9ad5a912909381f26187d43abbf0bf85aab9dc3507d2763bc | да | README.zh.md |
-| community/README.ru.md | https://github.com/paulmann/RAGRAF/blob/e6e3b2faa3348acc762db467dad3cb472dfb3146/README.ru.md | ecdd91da6002313c3a6f6f89062b0c4322fc5a6a1d96559aec6e21b689985885 | ecdd91da6002313c3a6f6f89062b0c4322fc5a6a1d96559aec6e21b689985885 | да | README.ru.md |
+| community/README.de.md | https://github.com/paulmann/RAGRAF/blob/e6e3b2faa3348acc762db467dad3cb472dfb3146/README.de.md | 0a970cab774a90c55c6206a7a728349382ef7c9bc72b44407f18da68fdf874fa | 46cfde3ddad3347fedec9da38c2758be19d35ded4ec057a7d98e770bd51d3f8c | нет | README.de.md |
+| community/README.es.md | https://github.com/paulmann/RAGRAF/blob/e6e3b2faa3348acc762db467dad3cb472dfb3146/README.es.md | 099fe44fba023c5e442fecba7f982ba19b4da9604b4a4592f4ddcf946bab4783 | eaf764dcfccfb822dd57ab711a7e78446ff9d117a4c816901ac7f73685aa7a7c | нет | README.es.md |
+| community/README.hi.md | https://github.com/paulmann/RAGRAF/blob/e6e3b2faa3348acc762db467dad3cb472dfb3146/README.hi.md | 995fa30a5ab4bd9de473e9b75a3c658bdd13d18f4f79efe1cde5205f75ed2212 | f6a19724a7c1fe210d2dc6a3654a9b8661e80a9129e96d998cdd41e7beb9617e | нет | README.hi.md |
+| community/README.zh.md | https://github.com/paulmann/RAGRAF/blob/e6e3b2faa3348acc762db467dad3cb472dfb3146/README.zh.md | 21dfb0f6e48e5ac9ad5a912909381f26187d43abbf0bf85aab9dc3507d2763bc | 0eb981f8e3583e7cf521e3ca510fb33456dcdb10edcf63fdd78d7690030c4b2d | нет | README.zh.md |
+| community/README.ru.md | https://github.com/paulmann/RAGRAF/blob/e6e3b2faa3348acc762db467dad3cb472dfb3146/README.ru.md | ecdd91da6002313c3a6f6f89062b0c4322fc5a6a1d96559aec6e21b689985885 | de015e09b6460203ac359206d7d70f9aa99bf9cfb328461c2f1821a92f172979 | нет | README.ru.md |
 | community/EULA.md | https://github.com/paulmann/RAGRAF/blob/e6e3b2faa3348acc762db467dad3cb472dfb3146/EULA.md | de3a473f73d39dedb64f362384554f25584979d62b51f8ea50c5d531bab75a3a | de3a473f73d39dedb64f362384554f25584979d62b51f8ea50c5d531bab75a3a | да | EULA.md |
 | community/ROADMAP.md | https://github.com/paulmann/RAGRAF/blob/e6e3b2faa3348acc762db467dad3cb472dfb3146/ROADMAP.md | 1973da88532a9dab0b96873df9acf57575b286af40f4904a36e87ccf5c6457be | 1973da88532a9dab0b96873df9acf57575b286af40f4904a36e87ccf5c6457be | да | ROADMAP.md |
 | community/SECURITY.md | https://github.com/paulmann/RAGRAF/blob/e6e3b2faa3348acc762db467dad3cb472dfb3146/SECURITY.md | dbc7d9c2bd4d3e2d1481a36d00655633c3b45603d1f6753a26c9357414495700 | dbc7d9c2bd4d3e2d1481a36d00655633c3b45603d1f6753a26c9357414495700 | да | SECURITY.md |
@@ -109,6 +109,14 @@
 | scripts/ragraf.ps1 | https://github.com/paulmann/RAGRAF/blob/5b98bccd3dc8f1904e930f03e39a55ba4a20d317/scripts/ragraf.ps1 | f7dbe0bb262b92456945a7863e6263bce3b4678f1cb04ae5f9e81c6a05488813 | f7dbe0bb262b92456945a7863e6263bce3b4678f1cb04ae5f9e81c6a05488813 | да | scripts/ragraf.ps1 |
 | scripts/install-joern.ps1 | https://github.com/paulmann/RAGRAF/blob/5b98bccd3dc8f1904e930f03e39a55ba4a20d317/scripts/install-joern.ps1 | c3ebcf0e2c344b95e1fc1d9c3f60937ac87fe6fac7d76351683c8b8faf4f8a27 | c3ebcf0e2c344b95e1fc1d9c3f60937ac87fe6fac7d76351683c8b8faf4f8a27 | да | scripts/install-joern.ps1 |
 | scripts/PSScriptAnalyzerSettings.psd1 | https://github.com/paulmann/RAGRAF/blob/5b98bccd3dc8f1904e930f03e39a55ba4a20d317/scripts/PSScriptAnalyzerSettings.psd1 | dd5fbe1cb5be2fa1bc9ca6f9fc5b45b3b1ec40cecb452ae5b2d938c6c9473657 | dd5fbe1cb5be2fa1bc9ca6f9fc5b45b3b1ec40cecb452ae5b2d938c6c9473657 | да | scripts/PSScriptAnalyzerSettings.psd1 |
+
+> **Изменение 27.10.2026 (этап И28).** Пять переводов README изменены в живом
+> дереве после переноса из публичного `main`: в каждом обновлены числа собственного
+> индекса RAGRAF (865 файлов, 5 191 узел, 68 311 рёбер — запись `rev-0407`), больше
+> ничего. Хэш в дереве поэтому не равен хэшу публичного `main`, и признак
+> «совпадает» стоит «нет»: это заявленное расхождение, а не порча переноса. Тем же
+> порядком, что и в прошлых этапах, таблица пересчитывается на голове публикации —
+> тогда признак возвращается в «да».
 
 > **Изменение 24.10.2026 (этап И5).** `community/SECURITY.md` отредактирован в
 > живом дереве после переноса из публичного `main`: дефекты C-01 и C-04 закрыты,
@@ -284,6 +292,41 @@ Community / Pro / Enterprise вместо формулировки BUSL-1.1 с �
 смысл фразы, поэтому пропущенное при сохранённой структуре раздела предложение не видит ни
 эта проверка, ни прежняя; зелёный `check_glossary` означает «термины названы одним словом»,
 а не «перевод верен».
+
+**Проза переводов стала проверяемой (этап И28, 27.10.2026).** Тридцать шестая
+проверка чекера (`Test-ProseProfile`) закрывает следующий слой после терминологии и
+самый вероятный вид потери при переводе. Прежние проверки видели структуру раздела
+(число блоков команд и строк таблиц — функция `section_profile` в
+`tools/check_translations.py`) и слово
+термина, но не прозу: перевод, из которого пропал абзац, оставался «полным» —
+структура совпала, ссылки на месте, числа сошлись, а текста меньше. Пропавшее
+предложение внутри абзаца не видел вообще ни один замер.
+
+Счёт вынесен в `tools/check_prose_profile.py`: файл разбивается на разделы `##`,
+внутри — на абзацы прозы, внутри абзаца — на предложения по знакам языка (латинские
+`. ! ? …` с условием справа, китайские `。！？`, деванагари `।`; объявленные сокращения
+концом предложения не считаются, абзац без знака конца — одно предложение).
+Допуски объявлены ДАННЫМИ — `docs/03_implementation/prose.json`, по языку: абзацев в
+разделе и предложений в абзаце, — и сняты замером, а не назначены: первый замер
+черновым счётчиком дал расхождения во всех пяти переводах, и все они оказались
+дефектами СЧЁТА, а не пропущенной прозой (строки-продолжения списков считались
+абзацами; `。` без пробела после себя не признавалась концом предложения; `.` после
+жирного шрифта, `**On the model cache.**`, не признавалась концом предложения;
+сокращение `в.` съедало конец слова, «проектов.»). После их устранения расхождение
+равно нулю, поэтому объявленный допуск — 0 и по абзацам, и по предложениям: он ловит
+и пропавший абзац, и склейку двух абзацев в один, и потерянное предложение внутри
+абзаца. Проверено тремя порчами в песочнице с приманками: каждая даёт ровно одну
+находку с номером раздела, номером абзаца и обоими числами, откат возвращает зелёный
+прогон, пустой вход — провал.
+
+**Граница названа прямо и здесь:** проверяется СЧЁТ, а не смысл. Предложение может
+быть переведено наоборот — счёт этого не увидит; проза в списках, таблицах, цитатах
+и блоках команд не считается (её сохранность сторожат другие проверки: профиль
+раздела по блокам команд и строкам таблиц, наличие ссылок); законное для языка
+различие (одно английское предложение передано двумя) при нулевом допуске станет
+находкой, и расширение допуска — решение владельца, названное числом в данных, а не
+правка проверки. Зелёный `check_prose_profile` означает «пропущенной прозы по счёту
+нет», а не «перевод верен».
 
 **Числа в переводах получили сторожа (этап И22).** До него числа индекса в четырёх
 переводах обновлялись вручную — этап И21 обновил их в шести файлах и записал это в отчёт,

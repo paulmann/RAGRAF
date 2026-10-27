@@ -18,7 +18,7 @@
     результат Ok=$true при нулевом осмотре считается ложным PASS и валит прогон.
 
     Ожидаемый baseline на момент передачи проекта: 0 ошибок, 0 предупреждений,
-    35 проверок — ровно столько, сколько записей в реестре `$script:CheckFunctions`;
+    36 проверок — ровно столько, сколько записей в реестре `$script:CheckFunctions`;
     это сверяет Test-DocumentedNumbers. Прежние две ошибки («запись прогона в реестр
     не покрывала путь ensure» и «документы называли 18 и 16 инструментов там, где
     в коде 23») закрыты
@@ -32,6 +32,13 @@
     объявлено это ДАННЫМИ (docs/03_implementation/glossary.json), а не словарём в
     коде. Граница та же, что у состояний переводов: проверяется слово, а не смысл
     фразы, — зелёный результат не означает «перевод верен».
+
+    27.10.2026 добавлена проверка прозы переводов (Test-ProseProfile): в каждом
+    разделе считается число абзацев прозы, в каждом абзаце — число предложений, и
+    расхождение с README.md сверх объявленного допуска это находка. Допуски лежат
+    ДАННЫМИ (docs/03_implementation/prose.json) и сняты замером — ноль по абзацам
+    и ноль по предложениям. Граница названа и здесь: проверяется счёт, а не смысл
+    предложения; проза в списках, таблицах и блоках команд не считается.
 
 .PARAMETER ProjectRoot
     Корень проекта. По умолчанию — каталог двумя уровнями выше скрипта, то есть
@@ -3169,6 +3176,134 @@ function Test-Glossary {
     return New-CheckResult -Name $checkName -Ok ($problems.Count -eq 0) -Examined $examined -Details $problems
 }
 
+function Test-ProseProfile {
+    <#
+    .SYNOPSIS
+        Проза переводов README считается: раздел за разделом, абзац за абзацем.
+
+    .DESCRIPTION
+        Измеренный дефект (27.10.2026, этап И28). К этому моменту перевод
+        подтверждался структурой разделов, ссылками, числами индекса и
+        терминологией — и каждая из этих проверок честно называла границу: смысл
+        фраз машинной проверке не поддаётся. Но между смыслом и словом есть слой,
+        который поддаётся счёту, и его не сторожил никто. Профиль раздела в
+        `tools/check_translations.py` (`section_profile`) состоит из двух чисел —
+        блоков команд и строк таблиц; прозы в нём нет. Поэтому перевод, из
+        которого пропал абзац, оставался «полным»: структура совпала, ссылки на
+        месте, числа сошлись, а текста меньше. Пропавшее предложение внутри
+        абзаца не видел вообще никто: ни число разделов, ни профиль, ни ссылки,
+        ни словарь терминов на такое не реагируют.
+
+        Свойства проверяет `tools/check_prose_profile.py`: в каждом разделе
+        считается число абзацев прозы, в каждом абзаце — число предложений, и
+        расхождение с `README.md` сверх допуска это находка с номером раздела,
+        номером абзаца и обоими числами. Допуски объявлены ДАННЫМИ
+        (`docs/03_implementation/prose.json`) и сняты замером: ноль по абзацам и
+        ноль по предложениям, потому что фактическое расхождение в пяти переводах
+        равно нулю. Нулевой допуск — самый сильный: он ловит и пропавший абзац, и
+        склейку двух абзацев в один, и потерянное предложение внутри абзаца.
+        Границы счёта названы в шапке инструмента: проза в списках, таблицах,
+        цитатах и блоках команд не считается, а знаки конца предложения
+        разбираются по языку (латинские, `。！？`, `।`).
+
+        Здесь к ним добавляется то, что видно только PowerShell: языки из
+        объявления допусков сверяются с тем, что инструмент действительно
+        осмотрел, и с файлами в `community/`. Иначе новый перевод `README.fr.md`
+        появился бы в дереве, не попал ни в объявление, ни в осмотр — и прогон
+        остался бы зелёным ровно на том классе дефекта, ради которого этот чекер
+        написан.
+
+        Молчаливый пропуск запрещён: нет скрипта, нет python или ноль осмотренных
+        объектов — это провал, а не «нечего проверять».
+    #>
+    $problems = [System.Collections.Generic.List[string]]::new()
+    $checkName = 'translation prose matches the main document'
+
+    $toolPath = Join-Path $script:ProjectRoot 'tools/check_prose_profile.py'
+    if (-not (Test-Path -LiteralPath $toolPath)) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: нет tools/check_prose_profile.py')
+    }
+
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $python) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: python не найден в PATH')
+    }
+
+    $output = & $python.Source $toolPath --root $script:ProjectRoot 2>&1
+    $code = $LASTEXITCODE
+    $text = ($output | Out-String).Trim()
+    Write-Host "    проза переводов: $text"
+
+    $lines = @($output | Where-Object { $_ -is [string] })
+    $examinedText = ([regex]::Match($text, 'осмотрено:\s*(\d+)')).Groups[1].Value
+    $examined = if ($examinedText) { [int]$examinedText } else { 0 }
+
+    if ($code -ne 0) {
+        foreach ($line in $lines) {
+            if ($line -match '^\s*FAIL:') { $problems.Add(($line -replace '^\s*FAIL:\s*', '')) }
+        }
+        if ($problems.Count -eq 0) {
+            $problems.Add("проверка прозы переводов завершилась кодом $code без расшифровки")
+        }
+    }
+
+    # Языки из объявления допусков сверяются с осмотренными. Инструмент печатает
+    # строку «язык: <код> — разделов N, абзацев M» на каждый перевод, который
+    # действительно прочитал; язык, о котором отчёта нет, остался непроверенным.
+    $prosePath = Join-Path $script:ProjectRoot 'docs/03_implementation/prose.json'
+    $declared = @()
+    if (Test-Path -LiteralPath $prosePath) {
+        $examined++
+        try {
+            $prose = (Get-ProjectText $prosePath) | ConvertFrom-Json
+            $declared = @($prose.languages.PSObject.Properties.Name)
+        }
+        catch {
+            $problems.Add('docs/03_implementation/prose.json не разобран: допуски объявлены, а осмотреть их нечем')
+            $declared = @()
+        }
+    }
+    else {
+        $problems.Add('нет docs/03_implementation/prose.json: допуски проверки прозы не объявлены данными')
+    }
+
+    $seen = @($lines | Where-Object { $_ -match '^язык:\s+\S' } |
+        ForEach-Object { (($_ -replace '^язык:\s+', '') -replace '\s+—.*$', '').Trim() })
+
+    if ($declared.Count -eq 0 -and $problems.Count -eq 0) {
+        $problems.Add('в объявлении нет ни одного языка: допуски пусты, а проверка объявлена')
+    }
+    foreach ($language in $declared) {
+        $examined++
+        if ($seen -notcontains $language) {
+            $problems.Add("язык '$language' объявлен в допусках, но проверка его не осмотрела: строки «язык: $language» в выводе нет")
+        }
+    }
+
+    # Файлы в community/ сверяются с осмотренным: новый перевод не должен
+    # оставаться непроверенным даже там, где о нём молчит объявление.
+    $community = Join-Path $script:ProjectRoot 'community'
+    $translations = @(if (Test-Path -LiteralPath $community) {
+        Get-ChildItem -LiteralPath $community -File -Filter 'README.*.md' -ErrorAction SilentlyContinue
+    })
+    $examined++
+    if ($translations.Count -eq 0) {
+        $problems.Add('в community/ нет ни одного перевода README.*.md: прозу объявлено проверять, а сверять не с чем')
+    }
+    if ($translations.Count -gt 0 -and $seen.Count -ne $translations.Count) {
+        $problems.Add("инструмент осмотрел $($seen.Count) переводов, а в community/ их $($translations.Count): перечень и осмотр разошлись")
+    }
+
+    if ($examined -eq 0) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: ни одного объекта не осмотрено — это ложный PASS')
+    }
+
+    return New-CheckResult -Name $checkName -Ok ($problems.Count -eq 0) -Examined $examined -Details $problems
+}
+
 $script:CheckFunctions = @(
     'Test-ProjectLayout'
     'Test-SecretHygiene'
@@ -3205,6 +3340,7 @@ $script:CheckFunctions = @(
     'Test-SingleDeliveryCopy'
     'Test-TranslationStates'
     'Test-Glossary'
+    'Test-ProseProfile'
 )
 
 $script:CheckNames = @()

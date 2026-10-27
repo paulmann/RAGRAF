@@ -187,6 +187,11 @@ FILES = [
     "tools/Fix-LowIntegritySandbox.ps1",
     "community/install.ps1",
     "docs/03_implementation/RELEASE-SOURCES.md",
+    # Проза переводов (этап И28, 27.10.2026): объявление допусков и сама
+    # проверка. Без этих записей новые файлы этапа остались бы вне штатной
+    # очистки BOM/CRLF, и своя же проверка гигиены о них молчала бы.
+    "docs/03_implementation/prose.json",
+    "tools/check_prose_profile.py",
 ]
 
 # Проверка выполняется на копии файла: сравнение идёт по байтам.
