@@ -46,6 +46,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+from . import registry_facts
 from . import util
 from .config import ProjectConfig
 
@@ -174,9 +175,28 @@ class Catalog:
         return self._data
 
     def save(self) -> None:
+        """Записать реестр и, если состав изменился, отметить это в журнале.
+
+        `updated_at` двигается при КАЖДОМ сохранении, в том числе когда
+        индексируется другой корпус и состав реестра не меняется. Поэтому дата
+        обновления реестра — подвижный факт: документ, называющий её, стареет
+        без единой правки своего текста (измерено 28.10.2026, ПРОМТ-И33).
+
+        Журнал (`catalog/registry_history.jsonl`) пополняется ТОЛЬКО сменой
+        состава — числа корпусов и проиндексированных. По нему проверка
+        отличает «документ отстал» (такое состояние было) от «документ врёт»
+        (такого состояния не было). Файл лежит вне корпуса индексации
+        (`**/catalog/**` исключён в config/ragraf.yaml), поэтому его рост не
+        сдвигает контрольную сумму корпуса и не зацикливает сторожа.
+        """
         data = self.load()
         data["version"] = CATALOG_VERSION
         data["updated_at"] = util.now_iso()
+        registry_facts.record_state(
+            self.path,
+            registry_facts.registry_state(data.get("entries") or {}),
+            data["updated_at"],
+        )
         util.write_json(self.path, data, indent=2)
 
     def acquire_lock(self, timeout_sec: float = 120.0, poll: float = 0.2) -> bool:

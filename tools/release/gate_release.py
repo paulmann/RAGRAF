@@ -20,6 +20,12 @@
 `tools/check_translations.py` в режиме `--strict`, где отставание — находка.
 Иначе перевод мог бы уехать читателю с числами прошлой ревизии при зелёном гейте.
 
+И на строку реестра (этап И33, 28.10.2026): «по реестру на <дата>: N корпусов,
+M проиндексированы» в шести документах сверяется с `catalog/catalog.json`
+инструментом `tools/registry_line.py` в том же режиме `--strict`. Чекер
+различает «отстал» и «врёт» и на отставание предупреждает; публикация — нет:
+там отставание тоже отказ.
+
 Пять обязательных порч (по одной на класс дефекта):
 
 1. `hash`     — байт подменён: файл есть, имя верное, содержимое чужое;
@@ -200,6 +206,49 @@ def check_translation_numbers(source: Path) -> tuple[int, str]:
     return 1, f"переводы: {problem[:300]}"
 
 
+def check_registry_line(source: Path) -> tuple[int, str]:
+    """Строка реестра в шести документах обязана совпадать с реестром — без «отстал».
+
+    Чекер различает три исхода: «совпал» (молчание), «отстал» (предупреждение)
+    и «врёт» (ошибка). На публикации варианта «отстал» нет: наружу уходит
+    только сверенный замер, иначе вчерашняя дата реестра уезжает читателю при
+    зелёном гейте.
+
+    Сверка не повторяется здесь второй редакцией: разбор шести документов,
+    журнал прежних состояний реестра и три исхода живут в
+    `tools/registry_line.py`, а этот шаг требует от него код 0 в режиме
+    `--strict` — том же, которым его проверяет тест цикла качества.
+    """
+    tool = source / "tools" / "registry_line.py"
+    if not tool.exists():
+        return 1, (f"нет {tool}: строку реестра сверить не с чем, а публикация без "
+                   f"этой сверки выдаёт вчерашнюю дату реестра за сегодняшнюю")
+    completed = subprocess.run(
+        [PY, str(tool), "--root", str(source), "--verify", "--strict", "--json"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
+    )
+    payload = None
+    try:
+        payload = json.loads((completed.stdout or "").strip() or "null")
+    except json.JSONDecodeError:
+        payload = None
+    if not isinstance(payload, dict):
+        detail = (completed.stderr or "").strip() or "пустой вывод"
+        return 1, f"ответ tools/registry_line.py не разобран: {detail[:300]}"
+    if payload.get("error"):
+        return 1, f"строка реестра не сверена: {str(payload['error'])[:300]}"
+    if completed.returncode == 0:
+        registry = payload.get("registry") or {}
+        return 0, (f"строка реестра сверена с catalog/catalog.json во всех "
+                   f"{len(payload.get('documents') or [])} документах "
+                   f"({registry.get('date')}: {registry.get('corpora')} корпусов, "
+                   f"{registry.get('indexed')} проиндексированы)")
+    findings = list(payload.get("problems") or []) + list(payload.get("lags") or [])
+    first = (findings[0] if findings
+             else "(инструмент не назвал ни одной находки — это и есть дефект)")
+    return 1, f"строка реестра: {str(first)[:300]}"
+
+
 def verify(tree: Path, only: str, manifest: Path | None, source: Path) -> tuple[int, str]:
     args = ["--tree", str(tree), "--only", only, "--source", str(source)]
     if manifest is not None:
@@ -221,12 +270,29 @@ def main(argv: list[str] | None = None) -> int:
         print(("OK: " if numbers_code == 0 else "FAIL: ") + numbers_message)
         if numbers_code != 0:
             return numbers_code
+        # Строка реестра проверяется ДО переводов: её предмет — дата и число
+        # корпусов в шести документах, и он не зависит от состава поставки.
+        # Шаг переводов, наоборот, требует всей поставки (ссылки переводов
+        # обязаны указывать на файлы манифеста) и в песочнице отказывает первым.
+        registry_code, registry_message = check_registry_line(source)
+        print(("OK: " if registry_code == 0 else "FAIL: ") + registry_message)
+        if registry_code != 0:
+            return registry_code
         words_code, words_message = check_translation_numbers(source)
         print(("OK: " if words_code == 0 else "FAIL: ") + words_message)
         return words_code
     print(f"числа публикации: код {numbers_code} — {numbers_message}")
     if numbers_code != 0:
         print("FAIL: публикация остановлена — числа README не совпадают с активной ревизией")
+        return 1
+
+    # Строка реестра: дата и число корпусов в шести документах. Здесь, в отличие
+    # от чекера, отставание — отказ (ПРОМТ-И33). Проверяется до переводов по той
+    # же причине, что и в режиме --check-numbers: её предмет от поставки не зависит.
+    registry_code, registry_message = check_registry_line(source)
+    print(f"строка реестра: код {registry_code} — {registry_message}")
+    if registry_code != 0:
+        print("FAIL: публикация остановлена — строка реестра не совпадает с реестром")
         return 1
 
     # Числа ПЕРЕВОДОВ: у них до этапа И22 сторожа не было, и отставший перевод
@@ -236,6 +302,7 @@ def main(argv: list[str] | None = None) -> int:
     if words_code != 0:
         print("FAIL: публикация остановлена — числа переводов не совпадают с активной ревизией")
         return 1
+
 
     root = Path(tempfile.mkdtemp(prefix="ragraf-gate-"))
     tree = root / "tree"

@@ -1516,79 +1516,50 @@ function Test-DocumentedNumbers {
     }
 
 
-    # --- Числа полигона: снимок и текущий реестр — РАЗНЫЕ состояния ---
-    # Измеренный дефект (25.10.2026, ПРОМТ-И14): README называл «28 корпусов,
-    # 25 проиндексированы» и 7 527 файлов по замеру 16.10.2026, а в реестре
-    # было 37 записей. Числа не сверялись ни с чем и читались как описание
-    # сегодняшнего продукта.
+    # --- Числа полигона и строка реестра: одна реализация на двух потребителей ---
+    # Измеренный дефект (28.10.2026, ПРОМТ-И33). Строка реестра — «по реестру на
+    # ДД.ММ.ГГГГ: N корпусов, M проиндексированы» — живёт в README и в пяти
+    # переводах, и до этого этапа её держали ТОЧНЫМ равенством с датой
+    # обновления `catalog/catalog.json`. Но `updated_at` реестра двигается при
+    # индексации ЛЮБОГО корпуса, то есть дата меняется без изменения состава:
+    # честный документ, называющий вчерашнюю дату, валил прогон наравне с
+    # выдуманными числами. «Починкой» было переписывание даты руками в шести
+    # файлах — и она не держалась до следующего пересбора.
     #
-    # Разрешены ровно два состояния, и проверка их различает:
-    #   1) число объявлено СНИМКОМ: рядом стоят дата и оговорка «не текущее
-    #      состояние» — сверять его с реестром нельзя и не нужно;
-    #   2) число объявлено ТЕКУЩИМ: «по реестру на ДД.ММ.ГГГГ: N корпусов,
-    #      M проиндексированы» — тогда оно обязано совпасть с catalog.json
-    #      и с датой его обновления.
-    # Третьего состояния нет: число, которое не снимок и не сверено, читается
-    # как факт о сегодняшнем дне, то есть является догадкой.
-    $readmePath = Join-Path $script:ProjectRoot 'README.md'
-    if (-not (Test-Path -LiteralPath $readmePath)) {
-        $problems.Add('нет README.md: числа полигона сверять не с чем')
+    # Здесь сверка не повторяется второй редакцией: разбор шести документов,
+    # журнал прежних состояний реестра и три исхода («совпал», «отстал»,
+    # «врёт») живут в `tools/registry_line.py`. Чекер раскладывает его ответ на
+    # находки и предупреждения и ничего не решает заново — иначе «чекер молчит»
+    # перестало бы значить то же самое для публикации.
+    #
+    # Тот же инструмент в режиме `--strict` вызывает ворота публикации
+    # (`tools/release/gate_release.py`): там отставание — отказ.
+    $registryTool = Join-Path $script:ProjectRoot 'tools/registry_line.py'
+    $registryPython = Get-Command python -ErrorAction SilentlyContinue
+    if (-not (Test-Path -LiteralPath $registryTool)) {
+        $problems.Add('NOT-IMPLEMENTED: нет tools/registry_line.py — строка реестра в шести документах не проверяется')
+    }
+    elseif (-not $registryPython) {
+        $problems.Add('нет python: строку реестра и числа полигона сверить нечем')
     }
     else {
-        $examined++
-        $readmeText = Get-ProjectText $readmePath
-        $live = [regex]::Match($readmeText, 'by the registry on (\d{2})\.(\d{2})\.(\d{4})[^\d]{0,80}?(\d+)\s+corpora,\s*(\d+)\s+indexed')
-        $snapshot = [regex]::Match($readmeText, 'snapshot of (\d{2}\.\d{2}\.\d{4})')
-
-        if (-not $snapshot.Success -and -not $live.Success) {
-            $problems.Add('числа полигона в README не помечены ни снимком с датой, ни сверкой с реестром: читатель принимает их за текущее состояние')
+        $registryRaw = & $registryPython.Source $registryTool --root $script:ProjectRoot --verify --json 2>&1
+        $registryCode = $LASTEXITCODE
+        $registryPayload = $null
+        try { $registryPayload = ($registryRaw | Out-String) | ConvertFrom-Json -DateKind String } catch { $registryPayload = $null }
+        if (-not $registryPayload) {
+            $problems.Add("машинный ответ tools/registry_line.py не разобран (код $registryCode): " + (($registryRaw | Out-String).Trim()))
         }
-
-        if ($snapshot.Success) {
-            $examined++
-            $tail = $readmeText.Substring($snapshot.Index, [Math]::Min(600, $readmeText.Length - $snapshot.Index))
-            if ($tail -notmatch 'not the current state') {
-                $problems.Add('снимок полигона помечен датой, но не сказано, что числа не текущие: дата без этой оговорки не отделяет замер от сегодняшнего дня')
-            }
-            if ($tail -match 'as of today|on the current date|на сегодня|на текущий момент') {
-                $problems.Add('рядом со снимком полигона стоит оборот текущего состояния: замер выдан за сегодняшний')
-            }
+        elseif (-not $registryPayload.PSObject.Properties['examined'] -or [int]$registryPayload.examined -lt 1) {
+            $problems.Add('строка реестра: осмотрено 0 объектов — это не PASS')
         }
-
-        if ($live.Success) {
-            $examined++
-            $catalogPath = Join-Path $script:ProjectRoot 'catalog/catalog.json'
-            if (-not (Test-Path -LiteralPath $catalogPath)) {
-                $problems.Add('README называет числа реестра, а catalog/catalog.json нет: сверять нечем')
-            }
-            else {
-                $catalog = Get-Content -LiteralPath $catalogPath -Raw -Encoding utf8 | ConvertFrom-Json
-                $entries = @($catalog.entries.PSObject.Properties)
-                $indexed = @($entries | Where-Object { $_.Value.rev_id })
-                $statedDate = "$($live.Groups[3].Value)-$($live.Groups[2].Value)-$($live.Groups[1].Value)"
-                $registryDate = ''
-                if ($catalog.updated_at) {
-                    # ConvertFrom-Json разбирает ISO-метку в DateTime, поэтому
-                    # строка «10/25/2026» здесь — не ошибка даты, а её формат.
-                    if ($catalog.updated_at -is [datetime]) {
-                        $registryDate = $catalog.updated_at.ToString('yyyy-MM-dd')
-                    }
-                    else {
-                        $registryDate = ([string]$catalog.updated_at).Substring(0, 10)
-                    }
-                }
-                if ($entries.Count -lt 1) {
-                    $problems.Add('реестр пуст: число корпусов в README сверить не с чем')
-                }
-                elseif ([int]$live.Groups[4].Value -ne $entries.Count) {
-                    $problems.Add("README называет $($live.Groups[4].Value) корпусов, а в реестре $($entries.Count)")
-                }
-                elseif ([int]$live.Groups[5].Value -ne $indexed.Count) {
-                    $problems.Add("README называет $($live.Groups[5].Value) проиндексированных корпусов, а в реестре $($indexed.Count)")
-                }
-                elseif ($registryDate -and $statedDate -ne $registryDate) {
-                    $problems.Add("README говорит «по реестру на $($live.Groups[1].Value).$($live.Groups[2].Value).$($live.Groups[3].Value)», а реестр обновлён $registryDate")
-                }
+        else {
+            $examined += [int]$registryPayload.examined
+            foreach ($item in @($registryPayload.problems)) { $problems.Add([string]$item) }
+            foreach ($item in @($registryPayload.lags)) { $lagNotes.Add([string]$item) }
+            foreach ($item in @($registryPayload.notes)) { $notes.Add([string]$item) }
+            if ($registryCode -ne 0 -and $problems.Count -eq 0) {
+                $problems.Add("tools/registry_line.py завершился кодом $registryCode, не назвав находок — это и есть дефект")
             }
         }
     }

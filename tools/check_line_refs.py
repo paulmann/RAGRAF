@@ -148,6 +148,11 @@ PAIRS = (
          marker="токен доступа"),
     dict(doc="AGENTS.md", anchor="`$script:CheckFunctions.Count`", path="tools/Invoke-ProjectDoctrine.ps1",
          marker="CheckFunctions = @("),
+    # Этап И34: версия объявлена в двух местах, и оба адреса проверяются попаданием.
+    dict(doc="docs/AGENTS-context.md", anchor="ПРОМТ-И34", path="src/ragraf/__init__.py",
+         marker="__version__"),
+    dict(doc="docs/AGENTS-context.md", anchor="ПРОМТ-И34", path="community/CITATION.cff",
+         marker="version:"),
     dict(doc="docs/AGENTS-context.md", anchor="сколько правил реально подключено",
          path="tools/Invoke-ProjectDoctrine.ps1", marker="CheckFunctions = @("),
     # §4.4 контекста и ловушка 21 трапов: список OPS и таблица node.

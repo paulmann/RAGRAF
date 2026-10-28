@@ -22,7 +22,9 @@
 ## 1. Таблица источников
 
 Таблица пересчитана **после** публикации, и голова сверки названа в заголовке
-раздела выше: все 23 строки совпадают с публичным `main` побайтово, расхождений нет.
+раздела выше: на той голове все 23 строки совпадали с публичным `main` побайтово.
+Правка 28.10.2026 вывела из совпадения пять переводов — это объявлено ниже, а не
+забыто: столбец «совпадает» у них «нет» до публикации.
 Хэш в абзаце не повторяется намеренно: пересчёт идёт после коммита, поэтому сам
 коммит таблицы сдвигает `main` — вписанное здесь значение устаревало бы от правки
 того же файла. Прежние редакции этого
@@ -123,19 +125,29 @@
 этапа И25 (голова `9ca6ff422d07…`) расхождение закрыла: таблица пересчитана
 на новой голове, все 23 строки «да».
 
+**Изменение 28.10.2026 (этап И33).** Строка реестра «по реестру на <дата>:
+N корпусов, M проиндексированы» переписана генератором `tools/registry_line.py`
+в шести документах (дата реестра 28.10.2026, 42 корпуса, 33 проиндексированы).
+Правка изменила sha256 всех пяти переводов, поэтому столбец «совпадает» у них
+стоит «нет», а «sha256 в дереве» пересчитан тем же прогоном генератора — ручной
+пересчёт шестидесятизначных хэшей и был источником следующего расхождения.
+Столбец «sha256 в публичном main» не трогался: он описывает ОПУБЛИКОВАННУЮ
+копию, и генератор её не видит. Публикация закроет расхождение пересчётом
+таблицы на новой голове — так же, как это сделано 27.10.2026.
+
 | файл в дереве | источник (URL + коммит) | sha256 в публичном main | sha256 в дереве | совпадает | путь в поставке |
 |---|---|---|---|---|---|
-| community/CHANGELOG.md | https://github.com/paulmann/RAGRAF/blob/bca3f3947d8c47cbabe1f75b2b2162e8b0925cc9/CHANGELOG.md | b5ea007e9b8bccf1e5cf8752c4543c6c909d5bef4972113b98cfdfe8a564abed | b5ea007e9b8bccf1e5cf8752c4543c6c909d5bef4972113b98cfdfe8a564abed | да | CHANGELOG.md |
-| community/CITATION.cff | https://github.com/paulmann/RAGRAF/blob/bca3f3947d8c47cbabe1f75b2b2162e8b0925cc9/CITATION.cff | a0b16a209dfb162fcd2817455939a21588f9ffa1d1f6ec02e0281fd59feb4e32 | a0b16a209dfb162fcd2817455939a21588f9ffa1d1f6ec02e0281fd59feb4e32 | да | CITATION.cff |
+| community/CHANGELOG.md | https://github.com/paulmann/RAGRAF/blob/bca3f3947d8c47cbabe1f75b2b2162e8b0925cc9/CHANGELOG.md | b5ea007e9b8bccf1e5cf8752c4543c6c909d5bef4972113b98cfdfe8a564abed | 31f174f70537032cb2fc2661df7c4a6090c6648e330dc932ceb94c0c72ca6e00 | нет | CHANGELOG.md |
+| community/CITATION.cff | https://github.com/paulmann/RAGRAF/blob/bca3f3947d8c47cbabe1f75b2b2162e8b0925cc9/CITATION.cff | a0b16a209dfb162fcd2817455939a21588f9ffa1d1f6ec02e0281fd59feb4e32 | e889cb270a37b13ed3d38fa839ff1520ff7c0fa24435c4b73cfb50ed20eab344 | нет | CITATION.cff |
 | community/CODE_OF_CONDUCT.md | https://github.com/paulmann/RAGRAF/blob/bca3f3947d8c47cbabe1f75b2b2162e8b0925cc9/CODE_OF_CONDUCT.md | 34596ad809e62b3c5a0f9cfb3106c971c21b4f145b18c7e70704959d6996b580 | 34596ad809e62b3c5a0f9cfb3106c971c21b4f145b18c7e70704959d6996b580 | да | CODE_OF_CONDUCT.md |
 | community/CONTRIBUTING.md | https://github.com/paulmann/RAGRAF/blob/bca3f3947d8c47cbabe1f75b2b2162e8b0925cc9/CONTRIBUTING.md | 4702989e9f57c205f752d6e5977b692316fae0fa4c61c32355d5289e05d98689 | 4702989e9f57c205f752d6e5977b692316fae0fa4c61c32355d5289e05d98689 | да | CONTRIBUTING.md |
 | community/install.ps1 | https://github.com/paulmann/RAGRAF/blob/bca3f3947d8c47cbabe1f75b2b2162e8b0925cc9/install.ps1 | 5a55c8d88ba70066e43147d9b772d98352f46ca82a88ef18a2d8ada71509e8e0 | 5a55c8d88ba70066e43147d9b772d98352f46ca82a88ef18a2d8ada71509e8e0 | да | install.ps1 |
 | community/mkdocs.yml | https://github.com/paulmann/RAGRAF/blob/bca3f3947d8c47cbabe1f75b2b2162e8b0925cc9/mkdocs.yml | fafbfabe326de2139b7075cc831c358729070a28f0e1b90baa26dbf8bcd4a0e4 | fafbfabe326de2139b7075cc831c358729070a28f0e1b90baa26dbf8bcd4a0e4 | да | mkdocs.yml |
-| community/README.de.md | https://github.com/paulmann/RAGRAF/blob/bca3f3947d8c47cbabe1f75b2b2162e8b0925cc9/README.de.md | b04f2330f1b663b9ca888777ea1ff6d1789651e9985c74b9a1958a230f02c96c | b04f2330f1b663b9ca888777ea1ff6d1789651e9985c74b9a1958a230f02c96c |  да | README.de.md |
-| community/README.es.md | https://github.com/paulmann/RAGRAF/blob/bca3f3947d8c47cbabe1f75b2b2162e8b0925cc9/README.es.md | b6197b1c5a236d515f3227188e1129477e80f66d05abb063a61d75c91a41c623 | b6197b1c5a236d515f3227188e1129477e80f66d05abb063a61d75c91a41c623 |  да | README.es.md |
-| community/README.hi.md | https://github.com/paulmann/RAGRAF/blob/bca3f3947d8c47cbabe1f75b2b2162e8b0925cc9/README.hi.md | a96445a86c6c73de7a36b926f0eb4d9267a47d392c1631b1a61a1fce869e0b16 | a96445a86c6c73de7a36b926f0eb4d9267a47d392c1631b1a61a1fce869e0b16 |  да | README.hi.md |
-| community/README.zh.md | https://github.com/paulmann/RAGRAF/blob/bca3f3947d8c47cbabe1f75b2b2162e8b0925cc9/README.zh.md | 28f330b28ea906b2cf8ffada27e9433abead6d680bed31e038aac755c2eda412 | 28f330b28ea906b2cf8ffada27e9433abead6d680bed31e038aac755c2eda412 |  да | README.zh.md |
-| community/README.ru.md | https://github.com/paulmann/RAGRAF/blob/bca3f3947d8c47cbabe1f75b2b2162e8b0925cc9/README.ru.md | a639aea387e04ec752420196c13f235a298e0cbed051ccb64927b84df6c73cc2 | a639aea387e04ec752420196c13f235a298e0cbed051ccb64927b84df6c73cc2 |  да | README.ru.md |
+| community/README.de.md | https://github.com/paulmann/RAGRAF/blob/bca3f3947d8c47cbabe1f75b2b2162e8b0925cc9/README.de.md | b04f2330f1b663b9ca888777ea1ff6d1789651e9985c74b9a1958a230f02c96c | 7ee1a143e137597df7363d9a08fd184d9a5dfe1df8e1c0c8b9241e4e49824788 | нет | README.de.md |
+| community/README.es.md | https://github.com/paulmann/RAGRAF/blob/bca3f3947d8c47cbabe1f75b2b2162e8b0925cc9/README.es.md | b6197b1c5a236d515f3227188e1129477e80f66d05abb063a61d75c91a41c623 | 50ccfbe41899ab7cf61e2e9584ab4a49eb610b6fa7f62cbd9cbb3389e38de02d | нет | README.es.md |
+| community/README.hi.md | https://github.com/paulmann/RAGRAF/blob/bca3f3947d8c47cbabe1f75b2b2162e8b0925cc9/README.hi.md | a96445a86c6c73de7a36b926f0eb4d9267a47d392c1631b1a61a1fce869e0b16 | cc048560478bd9f12e36c1ccd03ad9b7acff37110d0165d05b4515fbd8cb2586 | нет | README.hi.md |
+| community/README.zh.md | https://github.com/paulmann/RAGRAF/blob/bca3f3947d8c47cbabe1f75b2b2162e8b0925cc9/README.zh.md | 28f330b28ea906b2cf8ffada27e9433abead6d680bed31e038aac755c2eda412 | aad5015ba6c2276efd67ea82686b420b15fe2c8ebd09eb65f87e69b34cc6b2a7 | нет | README.zh.md |
+| community/README.ru.md | https://github.com/paulmann/RAGRAF/blob/bca3f3947d8c47cbabe1f75b2b2162e8b0925cc9/README.ru.md | a639aea387e04ec752420196c13f235a298e0cbed051ccb64927b84df6c73cc2 | 8ecb7405dc2e5c339dc018aa7c507ded9894a2d2e336ca70ca3729c978887b8d | нет | README.ru.md |
 | community/EULA.md | https://github.com/paulmann/RAGRAF/blob/bca3f3947d8c47cbabe1f75b2b2162e8b0925cc9/EULA.md | de3a473f73d39dedb64f362384554f25584979d62b51f8ea50c5d531bab75a3a | de3a473f73d39dedb64f362384554f25584979d62b51f8ea50c5d531bab75a3a | да | EULA.md |
 | community/ROADMAP.md | https://github.com/paulmann/RAGRAF/blob/bca3f3947d8c47cbabe1f75b2b2162e8b0925cc9/ROADMAP.md | 1973da88532a9dab0b96873df9acf57575b286af40f4904a36e87ccf5c6457be | 1973da88532a9dab0b96873df9acf57575b286af40f4904a36e87ccf5c6457be | да | ROADMAP.md |
 | community/SECURITY.md | https://github.com/paulmann/RAGRAF/blob/bca3f3947d8c47cbabe1f75b2b2162e8b0925cc9/SECURITY.md | dbc7d9c2bd4d3e2d1481a36d00655633c3b45603d1f6753a26c9357414495700 | dbc7d9c2bd4d3e2d1481a36d00655633c3b45603d1f6753a26c9357414495700 | да | SECURITY.md |
