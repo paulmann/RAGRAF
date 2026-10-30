@@ -31,7 +31,7 @@ jobs:
       # checkout с сохранением переводов строк: договор проекта требует LF, и
       # проверка ниже читает ФАЙЛЫ, а не индекс. Без этого на Windows-раннере
       # (core.autocrlf=true) каждый файл оказывался с CR и шаг падал всегда.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Enforce LF in the work tree (contract LF + no BOM)
@@ -41,7 +41,7 @@ jobs:
           git config --local core.eol lf
           git rm --cached -r -q . 2>$null | Out-Null
           git reset --hard -q
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.13'
       - name: Python syntax check (all files)
@@ -81,7 +81,7 @@ jobs:
     name: PowerShell (parser + PSScriptAnalyzer)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Parse all scripts
         shell: pwsh
         run: |
@@ -109,7 +109,7 @@ jobs:
         os: [windows-latest, ubuntu-latest]
         python: ['3.13', '3.14']
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Enforce LF in the work tree (same contract as hygiene job)
         shell: pwsh
         run: |
@@ -117,7 +117,7 @@ jobs:
           git config --local core.eol lf
           git rm --cached -r -q . 2>$null | Out-Null
           git reset --hard -q
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python }}
       - name: Install (Windows installer OR pip)
@@ -175,8 +175,8 @@ jobs:
     name: Package build (sdist + wheel)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.13'
       - run: pip install build
@@ -185,7 +185,7 @@ jobs:
         run: |
           pip install dist/*.whl
           ragraf --version
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist
           path: dist/
