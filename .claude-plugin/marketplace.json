@@ -22,7 +22,7 @@
         "email": "Mikhail@Deynekin.com",
         "url": "https://Deynekin.com"
       },
-      "homepage": "https://github.com/paulmann/RAGRAF",
+      "homepage": "https://raggraf.com",
       "repository": "https://github.com/paulmann/RAGRAF",
       "license": "BUSL-1.1",
       "keywords": [
@@ -37,5 +37,6 @@
       "category": "development"
     }
   ],
-  "version": "0.5.6"
+  "version": "0.5.6",
+  "homepage": "https://raggraf.com"
 }
