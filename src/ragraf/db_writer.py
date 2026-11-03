@@ -122,8 +122,20 @@ def table_id(database: str, table: str) -> str:
 
 def write_introspection(writer, rev_id: str, result: IntrospectionResult,
                         samples: dict[str, samples_mod.TableSample] | None = None,
-                        ) -> dict[str, Any]:
-    """Записать структуру живой базы в граф. Возвращает статистику."""
+                        *, control=None) -> dict[str, Any]:
+    """Записать структуру живой базы в граф. Возвращает статистику.
+
+    `control` — соединение `control.sqlite`. Там живёт ключ
+    `db_fingerprint:<rev>`, по которому сторож свежести понимает, что
+    структура изменилась, а структура пишется в другой файл
+    (`graph.sqlite`). Две записи в два хранилища могут разойтись молча,
+    поэтому отпечаток оставляет САМА запись структуры, а не вызывающий
+    путь. Измерено 28.10.2026: CLI-путь записал структуру и не записал
+    отпечаток, после чего классификатор сравнил новую структуру с
+    прежним значением и требовал переиндексацию на каждой проверке.
+    Соединение не предъявлено — открывается по `writer.cfg`: путь не
+    может записать структуру, не оставив отпечатка.
+    """
     conn = writer.conn
     ensure_schema(conn)
 
@@ -218,7 +230,40 @@ def write_introspection(writer, rev_id: str, result: IntrospectionResult,
           stats["views"], stats["sensitive_columns"], stats["fingerprint"],
           stats["collected_at"], stats["samples_collected"], stats["notes"])])
     conn.commit()
+    # Отпечаток — часть записи структуры, а не отдельный шаг пути.
+    stats["fingerprint_stored"] = _record_fingerprint(
+        writer, rev_id, fingerprint, str(stats["dialect"]), control)
     return stats
+
+
+def _record_fingerprint(writer, rev_id: str, fingerprint: str, dialect: str,
+                        control) -> bool:
+    """Записать отпечаток структуры туда, где его читает классификатор.
+
+    Возвращает ФАКТ записи, а не намерение: значение перечитывается и
+    сравнивается. Иначе сбой записи выглядел бы как успех — ровно это
+    расхождение («печатается» вместо «записывается») и было дефектом.
+    """
+    owner = control
+    closer = None
+    if owner is None:
+        cfg = getattr(writer, "cfg", None)
+        if cfg is None:
+            return False
+        from .revisions import ControlStore
+
+        owner = ControlStore(cfg).conn
+        closer = owner
+    try:
+        index_mod.record_fingerprint(owner, rev_id, fingerprint, dialect)
+        stored = index_mod.stored_fingerprint(owner, rev_id)
+        return stored == f"{dialect}:{fingerprint}"
+    finally:
+        if closer is not None:
+            try:
+                closer.close()
+            except Exception:
+                pass
 
 
 def structure_text(database: Database, table: Table) -> str:

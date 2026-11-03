@@ -50,12 +50,27 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
-from . import signing, util
+from . import paths, signing, util
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 BASE_DIR = pathlib.Path(__file__).resolve().parent
 BASELINE_FILE = BASE_DIR / "edition_baseline.json"
-LICENSE_FILE = REPO / "catalog" / "edition.license"
+def license_file() -> Path:
+    """Лицензия: в каталоге СОСТОЯНИЯ, а не рядом с кодом.
+
+    На установке `REPO` — это `<venv>/lib/python3.13`. Лицензия, положенная
+    туда, не находится вовсе, а найденная теряется при обновлении venv.
+    Замер 01.11.2026 на чистой установке.
+    """
+    return paths.state_file("edition.license")
+
+
+def pubkey_file() -> Path:
+    """Открытый ключ проверки лицензии: там же, где лицензия."""
+    return paths.state_file("edition.pub")
+
+
+LICENSE_FILE = license_file()
 
 BASELINE_ENV = "RAGRAF_EDITION_BASELINE"
 LICENSE_ENV = "RAGRAF_EDITION_LICENSE"
@@ -66,7 +81,7 @@ DECLARED_ENV = "RAGRAF_EDITION"
 # свой текст своим ключом может кто угодно. Замер 24.10.2026: файл, подписанный
 # чужим ключом, проходил проверку как valid, и слой выдавал издание pro.
 PUBKEY_ENV = "RAGRAF_EDITION_PUBKEY"
-PUBKEY_FILE = REPO / "catalog" / "edition.pub"
+PUBKEY_FILE = pubkey_file()
 
 SUPPORTED_SCHEMA = 1
 # Закрытый список статусов возможности. Значение вне списка — отказ проверки
@@ -644,6 +659,36 @@ def declared_edition() -> tuple[str, str]:
     if value:
         return value, "настройка edition"
     return "", "не задано"
+
+
+def feature_denial(feature: str) -> str:
+    """Причина отказа по ВОЗМОЖНОСТИ или пустая строка.
+
+    Нужна там, где действие запускается не операцией фасада: проход извлечения
+    стартует командой `docgraph build` и флагом `index --doc-graph`, и `op_*`,
+    который обернула бы общая проверка изданий, у него нет. Проверка та же по
+    смыслу («возможность объявлена в данных, действует издание»), поэтому и
+    текст причины берётся из тех же данных, а не пишется заново.
+    """
+    name = str(feature or "").strip()
+    if not name:
+        return ""
+    try:
+        state = resolve()
+    except Exception as exc:  # noqa: BLE001 — причина называется, а не глотается
+        return f"состояние изданий не разрешено ({type(exc).__name__}: {exc})"
+    if not state.resolved:
+        return ("состояние изданий не разрешено: "
+                + "; ".join(state.notes or ["причина не названа"]))
+    if name in state.features:
+        return ""
+    required = ""
+    for item in (getattr(state, "_baseline", None) or {}).get("features") or []:
+        if str(item.get("name")) == name:
+            required = str(item.get("edition") or "")
+            break
+    return (f"возможность «{name}» появляется в издании {required or 'старшем'}, "
+            f"действует {state.effective}: действие не выполняется")
 
 
 def resolve(*, declared: str | None = None,

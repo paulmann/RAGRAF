@@ -206,32 +206,86 @@ class LexVecStore:
         ).fetchall()
         return {str(r["text_hash"]): str(r["chunk_id"]) for r in rows}
 
-    def reusable_vectors(self, model: str, text_hashes: Iterable[str]) -> dict[str, list[float]]:
-        """Готовые векторы для неизменённого текста (без обращения к модели)."""
+    def reuse_index(self, model: str) -> tuple[dict[str, str], set[str]]:
+        """Что уже посчитано: text_hash → chunk_id и chunk_id, у которых вектор есть.
+
+        ПОЧЕМУ НЕ СОЕДИНЕНИЕ. Прежняя редакция соединяла обычную таблицу
+        `vec_meta` с виртуальной `vec_chunk`, и SQLite выполнял это как полный
+        скан `vec_chunk` на КАЖДУЮ строку `vec_meta`: ограничение по `chunk_id`
+        в виртуальную таблицу не передаётся (план `SCAN v VIRTUAL TABLE
+        INDEX 1:2!___`). Замер 31.10.2026 на корпусе ragraf: 21 272 чанка против
+        41 356 строк vec0 дали **16,98 с** на одном запросе — и это была почти
+        вся стадия lexvec (16,18 с). Тот же вопрос двумя сканами стоит
+        **0,17 с**: идентификаторы читаются из vec0 одним проходом (0,08 с),
+        пары — из `vec_meta` (0,08 с), пересечение считается в Python (0,01 с).
+
+        Вектор принадлежит `chunk_id`, а `chunk_id` адресует содержимое: чанк,
+        не изменившийся между ревизиями, получает тот же идентификатор. Поэтому
+        «есть ли вектор» — вопрос про chunk_id, а не про ревизию, и ответ на него
+        не меняется от прогона к прогону.
+        """
         if not self.vec_ok:
-            return {}
+            return {}, set()
+        present = {
+            str(r[0]) for r in self.conn.execute("SELECT chunk_id FROM vec_chunk")
+        }
+        pairs = self.conn.execute(
+            "SELECT text_hash, chunk_id FROM vec_meta WHERE model = ?", (model,)
+        ).fetchall()
+        hash_to_chunk: dict[str, str] = {}
+        live: set[str] = set()
+        for r in pairs:
+            chunk_id = str(r["chunk_id"])
+            if chunk_id not in present:
+                continue
+            live.add(chunk_id)
+            hash_to_chunk.setdefault(str(r["text_hash"]), chunk_id)
+        return hash_to_chunk, live
+
+    def reusable_vectors(self, model: str, text_hashes: Iterable[str]) -> dict[str, list[float]]:
+        """Готовые векторы для неизменённого текста (без обращения к модели).
+
+        Чтение идёт двумя шагами: карта «хэш → chunk_id» (два скана, 0,17 с),
+        затем векторы по явному списку идентификаторов. Явный список важен: на
+        нём vec0 ищет по первичному ключу, а соединение с обычной таблицей
+        превращается в полный скан виртуальной таблицы на каждую строку.
+        """
         wanted = list(dict.fromkeys(text_hashes))
         if not wanted:
             return {}
+        hash_to_chunk, _live = self.reuse_index(model)
+        sources = {h: hash_to_chunk[h] for h in wanted if h in hash_to_chunk}
+        if not sources:
+            return {}
+        by_chunk = {cid: th for th, cid in sources.items()}
+        ids = list(by_chunk)
         found: dict[str, list[float]] = {}
         CH = 400
-        for start in range(0, len(wanted), CH):
-            part = wanted[start : start + CH]
+        for start in range(0, len(ids), CH):
+            part = ids[start : start + CH]
             marks = ",".join("?" for _ in part)
             rows = self.conn.execute(
-                f"""SELECT vm.text_hash AS th, v.embedding AS emb
-                    FROM vec_meta vm JOIN vec_chunk v ON v.chunk_id = vm.chunk_id
-                    WHERE vm.model = ? AND vm.text_hash IN ({marks})
-                    GROUP BY vm.text_hash""",
-                (model, *part),
+                f"SELECT chunk_id AS cid, embedding AS emb FROM vec_chunk"
+                f" WHERE chunk_id IN ({marks})",
+                tuple(part),
             ).fetchall()
             for r in rows:
-                blob = r["emb"]
-                found[str(r["th"])] = _blob_to_vec(blob)
+                found[by_chunk[str(r["cid"])]] = _blob_to_vec(r["emb"])
         return found
 
-    def add_chunks(self, rev_id: str, chunks: list[ChunkRec], vectors: dict[str, list[float]] | None = None) -> int:
-        """Записать чанки в FTS5, chunk_map, vec_meta и (при наличии) vec0."""
+    def add_chunks(self, rev_id: str, chunks: list[ChunkRec],
+                   vectors: dict[str, list[float]] | None = None,
+                   *, present: set[str] | None = None,
+                   copies: dict[str, str] | None = None) -> int:
+        """Записать чанки в FTS5, chunk_map, vec_meta и (при наличии) vec0.
+
+        `present` — chunk_id, у которых вектор уже лежит в vec0 по текущей
+        модели: их НЕ переписываем (идентификатор адресует содержимое, поэтому
+        повторная запись того же вектора ничего не меняет). `copies` — пары
+        «новый chunk_id → источник»: текст не изменился, а идентификатор чанка
+        сменился (сдвинулись строки), и вектор переносится запросом
+        INSERT…SELECT — без чтения вектор-блобов в Python.
+        """
         if not chunks:
             return 0
         self._require_writable("add_chunks")
@@ -252,13 +306,19 @@ class LexVecStore:
             sql_part = ""
             if "SELECT" in ch.text.upper() or "INSERT" in ch.text.upper() or "UPDATE" in ch.text.upper():
                 sql_part = extract_sql_tokens(ch.text)
+            # Токенизация — самая дешёвая по коду и самая дорогая по времени
+            # часть записи: 42 556 вызовов на 21 тыс. чанков, 4,68 с в профиле.
+            # Раньше одно и то же значение считалось ДВАЖДЫ (в symbol_tokens и
+            # code_tokens попадал один текст), то есть половина этой работы была
+            # лишней. Теперь один раз на чанк.
+            tokens = tokenize_for_fts(ch.text)
             fts_rows.append(
                 (
                     rev_id,
                     ch.chunk_id,
                     ch.path,
-                    tokenize_for_fts(ch.text),
-                    tokenize_for_fts(ch.text),
+                    tokens,
+                    tokens,
                     sql_part,
                     "",
                 )
@@ -337,36 +397,46 @@ class LexVecStore:
             text_rows,
             batch=self.cfg.index.batch_size,
         )
-        if vec_rows and self.vec_ok:
-            # vec0 НЕ поддерживает разрешение конфликта OR REPLACE: повторная
-            # вставка существующего chunk_id падает с «UNIQUE constraint failed
-            # on vec_chunk primary key». Замерено 16.10.2026 на копии хранилища:
-            # 1) INSERT OR REPLACE по существующему ключу — OperationalError;
-            # 2) DELETE по ключу + INSERT — проходит. Поэтому запись идёт в два
-            # шага. Прежняя редакция ловила отказ и молча ставила vec_ok=False,
-            # из-за чего покрытие сообщало неверную причину («sqlite-vec не
-            # загрузился»), а новые векторы переставали записываться вовсе.
-            #
-            # Дедупликация по chunk_id ОБЯЗАТЕЛЬНА: разбор может выдать один и
-            # тот же идентификатор дважды (замер 16.10.2026: ft_chunk на
-            # rev-0152 содержит 3953 строки против 3952 в chunk_map — дубль
-            # административного стиля). Вторая вставка того же ключа оборвала
-            # бы запись на середине (на rev-0152 записались 232 вектора из 3413).
+        # Запись векторов. Замер 31.10.2026 на корпусе ragraf: из 21 272 чанков
+        # активной ревизии ВСЕ 21 272 уже имели вектор, то есть прежний
+        # безусловный DELETE+INSERT переписывал 21 тыс. строк на КАЖДОМ прогоне
+        # и не менял ни одного значения. Теперь пишется только то, чего в vec0
+        # нет.
+        #
+        # Дедупликация по chunk_id ОБЯЗАТЕЛЬНА: разбор может выдать один и тот
+        # же идентификатор дважды (замер 16.10.2026: ft_chunk на rev-0152
+        # содержал 3953 строки против 3952 в chunk_map — дубль
+        # административного стиля). Вторая вставка того же ключа оборвала бы
+        # запись на середине (на rev-0152 записались 232 вектора из 3413).
+        if self.vec_ok and (vec_rows or copies):
             unique_rows = list({row[0]: row for row in vec_rows}.values())
+            if present:
+                unique_rows = [row for row in unique_rows if row[0] not in present]
+            self.vectors_copied = 0
             try:
-                store.executemany_chunked(
-                    self.conn,
-                    "DELETE FROM vec_chunk WHERE chunk_id = ?",
-                    [(row[0],) for row in unique_rows],
-                    batch=self.cfg.index.batch_size,
-                )
-                store.executemany_chunked(
-                    self.conn,
-                    "INSERT INTO vec_chunk(chunk_id, rev_id, embedding)"
-                    " VALUES(?,?,?)",
-                    unique_rows,
-                    batch=self.cfg.index.batch_size,
-                )
+                if unique_rows:
+                    store.executemany_chunked(
+                        self.conn,
+                        "DELETE FROM vec_chunk WHERE chunk_id = ?",
+                        [(row[0],) for row in unique_rows],
+                        batch=self.cfg.index.batch_size,
+                    )
+                    store.executemany_chunked(
+                        self.conn,
+                        "INSERT INTO vec_chunk(chunk_id, rev_id, embedding)"
+                        " VALUES(?,?,?)",
+                        unique_rows,
+                        batch=self.cfg.index.batch_size,
+                    )
+                for target, source in (copies or {}).items():
+                    if present and target in present:
+                        continue
+                    cur = self.conn.execute(
+                        "INSERT INTO vec_chunk(chunk_id, rev_id, embedding)"
+                        " SELECT ?, ?, embedding FROM vec_chunk WHERE chunk_id = ?",
+                        (target, rev_id, source),
+                    )
+                    self.vectors_copied += int(cur.rowcount or 0)
             except sqlite3.Error as exc:
                 # Отказ записи векторов — это НЕ «расширение не загрузилось».
                 # Причина сохраняется и попадает в заметку покрытия: молчаливый
@@ -900,21 +970,30 @@ class LexVecStore:
                 out[table] = 0
         if self.vec_ok:
             try:
-                # В vec0 обычные колонки не хранятся, фильтр по rev_id невозможен:
-                # считаем общее число векторов и отдельно пересечение с текущей ревизией.
-                total = int(
-                    self.conn.execute("SELECT COUNT(*) AS c FROM vec_chunk").fetchone()["c"]
-                )
-                rev_count = int(
-                    self.conn.execute(
-                        """SELECT COUNT(*) AS c FROM vec_meta vm
-                           JOIN vec_chunk v ON v.chunk_id = vm.chunk_id
-                           WHERE vm.rev_id = ?""",
-                        (rev_id,),
-                    ).fetchone()["c"]
-                )
-                out["vec_chunk"] = rev_count
-                out["vec_chunk_total"] = total
+                # Вектор принадлежит chunk_id, а не ревизии: строка vec0 пишется
+                # один раз и живёт, пока чанк не изменился. Поэтому «векторов
+                # ревизии» — это пересечение её идентификаторов с содержимым vec0
+                # (два скана, 0,09 с).
+                #
+                # Прежняя редакция соединяла vec_meta с vec0, и SQLite сканировал
+                # виртуальную таблицу на каждую строку vec_meta — 16,4 с на
+                # 21 272 чанка. Утверждение «фильтр по rev_id в vec0 невозможен»
+                # тоже устарело: в sqlite-vec 0.1.9 rev_id хранится как
+                # метаданные и фильтруется (замер: COUNT(*) WHERE rev_id=? —
+                # 0,106 с). Но означает он «ревизию, где вектор ПОСЧИТАН», а не
+                # «ревизию, где он нужен»: после переиспользования первое и
+                # второе расходятся, и считать по нему было бы неверно.
+                present = {
+                    str(r[0]) for r in self.conn.execute("SELECT chunk_id FROM vec_chunk")
+                }
+                rev_ids = [
+                    str(r[0])
+                    for r in self.conn.execute(
+                        "SELECT chunk_id FROM vec_meta WHERE rev_id = ?", (rev_id,)
+                    )
+                ]
+                out["vec_chunk"] = sum(1 for cid in rev_ids if cid in present)
+                out["vec_chunk_total"] = len(present)
             except sqlite3.Error:
                 out["vec_chunk"] = 0
                 out["vec_chunk_total"] = 0
@@ -924,32 +1003,44 @@ class LexVecStore:
         return out
 
     def purge_rev(self, rev_id: str) -> None:
-        """Удаление данных ревизии. vec0 удаляется по chunk_id из vec_meta."""
+        """Удаление данных ревизии. Векторы убираются только осиротевшие.
+
+        Прежняя редакция удаляла строки vec0 по chunk_id удаляемой ревизии — то
+        есть векторы, которыми пользуются ОСТАЛЬНЫЕ ревизии: чанк адресуется
+        содержимым, и один и тот же chunk_id живёт во всех ревизиях, где файл не
+        менялся. Не освобождало это ничего (вектор возвращался копированием на
+        следующем прогоне), а поиск до следующего прогона оставался без вектора.
+
+        Теперь после удаления строк ревизии убираются только те векторы, на
+        которые больше не ссылается НИ ОДНА ревизия. Замер 31.10.2026 на корпусе
+        ragraf: таких строк было 19 709 из 41 356 — почти половина vec0, и они
+        были недостижимы: и поиск, и переиспользование ходят через `vec_meta`.
+        """
         self._require_writable("purge_rev")
-        try:
-            ids = [
-                str(r["chunk_id"])
-                for r in self.conn.execute(
-                    "SELECT chunk_id FROM vec_meta WHERE rev_id = ?", (rev_id,)
-                ).fetchall()
-            ]
-        except sqlite3.Error:
-            ids = []
         for table in ("ft_chunk", "chunk_map", "vec_meta", "chunk_text"):
             try:
                 self.conn.execute(f"DELETE FROM {table} WHERE rev_id = ?", (rev_id,))
             except sqlite3.Error:
                 pass
-        if self.vec_ok and ids:
-            for start in range(0, len(ids), 400):
-                part = ids[start : start + 400]
-                marks = ",".join("?" for _ in part)
-                try:
+        if self.vec_ok:
+            try:
+                referenced = {
+                    str(r[0]) for r in self.conn.execute("SELECT chunk_id FROM vec_meta")
+                }
+                orphan = [
+                    str(r[0])
+                    for r in self.conn.execute("SELECT chunk_id FROM vec_chunk")
+                    if str(r[0]) not in referenced
+                ]
+                for start in range(0, len(orphan), 400):
+                    part = orphan[start : start + 400]
+                    marks = ",".join("?" for _ in part)
                     self.conn.execute(
-                        f"DELETE FROM vec_chunk WHERE chunk_id IN ({marks})", tuple(part)
+                        f"DELETE FROM vec_chunk WHERE chunk_id IN ({marks})",
+                        tuple(part),
                     )
-                except sqlite3.Error:
-                    break
+            except sqlite3.Error as exc:
+                self.vec_error = f"уборка векторов не удалась: {type(exc).__name__}: {exc}"
         self.conn.commit()
 
     def close(self) -> None:

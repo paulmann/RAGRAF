@@ -23,6 +23,7 @@ import traceback
 from typing import Any, Callable
 
 from . import __version__
+from . import access as access_mod
 from . import contact as contact_mod
 from .config import ProjectConfig, load as load_config
 from .config import ConfigError
@@ -106,6 +107,189 @@ def force_utf8_stdio() -> None:
 PROGRESS_FIELD = "progressToken"
 
 TOOLS: list[dict[str, Any]] = [
+    # --- документный слой (этап «документы», фаза A) ---
+    {
+        "name": "ragraf_doc_search",
+        "description": (
+            "Поиск по документам с адресом: возвращает локатор (path:12, "
+            "path#anchor, path:sheet=…), структуру и провенанс разбора. "
+            "Отличается от ragraf_search тем, что адрес документа не строка файла."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "запрос по содержанию документа"},
+                "limit": {"type": "integer", "default": 20},
+                "kind": {"type": "string",
+                         "description": "вид узла: section, paragraph, table, record, slide, sheet"},
+                "doc": {"type": "string", "description": "ограничить документом (путь или doc_id)"},
+                "with_text": {"type": "boolean", "default": True},
+                "text_width": {"type": "integer", "default": 240},
+            },
+            "required": ["query"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "ragraf_entity_neighbors",
+        "description": (
+            "Соседи сущности по документному графу: кто связан и через какую "
+            "связь. У каждого соседа — адрес цитаты (path:start_line[-end_line]), "
+            "поэтому утверждение можно открыть. Вид «theme» отвечает темами, "
+            "когда слой тем собран (этап 5)."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "entity": {"type": "string",
+                           "description": "имя сущности или её entity_id"},
+                "depth": {"type": "integer", "minimum": 1, "maximum": 3, "default": 1,
+                          "description": "шагов обхода: 1..3; вне диапазона — отказ"},
+                "kind": {"type": "string", "enum": ["entity", "theme"], "default": "entity"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 200, "default": 50},
+            },
+            "required": ["entity"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "ragraf_doc_relations",
+        "description": (
+            "Связи документов через общие сущности: пары «документ ↔ документ» с "
+            "адресами упоминания связующей сущности с ОБЕИХ сторон. Нужен ровно "
+            "один вход: doc (путь) либо entity (имя или id)."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "doc": {"type": "string", "description": "путь документа"},
+                "entity": {"type": "string", "description": "имя сущности или entity_id"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 200, "default": 50},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "ragraf_themes",
+        "description": (
+            "Темы документного графа: группы сущностей, которые встречаются "
+            "вместе чаще случайного. Кластеры детерминированы (тот же слой — те "
+            "же theme_id), у каждого участника адрес цитаты, у темы — сводка по "
+            "цитатам, если модель была доступна (иначе summary=null и причина). "
+            "Издание pro (возможность doc-graph)."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "scope": {"type": "string",
+                          "description": "ограничить область: подкаталог корпуса"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 50,
+                          "default": 20},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "ragraf_global_overview",
+        "description": (
+            "Карта документного графа: документы, сущности, связи, темы, сводки "
+            "и топ-темы с адресами цитат. Отвечает на «что вообще есть», а не "
+            "«что найдено по запросу». Издание pro (возможность doc-graph)."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "limit": {"type": "integer", "minimum": 1, "maximum": 50,
+                          "default": 20},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "ragraf_doc_search_levels",
+        "description": (
+            "Dual-level поиск одним ответом: локальные факты (чанк с адресом "
+            "path:line) и глобальный уровень — сущности и связи документного "
+            "графа, в которые эти чанки входят. Связь уровней названа явно: у "
+            "хита via_entities, у глобального факта via_chunk. Локальный "
+            "уровень работает под любым изданием; глобальный требует "
+            "возможности doc-graph (pro) и без неё называется неполнота."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "запрос"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 200,
+                          "default": 20},
+                "mode": {"type": "string", "enum": ["local", "global", "both"],
+                         "default": "both",
+                         "description": "local — только чанки, global — только граф, both — оба уровня"},
+            },
+            "required": ["query"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "ragraf_doc_get",
+        "description": (
+            "Текст по адресу документа и провенанс. Сначала ищет в индексе, "
+            "затем разрешает по диску тем же читателем и называет источник."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "locator": {"type": "string",
+                            "description": "адрес: path:12, path:page=3, path#anchor, path:sheet=Лист!A1:B2"},
+                "with_provenance": {"type": "boolean", "default": True},
+            },
+            "required": ["locator"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "ragraf_doc_status",
+        "description": (
+            "Состояние документного слоя: сколько документов разобрано, "
+            "сколько failed и not_indexed_by_edition с причинами, бюджеты чанков."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "doc": {"type": "string", "description": "документ (путь или doc_id)"},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "ragraf_doc_ocr",
+        "description": (
+            "Состояние распознавания текста (OCR) и решение по файлу: включена ли "
+            "возможность, есть ли локальный движок, почему нет. Изображение без OCR "
+            "не превращается в пустой текст молча."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string",
+                         "description": "файл изображения, если нужно решение по нему"},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "ragraf_doc_validate",
+        "description": (
+            "Проверка целостности чанкинга документов: адрес у каждого чанка, "
+            "heading_chain или причина, table_id у таблиц, неподавленные ошибки."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "doc": {"type": "string", "description": "документ (путь или doc_id)"},
+            },
+            "additionalProperties": False,
+        },
+    },
     {
         "name": "ragraf_index_status",
         "description": (
@@ -113,6 +297,37 @@ TOOLS: list[dict[str, Any]] = [
             "размер журнала расхождений. ВЫЗЫВАТЬ ПЕРВЫМ перед любой работой с кодом."
         ),
         "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+    },
+    {
+        "name": "ragraf_compact",
+        "description": (
+            "Политика хранения .ragraf: сколько занимают граф, лексика, хранилище "
+            "управления и каталог cpg, что удаляется вместе с ревизией и где нужен "
+            "VACUUM. По умолчанию только ПЛАН (ничего не меняется). apply=true "
+            "удаляет хвост ротации, артефакты CPG вне хранения и временные файлы, "
+            "затем VACUUM там, где это оправдано. Меняющая диск операция: "
+            "вызывать после плана и бэкапа."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "apply": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "выполнить очистку (по умолчанию только план)",
+                },
+                "vacuum": {
+                    "type": "boolean",
+                    "description": "VACUUM: true — выполнить, false — не выполнять, "
+                                   "не задано — по порогу свободных страниц",
+                },
+                "retain": {
+                    "type": "integer",
+                    "description": "сколько последних ревизий хранить (по умолчанию retain_revs)",
+                },
+            },
+            "additionalProperties": False,
+        },
     },
     {
         "name": "ragraf_context",
@@ -420,6 +635,14 @@ TOOLS: list[dict[str, Any]] = [
                     "description": ("вернуть сформулированный ответ со ссылками вместо "
                                     "структурного результата (P2-2): ≤ 1–2 КБ"),
                 },
+                "mode": {
+                    "type": "string",
+                    "enum": ["auto", "code", "docs", "themes"],
+                    "default": "auto",
+                    "description": ("режим поиска: auto — прежнее поведение; code — "
+                                    "только код; docs — dual-level (уровень «тема» из "
+                                    "документного графа, издание pro); themes — темы"),
+                },
             },
             "required": ["query"],
             "additionalProperties": False,
@@ -521,6 +744,28 @@ TOOLS: list[dict[str, Any]] = [
                 "since": {"type": "string",
                           "description": "ревизия для сравнения (по умолчанию — предыдущая)"},
                 "limit": {"type": "integer", "default": 50},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "ragraf_excludes",
+        "description": (
+            "Управление списком исключений (уровень pro): какие каталоги не "
+            "считать в корпус (temp, tmp, cache, logs и подобные). Действие "
+            "show/impact считает эффект тем же сканером, что и индексация; "
+            "apply записывает настройку и ОТКАЗЫВАЕТ, если выпадают файлы кода."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string",
+                           "enum": ["show", "impact", "apply", "disable"],
+                           "default": "show"},
+                "dirs": {"type": "string",
+                         "description": "имена каталогов через запятую"},
+                "force": {"type": "boolean", "default": False,
+                          "description": "включить даже при потере файлов кода"},
             },
             "additionalProperties": False,
         },
@@ -643,6 +888,13 @@ TOOLS: list[dict[str, Any]] = [
                 "depth": {"type": "integer", "default": 1},
                 "hard_only": {"type": "boolean", "default": False},
                 "limit": {"type": "integer", "default": 100},
+                "min_confidence": {
+                    "type": "number",
+                    "description": ("порог достоверности связей 0..1 на этот вызов "
+                                    "(по умолчанию 0.5; доказанные связи не "
+                                    "отсекаются ни при каком пороге). Ответ "
+                                    "называет значение и сколько отсечено (этап 10)"),
+                },
                 "answer": {
                     "type": "boolean", "default": False,
                     "description": "вернуть сформулированный ответ со ссылками (P2-2)",
@@ -662,6 +914,39 @@ TOOLS: list[dict[str, Any]] = [
                 "depth": {"type": "integer", "default": 1},
                 "hard_only": {"type": "boolean", "default": False},
                 "limit": {"type": "integer", "default": 100},
+                "min_confidence": {
+                    "type": "number",
+                    "description": ("порог достоверности связей 0..1 на этот вызов "
+                                    "(по умолчанию 0.5; доказанные связи не "
+                                    "отсекаются ни при каком пороге). Ответ "
+                                    "называет значение и сколько отсечено (этап 10)"),
+                },
+            },
+            "required": ["fqn"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "ragraf_edge_evidence",
+        "description": (
+            "Рёбра символа с доказательствами (этап 8): вид доказательства у "
+            "каждого ребра (`cpg_call` — подтверждено CPG, `signature_match` — "
+            "по имени и месту объявления, `name_inference` — выведено по "
+            "имени), способ привязки цели, координата `path:line`, сверенная с "
+            "файлом ревизии (`evidence_ok`). Отдаются оба направления: `out` — "
+            "кого вызывает, `in` — кто вызывает. `evidence.derived` называет, "
+            "сколько рёбер в ответе выведено, а не подтверждено."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "fqn": {"type": "string"},
+                "kind": {
+                    "type": "string",
+                    "description": ("вид ребра: calls, calls_heuristic, …, либо "
+                                    "all — показать и структурные"),
+                },
+                "limit": {"type": "integer", "default": 200},
             },
             "required": ["fqn"],
             "additionalProperties": False,
@@ -680,6 +965,11 @@ TOOLS: list[dict[str, Any]] = [
                 "mode": {"type": "string", "enum": ["hard", "full"], "default": "full"},
                 "depth": {"type": "integer", "default": 3},
                 "limit": {"type": "integer", "default": 200},
+                "min_confidence": {
+                    "type": "number",
+                    "description": ("порог достоверности связей 0..1 на этот вызов "
+                                    "(по умолчанию 0.5; доказанные связи не отсекаются)"),
+                },
                 "answer": {
                     "type": "boolean", "default": False,
                     "description": "вернуть сформулированный ответ со ссылками (P2-2)",
@@ -701,6 +991,11 @@ TOOLS: list[dict[str, Any]] = [
                 "fqn": {"type": "string"},
                 "direction": {"type": "string", "enum": ["back", "forward"], "default": "back"},
                 "limit": {"type": "integer", "default": 200},
+                "min_confidence": {
+                    "type": "number",
+                    "description": ("порог достоверности связей 0..1 на этот вызов "
+                                    "(по умолчанию 0.5; доказанные связи не отсекаются)"),
+                },
             },
             "required": ["fqn"],
             "additionalProperties": False,
@@ -792,6 +1087,11 @@ TOOLS: list[dict[str, Any]] = [
                 "action": {"type": "string", "description": "действие для отбора ветвей"},
                 "depth": {"type": "integer", "default": 3},
                 "limit": {"type": "integer", "default": 300},
+                "min_confidence": {
+                    "type": "number",
+                    "description": ("порог достоверности связей вызывающих 0..1 "
+                                    "(по умолчанию 0.5; доказанные связи не отсекаются)"),
+                },
             },
             "required": ["symbol"],
             "additionalProperties": False,
@@ -1381,6 +1681,51 @@ TOOLS: list[dict[str, Any]] = [
 #     (модель эмбеддингов), внешние СУБД.
 # ---------------------------------------------------------------------------
 _TOOL_META: dict[str, dict[str, Any]] = {
+    "ragraf_doc_search": {
+        "title": "Поиск по документам с адресом и провенансом",
+        "readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
+    },
+    "ragraf_entity_neighbors": {
+        "title": "Соседи сущности по документному графу, с адресами цитат",
+        "readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
+        "openWorldHint": False,
+    },
+    "ragraf_doc_relations": {
+        "title": "Связи документов через общие сущности, с адресами с двух сторон",
+        "readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
+        "openWorldHint": False,
+    },
+    "ragraf_themes": {
+        "title": "Темы документного графа: кластеры, участники с адресами, сводки",
+        "readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
+        "openWorldHint": False,
+    },
+    "ragraf_global_overview": {
+        "title": "Карта документного графа: состав и главные темы с цитатами",
+        "readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
+        "openWorldHint": False,
+    },
+    "ragraf_doc_search_levels": {
+        "title": "Dual-level поиск: чанки с адресами и сущности графа со связями",
+        "readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
+        "openWorldHint": False,
+    },
+    "ragraf_doc_get": {
+        "title": "Текст документа по адресу (индекс или диск)",
+        "readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
+    },
+    "ragraf_doc_status": {
+        "title": "Состояние документного слоя: статусы и причины",
+        "readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
+    },
+    "ragraf_doc_ocr": {
+        "title": "Состояние OCR: включено ли, есть ли движок",
+        "readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
+    },
+    "ragraf_doc_validate": {
+        "title": "Валидатор чанкинга документов",
+        "readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
+    },
     "ragraf_index_status": {
         "title": "Состояние индекса: ревизия, полнота, возможности",
         "readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
@@ -1474,6 +1819,10 @@ _TOOL_META: dict[str, dict[str, Any]] = {
         "title": "Кто вызывает символ",
         "readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
     },
+    "ragraf_edge_evidence": {
+        "title": "Рёбра символа и чем они подтверждены",
+        "readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
+    },
     "ragraf_diff": {
         "title": "Что изменилось между ревизиями индекса",
         "readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
@@ -1481,6 +1830,14 @@ _TOOL_META: dict[str, dict[str, Any]] = {
     "ragraf_note": {
         "title": "Записать заметку о решении (знание между сессиями)",
         "readOnlyHint": False, "destructiveHint": False, "idempotentHint": False,
+    },
+    "ragraf_compact": {
+        "title": "Политика хранения: план уборки и (по запросу) уборка",
+        "readOnlyHint": False, "destructiveHint": True, "idempotentHint": True,
+    },
+    "ragraf_excludes": {
+        "title": "Профиль шумных каталогов: что исключается и чего это стоит",
+        "readOnlyHint": False, "destructiveHint": False, "idempotentHint": True,
     },
     "ragraf_notes": {
         "title": "Прочитать заметки о решениях",
@@ -1803,7 +2160,8 @@ class McpServer:
                  agent_kind: str = "unknown",
                  access_label: str = "",
                  corpus_source: str = "",
-                 watch: bool = True) -> None:
+                 watch: bool = True,
+                 access_scopes: list[str] | None = None) -> None:
         self.config_path = config_path
         self.cfg: ProjectConfig | None = None
         self._facade: Facade | None = None
@@ -1815,6 +2173,12 @@ class McpServer:
         # (локальный CLI, тесты). Значение доступа здесь НЕ хранится:
         # серверу нужна только метка для статистики.
         self.access_label = (access_label or "").strip()
+        # Уровни выданного доступа (этап 14). `None` — уровень не объявлен:
+        # так приходит локальный stdio-вызов, CLI и тесты, и для них проверка
+        # прав не применяется (они и так работают от владельца). Пустой список
+        # — объявлен и пуст: это отказ на любом уровне.
+        self.access_scopes: list[str] | None = (
+            None if access_scopes is None else [str(s) for s in access_scopes])
         # Метка задачи (P0-4): `RAGRAF_TASK` выставляет вызывающий агент на ход
         # работы. Без неё журнал обращений не отвечает на вопрос «на какую
         # задачу ушёл индекс» — все записи из HARNESS шли как «(без задачи)».
@@ -1944,11 +2308,27 @@ class McpServer:
         self._note_corpus_mismatch()
         # Фасад создаётся ленивым свойством уже на новом конфиге; свежесть
         # считается принудительно, чтобы не отдать факты по старому кэшу.
-        env = self.facade().op_freshness(force=True)
+        #
+        # Переиндексация здесь НЕ запускается, и это решение, а не мелочь.
+        # Замер 28.10.2026 (задание И42): после честного выбора активной
+        # ревизии вызов `use_project revoap.com` увидел реальное отставание
+        # корпуса на 1 ГБ и запустил его пересборку — четыре прерванных
+        # ревизии и таймаут вместо ответа. Переключение корпуса — чтение;
+        # пересборка ЧУЖОГО корпуса решение владельца, а не следствие
+        # запроса. Отставание при этом названо в ответе, а не скрыто.
+        env = self.facade().op_freshness(force=True, auto_reindex=False)
         status = self.facade().op_index_status()
         data = dict(status.get("result") or {})
         data["config"] = config_path
-        data["freshness"] = env.get("result")
+        freshness = dict(env.get("result") or {})
+        if freshness.get("stale"):
+            # Причина названа явно: иначе агент видел бы «отстал» и не знал,
+            # что пересборка не идёт по решению, а не по забывчивости.
+            freshness["reindex_skipped"] = (
+                "переключение корпуса не запускает переиндексацию: "
+                "пересборка этого корпуса — решение владельца"
+            )
+        data["freshness"] = freshness
         return data
 
     def config(self) -> ProjectConfig:
@@ -2510,6 +2890,25 @@ class McpServer:
                     "язык запросов к графу не поддерживается: используйте фиксированные операции",
                 )
 
+        # Права проверяются ДО обработчика и в одной точке: второй такой точки
+        # быть не должно, иначе они разойдутся (замер 01.11.2026: уровень
+        # доступа записывался в журнал, но нигде не проверялся, поэтому выданный
+        # `read` мог вызвать `ragraf_secret_set`).
+        allowed, need, why = access_mod.scope_allows(self.access_scopes, str(name or ""))
+        if not allowed:
+            self.log(f"отказ по правам: {name} (нужен {need}, доступ "
+                     f"{self.access_label or 'без метки'})")
+            refused = {
+                "isError": True,
+                "content": [{"type": "text",
+                             "text": f"доступ не разрешает {name}: {why}",
+                             "зона": "права"}],
+                "structuredContent": {"tool": str(name or ""), "refused": True,
+                                      "required_scope": need,
+                                      "access_label": self.access_label},
+            }
+            return self._ok(req_id, refused)
+
         handler = self._handlers().get(name)
         if handler is None:
             return self._ok(
@@ -2563,6 +2962,14 @@ class McpServer:
         f = self.facade
         return {
             "ragraf_index_status": lambda a: f().op_index_status(),
+            # Политика хранения: план по умолчанию, выполнение — только по явному
+            # apply=true. Инструмент добавлен после замера 30.10.2026, когда
+            # `.ragraf` занимал 26,8 ГБ при 8,8 ГБ данных индекса.
+            "ragraf_compact": lambda a: f().op_compact(
+                apply=bool(a.get("apply")),
+                vacuum=(None if a.get("vacuum") is None else bool(a.get("vacuum"))),
+                retain=(int(a["retain"]) if a.get("retain") not in (None, "") else None),
+            ),
             # Контекст корпуса: единственная операция, которая обязана отвечать
             # даже когда корпус не выбран вовсе (B1).
             "ragraf_context": lambda a: self._op_context(a),
@@ -2584,6 +2991,37 @@ class McpServer:
                 dry_run=bool(a.get("dry_run")),
             ),
             "ragraf_siem_test": lambda a: f().op_siem_test(),
+            "ragraf_doc_search": lambda a: f().op_doc_search(
+                a.get("query", ""), limit=int(a.get("limit") or 20),
+                kind=a.get("kind"), doc=a.get("doc"),
+                with_text=bool(a.get("with_text", True)),
+                text_width=int(a.get("text_width") or 240),
+            ),
+            "ragraf_entity_neighbors": lambda a: f().op_entity_neighbors(
+                a.get("entity", ""), depth=int(a.get("depth") or 1),
+                kind=str(a.get("kind") or "entity"),
+                limit=int(a.get("limit") or 50),
+            ),
+            "ragraf_doc_relations": lambda a: f().op_doc_relations(
+                doc=a.get("doc"), entity=a.get("entity"),
+                limit=int(a.get("limit") or 50),
+            ),
+            "ragraf_themes": lambda a: f().op_themes(
+                scope=a.get("scope"), limit=int(a.get("limit") or 20),
+            ),
+            "ragraf_global_overview": lambda a: f().op_global_overview(
+                limit=int(a.get("limit") or 20),
+            ),
+            "ragraf_doc_search_levels": lambda a: f().op_doc_search_levels(
+                a.get("query", ""), limit=int(a.get("limit") or 20),
+                mode=str(a.get("mode") or "both"),
+            ),
+            "ragraf_doc_get": lambda a: f().op_doc_get(
+                a.get("locator", ""), with_provenance=bool(a.get("with_provenance", True)),
+            ),
+            "ragraf_doc_status": lambda a: f().op_doc_status(a.get("doc")),
+            "ragraf_doc_validate": lambda a: f().op_doc_validate(a.get("doc")),
+            "ragraf_doc_ocr": lambda a: f().op_doc_ocr(a.get("path", "")),
             # Офлайн-лицензия и аттестация (ПРОМТ-И8): возможности издания
             # enterprise, поэтому на Community отвечает причиной издания.
             "ragraf_license_offline": lambda a: f().op_license_offline(
@@ -2626,6 +3064,7 @@ class McpServer:
                 with_text=bool(a.get("with_text")),
                 text_width=int(a.get("text_width", 160)),
                 answer=bool(a.get("answer")),
+                mode=str(a.get("mode") or "auto"),
             ),
             # Поиск «одним ответом» и структура корпуса (P1-1, P1-2).
             "ragraf_search_multi": lambda a: f().op_search_multi(
@@ -2644,6 +3083,10 @@ class McpServer:
             ),
             "ragraf_diff": lambda a: f().op_diff(
                 since=a.get("since"), limit=a.get("limit", 50)
+            ),
+            "ragraf_excludes": lambda a: f().op_excludes(
+                action=a.get("action", "show"), dirs=a.get("dirs", ""),
+                force=bool(a.get("force")),
             ),
             "ragraf_note": lambda a: f().op_note(
                 a.get("text", ""), task=a.get("task", ""),
@@ -2664,25 +3107,33 @@ class McpServer:
                 answer=bool(a.get("answer")),
             ),
             "ragraf_references": lambda a: f().op_references(
-                a.get("fqn", ""), limit=a.get("limit", 100)
+                a.get("fqn", ""), limit=a.get("limit", 100),
+                min_confidence=a.get("min_confidence"),
             ),
             "ragraf_callers": lambda a: f().op_callers(
                 a.get("fqn", ""), depth=a.get("depth", 1),
                 hard_only=bool(a.get("hard_only")), limit=a.get("limit", 100),
                 answer=bool(a.get("answer")),
+                min_confidence=a.get("min_confidence"),
             ),
             "ragraf_callees": lambda a: f().op_callees(
                 a.get("fqn", ""), depth=a.get("depth", 1),
                 hard_only=bool(a.get("hard_only")), limit=a.get("limit", 100),
+                min_confidence=a.get("min_confidence"),
+            ),
+            "ragraf_edge_evidence": lambda a: f().op_edge_evidence(
+                a.get("fqn", ""), kind=a.get("kind"), limit=a.get("limit", 200)
             ),
             "ragraf_impact": lambda a: f().op_impact(
                 a.get("target", ""), mode=a.get("mode", "full"),
                 depth=a.get("depth", 3), limit=a.get("limit", 200),
                 answer=bool(a.get("answer")),
+                min_confidence=a.get("min_confidence"),
             ),
             "ragraf_slice": lambda a: f().op_slice(
                 a.get("fqn", ""), direction=a.get("direction", "back"),
                 limit=a.get("limit", 200),
+                min_confidence=a.get("min_confidence"),
             ),
             "ragraf_code": lambda a: f().op_code(
                 fqn=a.get("fqn"), path=a.get("path"),
@@ -2707,7 +3158,8 @@ class McpServer:
             # кода, потому что лежал в большой ветви switch.
             "ragraf_policy_trace": lambda a: f().op_policy_trace(
                 a.get("symbol", ""), action=a.get("action"),
-                depth=a.get("depth", 3), limit=a.get("limit", 300)
+                depth=a.get("depth", 3), limit=a.get("limit", 300),
+                min_confidence=a.get("min_confidence"),
             ),
             "ragraf_routes": lambda a: f().op_routes(
                 path=a.get("path"), limit=a.get("limit", 200)

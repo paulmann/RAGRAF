@@ -7,11 +7,11 @@
 [![License](https://img.shields.io/badge/license-BUSL--1.1-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.13%2B-informational)](pyproject.toml)
 
-![RAGRAF — graph-and-vector knowledge base over source code for LLM agents: 61 MCP tools, verifiable facts as file:line, fully local](assets/social-preview.png)
+![RAGRAF — graph-and-vector knowledge base over source code for LLM agents: 74 MCP tools, verifiable facts as file:line, fully local](assets/social-preview.png)
 
 [**Quick start**](#first-steps) · [**Documentation**](#documentation) · [**Wiki**](https://github.com/paulmann/RAGRAF/wiki) · [**Changelog**](CHANGELOG.md) · [**Русская версия**](README.ru.md)
 
-> **Documentation status.** Every number below was measured on 26–27.10.2026 against version 0.4.0; the sizes of the RAGRAF index are compared with the active revision record by `Test-DocumentedNumbers`, and a figure that belongs to a past revision fails the release gate rather than passing as today's measurement.
+> **Documentation status.** Every number below was measured on 03.11.2026 against version 0.5.6; the sizes of the RAGRAF index are compared with the active revision record by `Test-DocumentedNumbers`, and a figure that belongs to a past revision fails the release gate rather than passing as today's measurement.
 
 An assistant that answers an agent's questions about a codebase — *where is it, who calls it, what breaks if I change it, how is it done elsewhere* — with verifiable facts (`file:line`) instead of blind `rg` and full-file reads. Python 3.13+, SQLite (graph + FTS5 + vectors in one place), tree-sitter, local embeddings without torch. An optional property-graph layer (Java + Joern) unlocks slicing; without it the product still works and says so.
 
@@ -58,11 +58,14 @@ One caveat is usually left out: **the 2–3× gain applies to localisation tasks
 
 ## Capabilities
 
-**54 operations** over a repository — a fixed set, with no graph query language:
+**67 operations** over a repository — a fixed set, with no graph query language:
 
 | Operation | Answers the question |
 |---|---|
-| `search` | where this is written about (hybrid: BM25 lexis + vectors) |
+| `search` | where this is written about (hybrid: BM25 lexis + vectors); `mode=code` narrows to code, `mode=docs` adds a theme level |
+| `doc_search_levels` | both levels in one answer: local facts (a chunk with `path:line`) and the global level — the entities and relations of the document graph those chunks belong to. The link is named, not implied: `via_entities` on a hit, `via_chunk` on a global fact. `mode` is `local`, `global` or `both` (default); the local level is not gated, the global one requires `doc-graph` |
+| `themes` | the themes of the document graph: clusters of entities that co-occur, each member with a citation address, and a summary over citations whenever a model was available (otherwise `summary=null` with the reason). Deterministic: the same layer always yields the same `theme_id` |
+| `global_overview` | the map of the document graph: documents, entities, relations, themes, summaries and the top themes with addresses — «what is in here at all», not «what matched a query» |
 | `search_multi` | where several strings occur at once; which files are copies and which copy is live |
 | `duplicates` | which files are copies of each other and what proves which one is active |
 | `entrypoints` | entry points: routes, HTTP handlers, CLI, markup endpoints |
@@ -98,7 +101,13 @@ One caveat is usually left out: **the 2–3× gain applies to localisation tasks
 
 Two further modes are not operations but a shape of answer: **`answer=true`** returns a phrased answer with references instead of a structural result (P2-2), and `brief=true` returns a short answer shell. `usage` reports the effect metrics (`saved_calls`, `hit_rate`, `avg_ms`, `misses`, `stale_served`).
 
-The same operations are exposed as **61 MCP tools** (`ragraf_*`) — for attachment to an agent as a server — and through the CLI. One group of tools is the live database layer: `ragraf_db_schema`, `ragraf_db_table`, `ragraf_db_relations`, `ragraf_db_sample`, `ragraf_db_drift`, `ragraf_db_cross`. Two operations of the closed tier (enterprise edition) are declared as tools: `ragraf_license_offline` (offline licence: request, issue, acceptance, transfer) and `ragraf_attest_bundle` (delivery attestation: a signed evidence bundle and its verification). The quality loop (pro edition) is `ragraf_quality_suite` (an index check suite plus a run record), `ragraf_quality_diff` (divergences between two runs) and `ragraf_quality_prune` (thinning the run journal: a dry run by default, deletion only with confirmation and after a copy of the journal). Three operations of the shared index (also pro) are outside the MCP set: they manage publication and the network channel rather than index reads, and run as `python -m ragraf.shared_index` (see `docs/03_implementation/SHARED-INDEX.md`). The secret broker (pro) is represented by two tools — `ragraf_broker_issue` (lease: term, custodian, reason, one-time redemption) and `ragraf_broker_rotate` (plan state, scheduling, rotation with lease revocation); lease state lives in `catalog/broker.json`, and the storage schema does not change.
+**Search has two levels.** `search` with `mode=docs` splits the query once into a theme (`high_level`) and concrete terms (`low_level`) and matches the theme against the entities of the document graph: a chunk that never says the word «licensing» can still be about licensing, and the theme level finds it by the entity's mention address. The lexical result stays exactly as it was — the theme level only adds hits, each with `match_kind` (`lexical`, `vector`, `entity`) and an address `path:start-end`; a hit without an address is never returned. Keys are cached by prompt version, so a repeated query costs nothing. When the level cannot run, the answer says so in `degraded` (`edition`, `llm_unavailable`, `layer_empty`, `no_keys`) and `mode=docs` degrades to plain lexis instead of pretending that nothing was found.
+
+The same two levels as one answer are `doc_search_levels`: local facts and the global level, with the link named by `via_entities` and `via_chunk`. It exists next to `search` rather than inside it, because `search` has a flat-list contract that prior measurements and clients rely on. An empty layer is never reported as «no links» — it has its own code (`layer_empty`) and its own reason, and in `mode=both` the answer says the global level is incomplete in `limits` while still returning the local facts.
+
+**Themes and the graph map.** `themes` returns the clusters of the document graph — deterministic, so the same layer always yields the same `theme_id` — with a citation address for every member and a summary over citations when a model was available; without a model the theme stays and `summary=null` names the reason. `global_overview` answers «what is in here at all»: documents, entities, relations, themes, summaries and the top themes with addresses. Both read the document graph and are refused without the `doc-graph` capability; the clusters themselves are built without a model (`ragraf docgraph themes`).
+
+The same operations are exposed as **74 MCP tools** (`ragraf_*`) — for attachment to an agent as a server — and through the CLI. One group of tools is the live database layer: `ragraf_db_schema`, `ragraf_db_table`, `ragraf_db_relations`, `ragraf_db_sample`, `ragraf_db_drift`, `ragraf_db_cross`. Two operations of the closed tier (enterprise edition) are declared as tools: `ragraf_license_offline` (offline licence: request, issue, acceptance, transfer) and `ragraf_attest_bundle` (delivery attestation: a signed evidence bundle and its verification). The quality loop (pro edition) is `ragraf_quality_suite` (an index check suite plus a run record), `ragraf_quality_diff` (divergences between two runs) and `ragraf_quality_prune` (thinning the run journal: a dry run by default, deletion only with confirmation and after a copy of the journal). Three operations of the shared index (also pro) are outside the MCP set: they manage publication and the network channel rather than index reads, and run as `python -m ragraf.shared_index` (see `docs/03_implementation/SHARED-INDEX.md`). The secret broker (pro) is represented by two tools — `ragraf_broker_issue` (lease: term, custodian, reason, one-time redemption) and `ragraf_broker_rotate` (plan state, scheduling, rotation with lease revocation); lease state lives in `catalog/broker.json`, and the storage schema does not change.
 The twenty-fourth one is `use_project`: choosing a corpus when one server serves several projects. `context` answers which corpus is selected and on what grounds — without it, answers about a foreign project were indistinguishable from answers about your own.
 
 **Twenty-nine languages** are parsed into a syntax tree (graph nodes and edges). Sixteen have their node map described by a profile: PHP, Python, JavaScript, TypeScript, Java, C#, C, C++, Ruby, Lua, Go, Perl, bash, PowerShell, CSS, HTML. The remaining thirteen (Rust, Kotlin, Swift, Scala, Dart, R, F#, OCaml, Solidity, Fortran, MATLAB, Elm, Lisp) take it from the grammar's own tags query: their node names do not match the familiar ones, and a profile per language would mean inventing names. Every language is checked on a sample file — at least one symbol found (`tests/test_new_languages.py`).
@@ -106,6 +115,8 @@ The twenty-fourth one is `use_project`: choosing a corpus when one server serves
 Forty more are attached as plain text: search finds the files, but they yield no nodes. These are Julia, Elixir, Erlang, Haskell, Clojure, Groovy, Visual Basic, Pascal/Delphi, Objective-C, Zig, Nim, Crystal, Tcl, Prolog, Ada, Verilog, VHDL, assembly, HCL/Terraform, Dockerfile, Makefile, CMake, SCSS, Less, Vue, Svelte, GraphQL, Protobuf, SQL, batch, Markdown, RST, YAML, JSON, TOML, INI, XML, plain text and the `document` language.
 
 **Documents are indexed in full, old versions included.** Word: `.docx`, `.docm`, `.dotx` and `.doc` (Word 97 through a dedicated OLE parser, no LibreOffice). Excel: `.xlsx`, `.xlsm`, `.xltx` and `.xls` (BIFF8). PowerPoint: `.pptx`, `.pptm`, `.ppsx`, `.potx` and `.ppt`. Plus PDF, OpenDocument (`.odt`, `.ods`, `.odp`, `.odg`), EPUB, RTF, `.eml` and `.msg` mail, and WPS Office files. Formats without a parser (Pages, OneNote, CHM, DjVu, `.xlsb`) do not pretend to be empty documents — they are reported with a reason.
+**Every chunk of a document has an address, and the address resolves back.** A section is named `path#heading/part`, a block of sheet cells `path#sheet:Sheet1!A1:C20`, a quoted mail body `path#msg-id/part`; `doc_get` takes the address and returns the text, so a citation can be checked rather than trusted. Chunks are budgeted at 1200 tokens (950 for sheets and long procedural documents), and a chunk over its budget fails the index check that runs between finishing and sealing a revision — a bad chunking never becomes the active index. Four operations cover the layer: `doc_search`, `doc_get`, `doc_status`, `doc_validate`. Recognising text on scans is a Pro capability (`doc_ocr`), off by default: it needs a language pack installed locally, and wrong OCR text in the index is worse than an honest refusal.
+
 
 What gets indexed is chosen in the panel: **Settings → the "Formats" tab** — 84 formats grouped by kind (languages, documents, data), a filter by name, extension and parse mode, "all"/"none" buttons and a counter of enabled entries. All formats are enabled by default, and `*` means "all, including those added later". Disabling a format changes the corpus contents and triggers a reindex at the next freshness check.
 
@@ -163,18 +174,40 @@ pwsh -File scripts/install.ps1 -Project C:\work\myproject -Index -NoVectors
 pwsh -File scripts/install.ps1 -WithTruststore
 ```
 
-### Other platforms
+### Other platforms (verified on Linux)
 
-One path that works wherever Python 3.13+ exists:
+Measured on a clean Debian 12 machine (no sudo, system Python 3.11) on 2026-11-01;
+the full protocol with numbers is in `docs/03_implementation/INSTALL-FROM-SCRATCH.md`.
 
 ```bash
-git clone https://github.com/paulmann/RAGRAF.git
-cd RAGRAF
-python -m venv .venv
-. .venv/bin/activate            # Windows: .venv\Scripts\Activate.ps1
-pip install -e .                # or: pip install -r requirements.txt
+# 1. Python 3.13 if the system has an older one (no root needed):
+curl -sSL -o py.tar.gz https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.13.18+20261026-x86_64-unknown-linux-gnu-install_only.tar.gz
+mkdir -p python && tar xzf py.tar.gz -C python --strip-components=1
+
+# 2. Install and check:
+./python/bin/python3 -m venv .venv
+. .venv/bin/activate
+pip install ragraf-0.5.6-py3-none-any.whl    # or: pip install -e .   (from a checkout)
 ragraf --version
+
+# 3. First corpus without downloading the embedding model:
+ragraf init /path/to/project
+ragraf ensure --no-vectors /path/to/project
+ragraf -p ~/.ragraf/config/<name>.yaml query search "your query"
 ```
+
+Three facts this path depends on:
+
+- **State lives outside the interpreter**: `~/.ragraf/` holds the registry,
+  settings, secrets, licence and corpus configs (`RAGRAF_HOME` overrides it). A
+  checkout keeps using its own `catalog/` and `config/`; only an installed
+  package uses the home directory. Updating the virtual environment therefore
+  does not lose the index.
+- **`ensure --no-vectors`** builds a lexical index with no model download.
+  Semantic search needs the model; the first run with vectors downloads ~240 MB
+  and says so in the report before starting.
+- **Three commands** are installed: `ragraf`, `ragraf-mcp` (stdio MCP server) and
+  `ragraf-admin` (panel). `tools/*.py` wrappers keep working in a checkout.
 
 The product also runs without installing the package, through a wrapper that puts `src/` on the path itself:
 
@@ -182,7 +215,9 @@ The product also runs without installing the package, through a wrapper that put
 python tools/ragraf.py --version
 ```
 
-> `scripts/install.ps1` is verified on Windows (PowerShell 7.6, Python 3.14.7). The `pip` path on Linux and macOS is **not verified** — the product was developed and measured on Windows.
+> `scripts/install.ps1` is verified on Windows (PowerShell 7.6, Python 3.14.7) and
+> now uses the same `~/.ragraf` home. The `pip` path on Linux is verified as of
+> 2026-11-01; macOS has not been measured (no Mac in the lab).
 
 ### External layer: Java and Joern (optional)
 
@@ -252,6 +287,18 @@ ragraf -p <config> usage              # telemetry: calls, facts, effect estimate
 
 `--project` is mandatory. `--agent` and `--agent-kind` are only needed for per-agent access statistics: without them the calls are recorded as `unknown`.
 
+### Claude Code: a plugin instead of manual wiring
+
+Claude Code 2.1.316 can install the whole integration — the MCP server, four hooks, the
+`ragraf-core` skill and two slash commands — as one plugin. Add the marketplace once with
+`/plugin marketplace add paulmann/RAGRAF`, then `/plugin install ragraf@ragraf`. The plugin
+is the **Community** edition: search, the symbol graph, the schema from migrations, the live
+database layer and audit work with no licence file; Pro features (`doc-ocr`, `doc-graph`, …)
+refuse by name, and their terms are in `EULA.md` inside the plugin. What each hook does, what
+it costs in context (about 120 always-on tokens) and what is out of scope are in
+`docs/03_implementation/CLAUDE_PLUGIN.md`. The manual `.mcp.json` above still works and is
+described in `docs/03_implementation/CLAUDE_CODE_INTEGRATION.md`.
+
 ### Settings panel
 
 ```bash
@@ -299,6 +346,7 @@ On a home network the package is not needed. Measured: without it — `certifica
 | `docs/03_implementation/INTEGRATION.md` | attaching to an agent: MCP, working rules, policy |
 | `docs/03_implementation/AGENTS_SETUP_AND_CAPABILITIES.md` | setup in HARNESS and AutoClaw, the full capability catalogue |
 | `docs/03_implementation/HARNESS_INTEGRATION.md` | DeepSeek Harness: MCP, skill, rules, gate |
+| `docs/03_implementation/CLAUDE_PLUGIN.md` | Claude Code plugin: marketplace, hooks, Community edition, catalogue submission |
 | `docs/03_implementation/AUTOCLAW_INTEGRATION.md` | AutoClaw: MCP, skill, rules, rollback |
 | `docs/03_implementation/CPG_INTEGRATION.md` | property graph: Joern, JDK, degradation modes |
 | `docs/skills/ragraf-core/SKILL.md` | the skill for working with the index: operation choice, recovery |
@@ -354,11 +402,11 @@ The project is built for concrete tasks, so architecture proposals get a hearing
 
 ## The project in numbers and the measured test bed
 
-Published figures (checked on 26.10.2026; index sizes from the active revision record): **54 operations** on the facade, **61 MCP tools**, **21** CLI subcommands, **29** tree-parsed languages and **40** text-attached ones (including `document`), **84** data formats in the registry (61 languages, 9 document families, 10 data kinds, 4 without a parser); the RAGRAF index itself — 875 files, 5 313 nodes and 70 556 edges (the snapshot is compared with the active revision record by `Test-DocumentedNumbers`: figures from a past revision raise a warning naming its `rev_id` and date, and at publication that is a refusal — `tools/release/gate_release.py`; the live figures come from `python tools/ragraf.py -p config/ragraf.yaml status`).
+Published figures (checked on 03.11.2026; index sizes from the active revision record): **67 operations** on the facade, **74 MCP tools**, **24** CLI subcommands, **29** tree-parsed languages and **40** text-attached ones (including `document`), **84** data formats in the registry (61 languages, 9 document families, 10 data kinds, 4 without a parser); the RAGRAF index itself — 1 037 files, 6 524 nodes and 90 852 edges (the snapshot is compared with the active revision record by `Test-DocumentedNumbers`: figures from a past revision raise a warning naming its `rev_id` and date, and at publication that is a refusal — `tools/release/gate_release.py`; the live figures come from `python tools/ragraf.py -p config/ragraf.yaml status`).
 
 **The test bed, depersonalised** (project names, paths and domains removed). The figures in this section are a **snapshot of 16.10.2026**, not the current state: at that moment the registry held **28 corpora, 25 indexed** — 10 with the CPG layer, 15 in `degraded` mode. For 16 of them the revision record was read the same day: **7 527 files, 94 528 symbols, 791 871 edges, 86 790 chunks**.
 
-The current registry size is kept apart from the snapshot on purpose: it changes with every attached project, and putting it into the table below would pass yesterday's measurement off as today's. It is named in its own line and compared with `catalog/catalog.json` — **by the registry on 28.10.2026: 42 corpora, 33 indexed**. A checker watches this figure: if it diverges from the registry, that is a finding, not a stale line.
+The current registry size is kept apart from the snapshot on purpose: it changes with every attached project, and putting it into the table below would pass yesterday's measurement off as today's. It is named in its own line and compared with `catalog/catalog.json` — **by the registry on 03.11.2026: 45 corpora, 37 indexed**. A checker watches this figure: if it diverges from the registry, that is a finding, not a stale line.
 
 | Corpus | Kind | Files | Symbols | Edges | Mode |
 |---|---|---|---|---|---|

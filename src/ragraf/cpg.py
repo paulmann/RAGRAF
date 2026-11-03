@@ -1644,15 +1644,36 @@ def merge_calls(
     проверкам: они работают на одноразовом хранилище и не должны трогать индекс
     проекта. По умолчанию поведение прежнее.
 
+    ВИД ДОКАЗАТЕЛЬСТВА (этап 8). Рёбра этого пути несут в свойствах
+    `source=cpg` и `resolved_by=<способ>`, а `store.insert_edges` выводит из них
+    поле `evidence_kind`:
+
+      * `fullname`, `name_file`, `own_class` — `cpg_call`: CPG видела вызов,
+        различается только точность привязки цели;
+      * `name_only` и поиск в базовых классах — `name_inference`: цель угадана
+        по одному имени.
+
+    Отдельного правила в этом файле нет намеренно: классификатор один
+    (`evidence.classify`) и используется и при записи, и при чтении.
+
     Возвращает статистику: сколько рёбер добавлено и почему остальные отклонены.
     """
     from . import store
 
     conn = store.connect(graph_db if graph_db is not None else cfg.graph_db)
     stats = {
-        "added": 0, "by_fullname": 0, "by_name_file": 0,
+        "added": 0, "by_fullname": 0, "by_name_file": 0, "by_fullname_norm": 0,
         "unresolved": 0, "builtin_skipped": 0, "duplicate": 0,
     }
+    # Этап 10: прежде чем сообщать «по полному имени 0», надо знать, СКОЛЬКО
+    # полных имён вообще было в выдаче. Без этих двух чисел ноль выглядит как
+    # дефект сопоставления, хотя причиной может быть сама CPG: для Python Joern
+    # вместо имени цели отдаёт заглушку `<unknownFullName>`.
+    stats["fullname_real"] = sum(
+        1 for call in calls
+        if not str(call.get("callee") or "").startswith(("<unknown", "<unresolved"))
+    )
+    stats["fullname_placeholder"] = len(calls) - int(stats["fullname_real"])
     rows: list[tuple] = []
     try:
         existing = {
@@ -1831,14 +1852,12 @@ def merge_calls(
             stats[f"by_{how}"] = stats.get(f"by_{how}", 0) + 1
 
         if rows:
-            store.executemany_chunked(
-                conn,
-                """INSERT OR REPLACE INTO edge(rev_id, edge_uid, src, dst, kind, provenance,
-                                              evidence_path, evidence_line, confidence, sources, props)
-                   VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
-                rows,
-                batch=cfg.index.batch_size,
-            )
+            # Вид доказательства (этап 8) пишется тем же входом, что и у рёбер
+            # разбора деревом: `store.insert_edges` выводит его из `props`
+            # (`source=cpg` + `resolved_by`) одним классификатором
+            # `evidence.classify`. Своего правила здесь быть не должно — иначе
+            # ответ `callers` и содержимое хранилища разойдутся.
+            store.insert_edges(conn, rows, batch=cfg.index.batch_size)
             conn.commit()
     finally:
         conn.close()

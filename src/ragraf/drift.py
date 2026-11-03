@@ -341,7 +341,8 @@ LEDGER_HEADER = """# Журнал расхождений индекса и ко�
 Формат записи: дата · ревизия · способ обнаружения · файл · вид изменения · символы.
 
 Виды: `add` (новый файл) · `modify` (изменён) · `delete` (удалён) · `rename` ·
-`schema_change` (изменение схемы БД) · `slice_boundary` (изменены границы срезов —
+`schema_change` (изменение схемы БД) · `docgraph_fingerprint` (изменился вход
+документного графа: модель, версия промпта, температура или настройки извлечения) · `slice_boundary` (изменены границы срезов —
 код перенесён в другую функцию; самое опасное для анализа изменение).
 """
 
@@ -460,7 +461,12 @@ def _build_archive_report(cfg: ProjectConfig, from_rev: str, to_rev: str, rows: 
     if not rows:
         out.append("")
         out.append("Изменений между ревизиями не зафиксировано.")
-    for kind in ("add", "modify", "delete", "rename", "schema_change", "slice_boundary"):
+    # `docgraph_fingerprint` — смена входа документного графа (модель, версия
+    # промпта, температура, набор настроек извлечения). Это такой же факт о
+    # знаниях, как изменение схемы БД: слой, собранный по другому входу, нельзя
+    # сравнивать со старым молча — поэтому вид назван в отчёте отдельной строкой.
+    for kind in ("add", "modify", "delete", "rename", "schema_change",
+                 "slice_boundary", "docgraph_fingerprint"):
         items = by_kind.get(kind) or []
         if not items:
             continue

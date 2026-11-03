@@ -58,7 +58,16 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         prog="build_release.py",
         description="Собрать публикуемое дерево RAGRAF по манифесту.",
     )
-    parser.add_argument("--out", required=True, help="каталог назначения (сборка)")
+    parser.add_argument(
+        "--out",
+        required=False,
+        help="каталог назначения (сборка); при --dry-run необязателен",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="показать, что будет собрано, и ничего не писать",
+    )
     parser.add_argument(
         "--manifest",
         default=None,
@@ -93,7 +102,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv if argv is not None else sys.argv[1:])
 
     source = Path(args.source).resolve() if args.source else rel.default_source()
-    out = Path(args.out).expanduser().resolve()
+    if not args.out and not args.dry_run:
+        return rel.fail("не задан --out: собирать некуда (для предпросмотра есть --dry-run)", 2)
+    out = Path(args.out).expanduser().resolve() if args.out else None
     manifest_path = (
         Path(args.manifest).resolve()
         if args.manifest
@@ -108,7 +119,7 @@ def main(argv: list[str] | None = None) -> int:
     # Пересечение путей проверяется ДО любой записи: сборка внутрь живого дерева
     # попала бы в собственный индекс, а сборка «поверх» источника уничтожила бы
     # исходники.
-    if rel.overlaps(source, out):
+    if out is not None and rel.overlaps(source, out):
         return rel.fail(
             f"приёмник пересекается с живым деревом: {out} против {source}. "
             f"Сборка внутрь дерева запрещена: она попадёт в свой же индекс",
@@ -120,7 +131,7 @@ def main(argv: list[str] | None = None) -> int:
     except Exception as error:  # noqa: BLE001 - манифест может быть калечным
         return rel.fail(f"манифест не разбирается: {error}", 1)
 
-    if out.exists():
+    if out is not None and out.exists() and not args.dry_run:
         existing = sorted(item.name for item in out.iterdir())
         if existing and not args.force:
             return rel.fail(
@@ -145,24 +156,29 @@ def main(argv: list[str] | None = None) -> int:
             print(f"FAIL: {problem}")
         return 1
 
-    out.mkdir(parents=True, exist_ok=True)
-
     copied = 0
-    for target in sorted(plan.files):
-        destination = out / target
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(plan.files[target], destination)
-        copied += 1
-
-    checksums = write_checksums(out, sorted(plan.files))
+    checksums = None
+    if not args.dry_run:
+        out.mkdir(parents=True, exist_ok=True)
+        for target in sorted(plan.files):
+            destination = out / target
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(plan.files[target], destination)
+            copied += 1
+        checksums = write_checksums(out, sorted(plan.files))
 
     print(f"манифест:            {manifest_path}")
     print(f"источник:            {source}")
-    print(f"приёмник:            {out}")
+    print(f"приёмник:            {out if out is not None else '(не задан, предпросмотр)'}")
     print(f"строк в манифесте:   {len(manifest.includes)} включений, {len(manifest.excludes)} исключений")
-    print(f"файлов перенесено:   {copied}")
+    if args.dry_run:
+        print(f"файлов к переносу:   {len(plan.files)}")
+        print("что записано:        ничего (--dry-run)")
+    else:
+        print(f"файлов перенесено:   {copied}")
     print(f"объём:               {plan.total_bytes} байт ({plan.total_bytes / (1 << 20):.1f} МБ)")
-    print(f"контрольные суммы:   {checksums.name} ({copied} строк)")
+    if checksums is not None:
+        print(f"контрольные суммы:   {checksums.name} ({copied} строк)")
 
     print("исключения (сколько файлов отсекло каждое правило):")
     for exclude in manifest.excludes:

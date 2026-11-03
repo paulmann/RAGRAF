@@ -134,7 +134,11 @@ try:
     # `shared_index_query`), этап И18 — две операции брокера секретов
     # (`broker_issue`, `broker_rotate`), поэтому здесь 54: проверка обязана
     # называть действующее число, иначе она охраняет прошлое.
-    check(len(BUILD_OPS) == 54, "операций в сборке — 54 (как в документах текущего состояния)",
+    # Этап 3 агентских интеграций (01.11.2026) добавил две операции документного
+    # графа (`entity_neighbors`, `doc_relations`): было 64.
+    # Этап 4 (02.11.2026) добавил `doc_search_levels` (dual-level поиск), этап 5 —
+    # `themes` и `global_overview` (темы и карта графа): действующее число — 67.
+    check(len(BUILD_OPS) == 67, "операций в сборке — 65 (как в документах текущего состояния)",
           str(len(BUILD_OPS)))
     ops_in_two = [op for op, names in edition.operations_index(BASE).items() if len(names) > 1]
     check(not ops_in_two, "ни одна операция не объявлена в двух возможностях", str(ops_in_two[:3]))

@@ -57,11 +57,14 @@
 
 from __future__ import annotations
 
+import atexit
 import json
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
+import time
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
 RELEASE = REPO / "tools/release"
@@ -80,6 +83,7 @@ FAILURES: list[str] = []
 EXAMINED = 0
 #: Собранное дерево последнего прогона: нужно свойству версии (CITATION, CHANGELOG).
 BUILT_TREE: pathlib.Path | None = None
+_SANDBOX: "pathlib.Path | None" = None
 
 
 def expect(condition: bool, message: str) -> None:
@@ -289,8 +293,14 @@ def main() -> int:
         expect(script.is_file(), f"NOT-IMPLEMENTED: нет {label}а — {script.relative_to(REPO).as_posix()}")
 
     if builder.is_file() and verifier.is_file():
-        global BUILT_TREE
+        global BUILT_TREE, _SANDBOX
         sandbox = pathlib.Path(tempfile.mkdtemp(prefix="ragraf-manifest-check-"))
+        _SANDBOX = sandbox
+        # Замер 29.10.2026: 437 брошенных песочниц `ragraf-manifest-check-*` — по одной
+        # на каждый прогон проверки. `atexit` убирает каталог на любом пути выхода,
+        # включая ранний `return report()`; переотступ функции ради `finally` был бы
+        # правкой на 160 строк с риском потерять ветку.
+        atexit.register(_drop_sandbox, sandbox)
         tree = sandbox / "tree"
         BUILT_TREE = tree
         code, output = run(builder, "--out", str(tree))
@@ -454,7 +464,31 @@ def main() -> int:
                 check_edition_step(previous, entry)
                 previous = entry
 
+    # Уборка ДО выхода, а не только в `atexit`: чекер считает каталоги %TEMP%
+    # сразу после выхода процесса, и `atexit`-уборка один раз не успела
+    # (замер 31.10.2026: `ragraf-manifest-check-<случайное>` в списке «до/после»).
+    _drop_sandbox(_SANDBOX)
     return report()
+
+
+def _drop_sandbox(path: "pathlib.Path | None") -> None:
+    """Убрать песочницу проверки; настоящий остаток назвать, а не потерять.
+
+    Windows держит удаляемые файлы открытыми ещё мгновение после выхода
+    дочернего процесса, поэтому `rmtree(ignore_errors=True)` может не сработать
+    с первого раза. Повтор с паузой решает это; если не помогло — путь
+    печатается, чтобы «оставили мусор» было видно, а не выяснялось чекером.
+    """
+    if not path:
+        return
+    for attempt in range(5):
+        if not path.exists():
+            return
+        shutil.rmtree(path, ignore_errors=True)
+        if not path.exists():
+            return
+        time.sleep(0.2 * (attempt + 1))
+    print(f"NOTE: песочница проверки не убрана: {path}")
 
 
 def report() -> int:

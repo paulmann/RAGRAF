@@ -93,6 +93,44 @@ SQL_RE = re.compile(r"\b(SELECT|INSERT\s+INTO|UPDATE|DELETE\s+FROM|REPLACE\s+INT
 SQL_TABLE_RE = re.compile(
     r"\b(?:FROM|JOIN|INTO|UPDATE|TABLE)\s+[`\"']?([A-Za-z_][A-Za-z0-9_]*)", re.IGNORECASE
 )
+
+#: Запрос ЦЕЛИКОМ: ключевое слово стоит в начале литерала, а не где-то внутри.
+#:
+#: ЗАЧЕМ ОТДЕЛЬНОЕ ПРАВИЛО. Замер 30.10.2026 (rev-0925): из четырёх рёбер
+#: `queries` два были выдуманы. Литерал перевода
+#: «Pro -> Enterprise: the licensor issues ... No installation, no delivery
+#: update and no data migration» содержит слово `update`, а `SQL_TABLE_RE`
+#: читает следующее за ним слово как имя таблицы — так в графе появились
+#: таблицы `and` (en_US) и `der` (de_DE), которых нет ни в одной базе.
+#: Проверка «похоже ли на запрос» отсекает такие литералы до разбора таблиц.
+#:
+#: Ведущие пробелы, скобки и SQL-комментарии допускаются: `(SELECT ...)` и
+#: `/* purge */ UPDATE ...` — настоящие запросы, и терять их нельзя.
+SQL_STATEMENT_RE = re.compile(
+    r"^[\s(]*(?:(?:--[^\n]*\n|/\*[\s\S]*?\*/)\s*)*"
+    r"(SELECT|INSERT\s+INTO|UPDATE|DELETE\s+FROM|REPLACE\s+INTO)\b",
+    re.IGNORECASE,
+)
+
+
+def looks_like_sql_statement(text: str) -> bool:
+    """Начинается ли литерал с операции SQL (то есть это запрос, а не текст).
+
+    Проверяется НАЧАЛО, а не наличие слова: слово `update` встречается в
+    обычной прозе, и разбор таблиц по нему даёт несуществующие таблицы.
+    Обратное правило («слово есть — значит запрос») измерено и отвергнуто:
+    оно дало два выдуманных ребра из четырёх.
+    """
+    probe = str(text or "").strip()
+    # Кавычки литерала снимаются здесь, а не у вызывающих: `raw` приходит и с
+    # ними (`_sql_from_text` получает текст узла целиком), и без этого правила
+    # проверка не сработала бы никогда — молча, потому что «не похоже на SQL»
+    # выглядит как обычный отрицательный ответ.
+    while probe[:1] in ("'", '"', "`"):
+        probe = probe[1:].lstrip()
+    return bool(SQL_STATEMENT_RE.match(probe))
+
+
 # Виды узлов для слоя оформления. Объявлены здесь, а не в css_html.py, потому что
 # использовать их должен и PHP-извлекатель: интерфейс проекта собирается внутри
 # PHP-шаблонов, и без разбора inline-разметки использования классов из PHP
@@ -994,7 +1032,12 @@ class PhpExtractor:
         raw = node_text(self._data, node)
         if len(raw) < 8 or not SQL_RE.search(raw):
             return
-        tables = sorted({m.group(1) for m in SQL_TABLE_RE.finditer(raw)})
+        # Ребро к таблице ставится только по литералу, который НАЧИНАЕТСЯ с
+        # операции SQL: проза со словом `update` таблиц не порождает.
+        tables = (
+            sorted({m.group(1) for m in SQL_TABLE_RE.finditer(raw)})
+            if looks_like_sql_statement(raw) else []
+        )
         # U4: признак «чтение или запись» вычисляется здесь и раньше ВЫБРАСЫВАЛСЯ:
         # он попадал в sql_literals, но не в ребро к таблице, поэтому операция
         # table_usage не могла ответить, какие вызовы пишут в журнал. Для правки

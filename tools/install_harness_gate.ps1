@@ -37,6 +37,19 @@ $shared = Join-Path $repo 'harness\all-hooks.json'
 
 Write-Output "патч профиля: $PatchPath"
 
+# 0. МЕХАНИЗМ, А НЕ ТОЛЬКО КОНФИГ. 28.10.2026 обновление приложения (0.2.0-rc.2 →
+# 0.2.1-rc.3) удалило пакет моста хуков из сборки; профиль при этом остался
+# «правильным», и установщик показывал зелёное, хотя ни один хук не запускается.
+# Поэтому сначала проверяется наличие механизма в установленной сборке.
+$mechanism = & $py (Join-Path $repo 'tools\patch_hooks_mount.py') --mechanism --brief 2>&1
+Write-Output "  механизм хуков: $mechanism"
+if ($LASTEXITCODE -ne 0) {
+    if ($Check) { exit 1 }
+    Write-Output '  УСТАНОВКА НЕ ИМЕЕТ СМЫСЛА: моста хуков нет в сборке DSH.'
+    Write-Output '  Конфиг при этом не трогаем: он корректен и заработает, когда механизм вернётся.'
+    exit 2
+}
+
 # 1. Свод должен быть собран из источников и совпадать с ними.
 if (-not (Test-Path -LiteralPath $shared)) { throw "нет свода хуков: $shared (сначала: python tools\merge_hooks.py)" }
 & $py (Join-Path $repo 'tools\merge_hooks.py') --check | ForEach-Object { "  $_" }

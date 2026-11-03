@@ -53,6 +53,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
+from . import paths
+
 try:  # pragma: no cover - проверяется тестом на живом окружении
     from nacl import secret as _nacl_secret
     from nacl.exceptions import CryptoError as _CryptoError
@@ -71,7 +73,7 @@ except Exception:  # noqa: BLE001 - отсутствие библиотеки э
 
 #: Каталог состояния RAGRAF. Он исключён из корпуса (``config/ragraf.yaml``),
 #: поэтому значения физически не могут попасть в индекс и в поисковую выдачу.
-CATALOG_DIR = Path(__file__).resolve().parents[2] / "catalog"
+CATALOG_DIR = paths.catalog_dir()
 
 #: Имя файла мастер-ключа. Отдельный файл, а не поле в базе: ключ и данные
 #: обязаны бэкапиться и защищаться по отдельности.

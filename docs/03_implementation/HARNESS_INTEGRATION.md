@@ -106,8 +106,8 @@ UnicodeEncodeError: 'charmap' codec can't encode characters in position 97-105
 `/sources`), документы PDF/DOCX/XLSX/PPTX/EML/ODT/RTF (язык `document`,
 `search` + `live_read`) и локальная польза (CLI `feedback`, `analytics`,
 страница `/value`). Числа берутся из кода, а не из этого текста, и сверяются
-проверкой `Test-DocumentedNumbers`: сервер отдаёт **59 инструментов**,
-фасад — 54 операции, CLI — 21 подкоманда; чекер — 35 проверок.
+проверкой `Test-DocumentedNumbers`: сервер отдаёт **74 инструмента**,
+фасад — 67 операций, CLI — 24 подкоманды; чекер — 46 проверок.
 
 Настройка обоих агентов и полный каталог возможностей —
 `docs/03_implementation/AGENTS_SETUP_AND_CAPABILITIES.md`.
@@ -417,3 +417,31 @@ pwsh -NoLogo -NoProfile -NonInteractive -File .\harness\Remove-BrokenSymlinks.ps
 `github.com/deepseek-ai/deepseek-harness`; публичной проверки API в этой сессии
 не делалось, поэтому контракт выше описан по фактам текущей установки
 (`lib/index.js`, README пакетов внутри `app.asar`), а не по документации.
+
+## HARNESS 44.7.0 (02.11.2026): мост хуков больше не входит в сборку
+
+Обновление клиента до 44.7.0 (пакеты `0.2.1-rc.5`) убрало мост хуков из
+`app.asar`: нет ни `@deepseek-ai/dsh-hooks-claude-code`, ни `@deepseek-ai/dsh-hook-protocol`,
+который мост импортирует. Запись `hooks-shared` в профиле осталась и указывала
+в пустоту, поэтому хуки не вызывались вовсе (последнее `hook/invoked` —
+23.10.2026 12:31:32), а гейт молча разрешал всё.
+
+Теперь установка ставит мост в профиль сама:
+
+```powershell
+cd C:\AutoClaw\RAGRAF
+.\.venv\Scripts\python.exe tools\install_harness_gate.py
+```
+
+Версия моста берётся из `app.asar` (у npm `latest` — `0.0.1-rc.5`, он несовместим
+с рантаймом `0.2.1-rc.5`; нужный выпуск — под тегом `next`). Команды хуков
+собираются без кавычек: PowerShell не принимает строку, начинающуюся с кавычки
+(`ParserError`, код 1 — на этом падал и гейт RAGRAF, и хуки xerj/bsg).
+
+Подробности, замеры и порядок отката — `docs/03_implementation/HARNESS-44.7-BRIDGE.md`.
+
+**Поправка к разделу выше.** Утверждение «профиль `desktop` разбирается
+(`--dump-config` показывает `mcp-ragraf`)» на 44.7.0 неверно: клиент отвечает
+`error: profile "desktop" is managed exclusively by the Electron application`
+(замерено 02.11.2026). Для проверки профиля используйте
+`tools/install_harness_gate.py --check`.

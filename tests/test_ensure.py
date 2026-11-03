@@ -11,13 +11,79 @@ RAGRAF ничего, кроме каталога проекта, и всё ра�
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
+# Состояние прогона — в своём каталоге: реестр разработок и настройки
+# пишутся туда, а не в живой `catalog/`. Измерено 30.10.2026: прежняя
+# редакция оставляла записи в живом реестре, и следующий прогон начинался
+# с изменённого состояния (этап 7). Переменная ставится ДО импорта модулей.
+_STATE = Path(tempfile.mkdtemp(prefix="ragraf-ensure-state-"))
+os.environ["RAGRAF_CATALOG_DIR"] = str(_STATE)
+# Конфигурация корпуса пишется туда же. Без этого `ensure(create=True)` клал
+# её в живой `config/` проекта — а `config/**` входит в корпус RAGRAF, и имя
+# файла содержит pid. Замер 31.10.2026: две проверки подряд обе запускали
+# переиндексацию (49,6 и 42,8 с) — корпус «устаревал» от одного прогона
+# набора. Переменная ставится ДО импорта модулей.
+os.environ["RAGRAF_CONFIG_DIR"] = str(_STATE / "config")
+(_STATE / "config").mkdir(parents=True, exist_ok=True)
+
 REPO = Path(__file__).resolve().parents[1]
+
+#: Снимок живого состояния: проверка утверждает, что прогон его не тронул.
+#:
+#: Сравнивается СОДЕРЖАНИЕ, а не байты: `Catalog.save()` двигает `updated_at`
+#: при каждом сохранении, в том числе когда сохраняет ДРУГОЙ процесс на том же
+#: реестре (долгоживущий MCP-сервер, другой агент). Замер 31.10.2026: набор
+#: падал на «живой catalog/catalog.json не изменён прогоном» примерно в одном
+#: прогоне из трёх-шести, и его собственные вызовы шли в отведённый каталог.
+#: Отметка времени называется отдельно: она двигается и без участия набора.
+_LIVE = REPO / "catalog"
+_VOLATILE = ("updated_at",)
+
+
+def _semantic(raw: bytes | None) -> str | None:
+    """Содержательная часть файла состояния: без подвижных отметок времени."""
+    import hashlib
+    import json
+
+    if raw is None:
+        return None
+    try:
+        data = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        return hashlib.sha256(raw).hexdigest()
+    if isinstance(data, dict):
+        for key in _VOLATILE:
+            data.pop(key, None)
+    return hashlib.sha256(json.dumps(data, sort_keys=True, ensure_ascii=False)
+                          .encode("utf-8")).hexdigest()
+
+
+def _live_entry_names(raw: bytes | None) -> set[str]:
+    """Имена разработок в живом реестре: состав, а не отметки времени."""
+    import json
+
+    if raw is None:
+        return set()
+    try:
+        data = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        return set()
+    entries = data.get("entries") if isinstance(data, dict) else None
+    return set(entries) if isinstance(entries, dict) else set()
+
+
+_LIVE_BEFORE = {name: (_LIVE / name).read_bytes()
+                for name in ("catalog.json", "settings.json", "registry_history.jsonl")
+                if (_LIVE / name).exists()}
+#: Снимок конфигураций пробы в ЖИВОМ `config/`: прогон не должен добавить ни
+#: одной. Файл пробы входит в корпус RAGRAF (`config/**`), а имя содержит pid.
+_CONFIG_BEFORE = sorted(q.name for q in (REPO / "config").glob("_ragraf_ensure_probe_*"))
 SRC = REPO / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
@@ -66,6 +132,8 @@ def _stop_ragraf_joern() -> None:
 def main() -> int:
     tmp = Path(tempfile.mkdtemp(prefix="ragraf_ensure_"))
     created_category = None
+    created_config = ""
+    inside_home: Path | None = None
     try:
         print("=== 1. Отказы: каталог не является проектом ===")
         home = Path.home()
@@ -85,13 +153,32 @@ def main() -> int:
         print("\n=== 2. Проект внутри профиля пользователя НЕ отклоняется ===")
         # Регресс: первая версия запрещала любой путь, содержащий `users`,
         # то есть ни один проект в профиле пользователя завести было нельзя.
-        inside_home = home / "_ragraf_ensure_probe"
-        inside_home.mkdir(exist_ok=True)
+        # Имя уникально для прогона. Прежняя редакция переиспользовала общий
+        # каталог `_ragraf_ensure_probe`, и остаток прошлого прогона давал
+        # `actual` вместо `created`: 12 из 17 проверок не запускались —
+        # «3 из 17» (воспроизведено 30.10.2026). Остатки снимаются явно
+        # и называются в выводе, а не убираются молча.
+        inside_home = home / f"_ragraf_ensure_probe_{os.getpid()}"
+        for stale in sorted(home.glob("_ragraf_ensure_probe*")):
+            if stale.name == inside_home.name or not stale.is_dir():
+                continue
+            shutil.rmtree(stale, ignore_errors=True)
+            if stale.exists():
+                print(f"  [ВНИМАНИЕ] остаток прошлого прогона не убран: {stale}")
+            else:
+                print(f"  убран остаток прошлого прогона: {stale.name}")
+        inside_home.mkdir(parents=True, exist_ok=True)
         (inside_home / ".gitignore").write_text("probe\n", encoding="utf-8")
         for name in ("alpha", "beta", "gamma"):
             (inside_home / f"{name}.py").write_text(
                 f"def probe_{name}(x):\n    return x\n", encoding="utf-8")
         outcome = ensure_mod.ensure(inside_home, create=True, index=True)
+        # Путь конфигурации запоминается СРАЗУ, а не в ветке `created`.
+        # Измеренный дефект (31.10.2026): при статусе `error` конфигурация уже
+        # лежит в `config/` проекта, но `created_config` оставался пустым, и
+        # уборка ниже ничего не снимала — за прогон `test_state_isolation`
+        # (он запускает этот набор несколько раз) накопилось пять файлов пробы.
+        created_config = str(getattr(outcome, "config", "") or "")
         check(outcome.status in ("created", "error"),
               "проект в профиле пользователя принят", f"{outcome.status}: {outcome.reason}")
         if outcome.status == "created":
@@ -177,10 +264,71 @@ def main() -> int:
         except Exception as exc:  # noqa: BLE001
             print(f"  примечание: Joern не остановлен: {exc}")
 
-        for target_dir in (tmp, Path.home() / "_ragraf_ensure_probe"):
+        for target_dir in [d for d in (tmp, inside_home, _STATE) if d is not None]:
             shutil.rmtree(target_dir, ignore_errors=True)
             if target_dir.exists():
                 print(f"  примечание: каталог не удалён: {target_dir}")
+
+    # Уборка того, что создал ПРОДУКТ, а не тест. `ensure(create=True)` кладёт
+    # конфигурацию корпуса в `config/` проекта RAGRAF (это его штатное место), а
+    # корпус пробы живёт в профиле пользователя. Раньше конфиг оставался в
+    # дереве: замер 31.10.2026 — шесть файлов `config/_ragraf_ensure_probe_*.yaml`
+    # после прогонов, из-за них число файлов корпуса уехало 961 → 967, а гейт
+    # публикации отказал «числа README не совпадают с активной ревизией».
+    # Остаток снимается по имени ЭТОГО прогона, а не по маске: чужие файлы
+    # трогать нельзя.
+    if created_config:
+        leftover = Path(created_config)
+        if leftover.exists():
+            try:
+                leftover.unlink()
+                print(f"  убран конфиг пробы: {leftover.name}")
+            except OSError as exc:
+                print(f"  примечание: конфиг пробы не удалён ({leftover.name}): {exc}")
+
+    print("\n=== 7. Живое состояние не изменилось ===")
+    # Проверяется то, за что набор ОТВЕЧАЕТ: проба не попала в живой реестр.
+    # Сравнение байтов живого `catalog.json` ложно обвиняло набор (измерено
+    # 31.10.2026: провал в одном прогоне из трёх): живой корпус переиндексировал
+    # ДРУГОЙ процесс — долгоживущий MCP-сервер со сторожем, который реагирует на
+    # правки файлов, — и реестр честно менял rev_id и indexed_at, к набору это
+    # отношения не имеет. Свойство набора — «проба не зарегистрирована в живом
+    # реестре и живой настройки не тронуты», и оно проверяемо независимо.
+    live_names_before = _live_entry_names(_LIVE_BEFORE.get("catalog.json"))
+    live_names_now = _live_entry_names(
+        (_LIVE / "catalog.json").read_bytes() if (_LIVE / "catalog.json").exists() else None)
+    check(live_names_now == live_names_before,
+          "живой catalog/catalog.json не получил разработку пробы",
+          f"было {sorted(live_names_before)}, стало {sorted(live_names_now)}")
+    probe_marks = (str(_STATE).replace("\\", "/"), "ragraf-ensure-", "probe")
+    polluted = [name for name in live_names_now - live_names_before]
+    check(not polluted, "в живом реестре нет записи пробы", str(polluted))
+    history_now = ((_LIVE / "registry_history.jsonl").read_bytes()
+                   if (_LIVE / "registry_history.jsonl").exists() else b"")
+    check(not any(mark.encode("utf-8") in history_now for mark in probe_marks),
+          "журнал состава живого реестра не упоминает пробу")
+    settings_now = ((_LIVE / "settings.json").read_bytes()
+                    if (_LIVE / "settings.json").exists() else None)
+    check(_semantic(settings_now) == _semantic(_LIVE_BEFORE.get("settings.json")),
+          "живой catalog/settings.json не изменён прогоном")
+    if live_names_now == live_names_before:
+        print("  [примечание] живой реестр мог сменить rev_id/indexed_at: это "
+              "делает другой процесс на том же реестре, а не набор")
+    # Конфигурация пробы: живой `config/` проекта входит в корпус RAGRAF, а имя
+    # файла содержит pid — такой файл делает корпус устаревшим после каждого
+    # прогона (замер 31.10.2026: две проверки подряд — две переиндексации).
+    config_now = sorted(q.name for q in (REPO / "config").glob("_ragraf_ensure_probe_*"))
+    check(config_now == _CONFIG_BEFORE,
+          "живой config/ не получил конфигурацию пробы",
+          f"было {_CONFIG_BEFORE}, стало {config_now}")
+    # Отрицательный контроль: проверка выше не должна проходить «на пустоте».
+    # Смотрим на путь, который вернул сам продукт: файл к этому моменту уже
+    # убран уборкой, а путь остался.
+    redirected = Path(created_config).parent if created_config else None
+    check(redirected is not None and redirected.resolve() == (_STATE / "config").resolve(),
+          "конфигурация пробы создана В отведённом каталоге (RAGRAF_CONFIG_DIR)",
+          f"путь конфигурации: {created_config or 'не создана'} — "
+          f"ожидался каталог {_STATE / 'config'}")
 
     print("\n=== ИТОГ ===")
     print(f"пройдено: {PASS}, провалено: {FAIL}")

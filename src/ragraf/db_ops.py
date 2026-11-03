@@ -37,6 +37,12 @@ def _has_layer(conn) -> bool:
     return store.table_exists(conn, "db_live_table")
 
 
+# Одна формулировка на все операции: «сравнивать не с чем» — это состояние
+# хранилища, а не результат сравнения.
+_NO_LIVE_LAYER = ("живой слой баз не собран: строк `db_live_*` нет, сравнивать "
+                  "не с чем. Пустой список — не «изменений нет»")
+
+
 def meta(conn, rev_id: str) -> dict[str, Any] | None:
     rows = _rows(conn, "SELECT * FROM db_live_meta WHERE rev_id = ?", (rev_id,))
     if not rows:
@@ -195,11 +201,22 @@ def drift(conn, rev_id: str, previous_rev: str) -> dict[str, Any]:
 
     Сравнение идёт по структуре, а не по данным: изменение строк здесь не
     показывается намеренно — данные не входят в отпечаток структуры.
+
+    Сравнивать можно только с ревизией, у которой живая схема ЕСТЬ. Замер
+    28.10.2026: живая схема собрана для 435 ревизий из 500, и запрос
+    `drift(rev-0500, rev-0010)` отвечал `tables_added=200`, `columns_added=300`
+    без единого слова о том, что у второй ревизии строк 0. Разница с пустым
+    состоянием — не изменение структуры, а отсутствие второго состояния;
+    поэтому такие списки помечены `compared=false`, а причина названа в `note`.
+    Из того же замера: `rev-0443` собрана по ОДНОЙ базе из трёх (118 таблиц
+    против 315), и разница списков там — разница охвата сбора.
     """
     if not _has_layer(conn):
-        return {"from": previous_rev, "to": rev_id, "tables_added": [],
+        return {"from": previous_rev, "to": rev_id, "compared": False,
+                "previous_tables": 0, "tables_added": [],
                 "tables_removed": [], "columns_added": [], "columns_removed": [],
-                "relations_added": [], "relations_removed": []}
+                "relations_added": [], "relations_removed": [],
+                "totals": {}, "note": _NO_LIVE_LAYER}
 
     # Сравниваются ДВЕ РЕВИЗИИ: первая редакция запрашивала обе по текущей и
     # всегда показывала пустой список изменений — это ловится проверкой на
@@ -228,13 +245,50 @@ def drift(conn, rev_id: str, previous_rev: str) -> dict[str, Any]:
         (previous_rev,)).fetchall()}
     return {
         "from": previous_rev, "to": rev_id,
+        "compared": bool(before),
+        "previous_tables": len(before),
         "tables_added": sorted(now - before)[:200],
         "tables_removed": sorted(before - now)[:200],
         "columns_added": sorted(now_cols - before_cols)[:300],
         "columns_removed": sorted(before_cols - now_cols)[:300],
         "relations_added": sorted(now_rel - before_rel)[:200],
         "relations_removed": sorted(before_rel - now_rel)[:200],
+        # Полные числа рядом с усечёнными списками: список обрезан до 200/300,
+        # и без счётчика «200 изменений» читается как «изменений ровно 200».
+        "totals": {
+            "tables_added": len(now - before),
+            "tables_removed": len(before - now),
+            "columns_added": len(now_cols - before_cols),
+            "columns_removed": len(before_cols - now_cols),
+            "relations_added": len(now_rel - before_rel),
+            "relations_removed": len(before_rel - now_rel),
+        },
+        "note": _drift_note(conn, rev_id, previous_rev, bool(before)),
     }
+
+
+def _drift_note(conn, rev_id: str, previous_rev: str, has_previous: bool) -> str:
+    """Почему сравнивать было не с чем или почему охват разный.
+
+    Два разных состояния, и оба читаются как «структура изменилась», если
+    промолчать: у предыдущей ревизии живой схемы нет вовсе; либо она собрана по
+    другому числу баз (замер: `rev-0443` — одна база из трёх).
+    """
+    if not has_previous:
+        return ("предыдущая ревизия без живой схемы: строк 0, второго состояния "
+                "нет. Пустой список изменений и «всё добавилось» здесь означают "
+                "одно и то же — сравнивать было не с чем")
+    now_meta = meta(conn, rev_id) or {}
+    prev_meta = meta(conn, previous_rev) or {}
+    try:
+        now_db = int(now_meta.get("databases") or 0)
+        prev_db = int(prev_meta.get("databases") or 0)
+    except (TypeError, ValueError):
+        return ""
+    if now_db and prev_db and now_db != prev_db:
+        return (f"охват сбора разный: в предыдущей ревизии баз {prev_db}, в текущей "
+                f"{now_db}. Часть разницы списков — разница ОХВАТА, а не структуры")
+    return ""
 
 
 def migrations_vs_live(conn, rev_id: str, *, limit: int = 300) -> dict[str, Any]:

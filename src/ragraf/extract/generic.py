@@ -55,6 +55,7 @@ from .php_ast import (
     SQL_TABLE_RE,
     TABLE_PREFIX,
     _sql_access,
+    looks_like_sql_statement,
     file_ref_edges,
     route_edges,
     routes_from_text,
@@ -815,6 +816,11 @@ class GenericExtractor:
         """
         raw = self._text(node)
         if len(raw) < 8 or not SQL_RE.search(raw):
+            return
+        # Таблицы читаются только из литерала, который начинается с операции
+        # SQL. Замер 30.10.2026: без этой проверки текст перевода со словом
+        # `update` дал таблицы `and` и `der`, которых нет ни в одной базе.
+        if not looks_like_sql_statement(raw):
             return
         tables = sorted({m.group(1) for m in SQL_TABLE_RE.finditer(raw)})
         access = _sql_access(raw)

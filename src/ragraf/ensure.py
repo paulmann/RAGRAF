@@ -300,7 +300,7 @@ def looks_like_project(root: Path) -> tuple[bool, str]:
 
 def ensure(root: Path, *, create: bool = True, index: bool = True,
            force_reindex: bool = False, budget_seconds: float | None = None,
-           max_files: int | None = None) -> EnsureOutcome:
+           max_files: int | None = None, with_vectors: bool = True) -> EnsureOutcome:
     """Привести корпус проекта в актуальное состояние.
 
     Параметры:
@@ -311,7 +311,12 @@ def ensure(root: Path, *, create: bool = True, index: bool = True,
         корпуса, `index.budget_seconds`): при исчерпании прогон прерывается до
         закрепления ревизии, а статус ответа — `partial`;
       * `max_files` — предел числа файлов корпуса (по умолчанию
-        `index.max_files`): больше — отказ с числами и подсказкой про exclude.
+        `index.max_files`): больше — отказ с числами и подсказкой про exclude;
+      * `with_vectors` — строить ли векторный слой. `False` важен на чистой
+        установке без доступа к HuggingFace: замер 01.11.2026 — первая
+        индексация повисла на загрузке модели без единой строки в выводе.
+        Лексический поиск работает и без векторов, поэтому это не «урезанный
+        режим», а честный выбор.
 
     Операция НИКОГДА не поднимает исключение наружу: любой сбой возвращается
     как `status="error"` с причиной. Смысл в том, что `ensure` вызывается
@@ -335,18 +340,51 @@ def ensure(root: Path, *, create: bool = True, index: bool = True,
     category = catalog.category_for_root(resolved)
 
     if category:
-        return _ensure_existing(catalog, category, resolved, start,
-                                index=index, force_reindex=force_reindex,
-                                budget_seconds=budget_seconds, max_files=max_files)
+        outcome = _ensure_existing(catalog, category, resolved, start,
+                                   index=index, force_reindex=force_reindex,
+                                   budget_seconds=budget_seconds, max_files=max_files,
+                                   with_vectors=with_vectors)
+    else:
+        outcome = _ensure_new(catalog, resolved, start, create=create, index=index,
+                              budget_seconds=budget_seconds, max_files=max_files,
+                              with_vectors=with_vectors)
+    _forget_gate_freshness(outcome)
+    return outcome
 
-    return _ensure_new(catalog, resolved, start, create=create, index=index,
-                        budget_seconds=budget_seconds, max_files=max_files)
+
+def _forget_gate_freshness(outcome: EnsureOutcome) -> None:
+    """Снять запомненную гейтом свежесть корпуса после пересборки.
+
+    Зачем. `gate.corpus_freshness` запоминает `fresh=False` и возвращает его до
+    24 часов, не перепроверяя («отставший корпус не стареет: он остаётся
+    отставшим, пока его не пересоберут»), а явный сброс кэша существовал
+    (`GateState.forget_freshness`), но после `ensure` никем не вызывался.
+    Замер 03.11.2026: CLI `ensure` дал ревизию rev-0008, а PreToolUse продолжал
+    называть индекс отставшим — в режиме `deny` это отклоняло бы файловый поиск
+    до суток после успешной пересборки. После сброса следующий вызов гейта
+    сверяет отпечаток заново и видит уже пересобранный корпус.
+
+    Ошибка кэша гейта не должна ломать `ensure`: индексация уже состоялась,
+    ответ о ней важнее побочной записи.
+    """
+    try:
+        if str(getattr(outcome, "status", "")) == "error":
+            return
+        root = str(getattr(outcome, "root", "") or "")
+        if not root:
+            return
+        from . import gate as gate_mod
+
+        gate_mod.state().forget_freshness(root)
+    except Exception:  # noqa: BLE001 — побочный кэш не роняет основную операцию
+        return
 
 
 def _ensure_existing(catalog: Catalog, category: str, root: Path, start: float, *,
                      index: bool, force_reindex: bool,
                      budget_seconds: float | None = None,
-                     max_files: int | None = None) -> EnsureOutcome:
+                     max_files: int | None = None,
+                     with_vectors: bool = True) -> EnsureOutcome:
     """Корпус известен: сверить сумму и при расхождении переиндексировать."""
     entry = catalog.get(category)
     if entry is None:
@@ -389,6 +427,7 @@ def _ensure_existing(catalog: Catalog, category: str, root: Path, start: float, 
 
     fresh = watch_mod.check(cfg, category, auto_reindex=True,
                             force=force_reindex, use_cache=not force_reindex,
+                            with_vectors=with_vectors,
                             budget_seconds=budget_seconds)
 
     outcome.rev_id = fresh.rev_id or entry.rev_id
@@ -432,7 +471,7 @@ def _ensure_existing(catalog: Catalog, category: str, root: Path, start: float, 
 
 def _ensure_new(catalog: Catalog, root: Path, start: float, *, create: bool,
                 index: bool, budget_seconds: float | None = None,
-                max_files: int | None = None) -> EnsureOutcome:
+                max_files: int | None = None, with_vectors: bool = True) -> EnsureOutcome:
     """Корпуса нет: завести его, если каталог похож на проект."""
     allowed, why = looks_like_project(root)
     if not allowed:
@@ -508,7 +547,7 @@ def _ensure_new(catalog: Catalog, root: Path, start: float, *, create: bool,
     budget = budget_seconds if budget_seconds is not None else cfg.index.budget_seconds
     idx = Indexer(cfg)
     try:
-        report = idx.run(budget_seconds=budget)
+        report = idx.run(budget_seconds=budget, with_vectors=bool(with_vectors))
     except Exception as exc:  # noqa: BLE001
         outcome.status = "error"
         outcome.reason = (

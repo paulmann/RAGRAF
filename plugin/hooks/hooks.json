@@ -1,0 +1,60 @@
+{
+  "_readme": [
+    "Хуки плагина RAGRAF для Claude Code.",
+    "Команда: `python` из PATH запускает лаунчер плагина, тот находит рабочую",
+    "копию RAGRAF (RAGRAF_HOME → известные места → пакет) и передаёт стадию",
+    "`tools/harness_gate.py`. Одна реализация стадий на все входы: установщик",
+    "tools/install_claude_code.py ставит те же стадии в ~/.claude/settings.json,",
+    "поэтому правка логики не расходится между способами установки.",
+    "Пути без кавычек: PowerShell не принимает строку, начинающуюся с кавычки",
+    "(ParserError, код 1 — измерено 02.11.2026).",
+    "Режим гейта: RAGRAF_GATE_MODE=warn|ask|deny|off, по умолчанию warn."
+  ],
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PLUGIN_ROOT}/scripts/ragraf_launcher.py\" hook session-start",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PLUGIN_ROOT}/scripts/ragraf_launcher.py\" hook prompt",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "pwsh|Bash|read|Read|grep|Grep|glob|Glob|mcp__ragraf__.*|mcp__plugin_ragraf_ragraf__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PLUGIN_ROOT}/scripts/ragraf_launcher.py\" hook pre-tool",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PLUGIN_ROOT}/scripts/ragraf_launcher.py\" hook stop",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

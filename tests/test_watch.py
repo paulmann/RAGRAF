@@ -192,7 +192,17 @@ def main() -> int:
               f"changed={fresh1.changed}")
 
         # Правим файл: добавляем функцию.
+        # Песочница набора проверяется перед записью: замер 31.10.2026 — при
+        # прогоне группы каталог исчез между созданием и правкой
+        # (`FileNotFoundError` на `projA/src/one.php`), и набор падал трейсбеком,
+        # не сказав, что именно пропало. Молчаливое `mkdir` было бы хуже: оно
+        # продолжило бы проверку на пустом месте. Поэтому пропажа называется.
         target = root_a / "src" / "one.php"
+        if not root_a.is_dir():
+            check(False, "песочница набора цела перед правкой файла",
+                  f"каталог {root_a} исчез во время прогона")
+            raise SystemExit(1)
+        target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(
             "<?php\nfunction a_one(): int { return 1; }\n"
             "function a_one_new(): int { return 11; }\n",

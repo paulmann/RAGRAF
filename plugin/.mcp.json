@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "ragraf": {
+      "command": "python",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/scripts/ragraf_launcher.py",
+        "mcp",
+        "--agent",
+        "claude-code",
+        "--agent-kind",
+        "external"
+      ],
+      "env": {
+        "PYTHONIOENCODING": "utf-8",
+        "PYTHONUTF8": "1"
+      }
+    }
+  }
+}

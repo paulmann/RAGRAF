@@ -1,0 +1,7 @@
+# Шаблон конфигурации MCP для RAGRAF. Значений секретов здесь нет.
+mcp:
+  servers:
+    - name: ragraf
+      command: ragraf-mcp
+      args: []
+      transport: stdio

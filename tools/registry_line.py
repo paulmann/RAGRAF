@@ -429,7 +429,8 @@ def _table_rows(text: str) -> list[list[str]]:
     return rows
 
 
-def refresh_sources_table(root: Path, changed: list[str]) -> dict:
+def refresh_sources_table(root: Path, changed: list[str],
+                          refresh_all: bool = False) -> dict:
     """Пересчитать хэши изменённых документов в таблице источников поставки.
 
     Меняются ДВА столбца: «sha256 в дереве» и «совпадает». Столбец «sha256 в
@@ -464,7 +465,10 @@ def refresh_sources_table(root: Path, changed: list[str]) -> dict:
         body = line.rstrip("\n")
         if body.lstrip().startswith("|"):
             cells = [cell.strip() for cell in body.strip().strip("|").split("|")]
-            if len(cells) == 6 and cells[0] in wanted:
+            # Строка таблицы может быть образцом («файл в дереве») — хэшировать
+            # нечего, и падать на этом нельзя: обновляются только существующие файлы.
+            if (len(cells) == 6 and (refresh_all or cells[0] in wanted)
+                    and (root / cells[0]).is_file()):
                 actual = hashlib.sha256((root / cells[0]).read_bytes()).hexdigest()
                 same = "да" if cells[2].lower() == actual else "нет"
                 if cells[3].lower() != actual or cells[4].lower() != same:
@@ -572,7 +576,14 @@ def write(root: Path, known: dict, revision: dict | None = None) -> dict:
         "changed": [], "unchanged": [], "problems": []}
     problems.extend(snapshots["problems"])
 
-    sources = refresh_sources_table(root, [doc.path for doc in DOCUMENTS])
+    # Таблица объявляет не только шесть README, но и всю обвязку
+    # (`community/**`, `scripts/**`). Раньше пересчитывались только README:
+    # правка `community/CHANGELOG.md` оставляла в таблице старый хэш, и сторож
+    # `tools/check_community_wrapper.py` отказывал сборке. Дефект измерен
+    # 31.10.2026: хэш в таблице 0787468225d6… при фактическом 48423ee65c07…
+    # Поэтому `--write` пересчитывает все объявленные строки, а не только шесть.
+    sources = refresh_sources_table(
+        root, [doc.path for doc in DOCUMENTS], refresh_all=True)
     problems.extend(sources["problems"])
     notes.extend(sources.get("notes") or [])
     return {"changed": changed, "unchanged": unchanged,

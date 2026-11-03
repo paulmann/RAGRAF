@@ -16,6 +16,9 @@ from pathlib import Path
 
 from . import __version__, util
 from .config import ConfigError, ProjectConfig, load as load_config
+# Перечни значений параметров живут в фасаде: оболочка берёт их оттуда, чтобы
+# перечень не разошёлся с проверкой (одно свойство — одна точка).
+from .facade import OP_CHOICES
 
 EXIT_OK = 0
 EXIT_ERROR = 1
@@ -35,6 +38,8 @@ EXIT_NOT_FOUND = EXIT_UNAVAILABLE
 OPS = [
     "search", "search_multi", "symbol", "references", "callers", "callees",
     "impact", "slice",
+    # Этап 8: доказательство у каждого ребра — отдельной операцией.
+    "edge_evidence",
     "code", "repo_map", "schema", "table_usage", "routes", "index_status",
     "drift_report", "drift_ack", "live_read", "calibrate", "write_check", "usage",
     "freshness", "catalog", "policy_trace", "class_usage",
@@ -48,6 +53,8 @@ OPS = [
     "db_schema", "db_table", "db_relations", "db_sample", "db_drift", "db_cross",
     # P2: сравнение ревизий и память о решениях.
     "diff", "note", "notes",
+    # Управление списком исключений (уровень pro): что не считать в корпус.
+    "excludes",
     # P3 (§3.2/§3.4): гейт использования индекса и отчёт по задаче.
     "gate", "task_stats", "task_set",
     # Внешний доступ (ПРОМТ-И7): единый вход и выгрузка журналов в SIEM.
@@ -60,6 +67,20 @@ OPS = [
     # Прореживание журнала (ПРОМТ-И10) — там же: это тот же контур и тот же
     # журнал, у него нет отдельной возможности издания.
     "quality_suite", "quality_diff", "quality_prune",
+    # Документный слой (этап «документы», фаза A): адрес, структура, статус.
+    "doc_search", "doc_get", "doc_status", "doc_validate", "doc_ocr",
+    # Документный граф (этап 3 плана «Агентские интеграции»): две операции
+    # чтения. Обе объявлены возможностью `doc-graph` (издание Pro), поэтому на
+    # Community отвечают отказом с причиной, а не отсутствуют: «не положено» и
+    # «не написано» — разные ответы.
+    "entity_neighbors", "doc_relations",
+    # Dual-level поиск (этап 4): два уровня одним ответом. Операция объявлена
+    # возможностью `search` (community) — локальный уровень бесплатен, а
+    # глобальный закрыт возможностью `doc-graph` ВНУТРИ операции.
+    "doc_search_levels",
+    # Этап 5: темы и карта документного графа. Обе — возможности `doc-graph`
+    # (издание pro): темы строятся по слою, карта считает его состав.
+    "themes", "global_overview",
 ]
 
 # Операции, которые в релизе 1 требуют слоя, добавляемого в M2/M3.
@@ -71,7 +92,13 @@ OP_REQUIRES_CPG = {"slice"}
 # отвергал верные команды до запуска: `table_usage --mode write` и
 # `class_usage --mode missing` из инструкции проекта падали с кодом 2.
 MODE_CHOICES: dict[str, tuple[str, ...]] = {
-    "impact": ("full", "hard"),
+    "impact": ("full", "hard", "all"),
+    # Этап 4: режим поиска. `auto` — прежнее поведение (лексика+вектор), `code` —
+    # только материал кода, `docs`/`themes` — dual-level (уровень «тема»).
+    "search": ("auto", "code", "docs", "themes"),
+    # Уровни поиска: `local` — чанки с адресами, `global` — сущности и связи
+    # документного графа, `both` — оба уровня со связями между ними.
+    "doc_search_levels": ("local", "global", "both"),
     "table_usage": ("all", "read", "write"),
     "class_usage": ("all", "missing", "unused"),
     "license_offline": ("request", "issue", "accept", "transfer"),
@@ -80,6 +107,8 @@ MODE_CHOICES: dict[str, tuple[str, ...]] = {
 # значение по умолчанию: режим у них не меняет смысл ответа.
 MODE_DEFAULT_BY_OP: dict[str, str] = {
     "impact": "full",
+    "search": "auto",
+    "doc_search_levels": "both",
     "table_usage": "all",
     "class_usage": "all",
     "license_offline": "accept",
@@ -171,6 +200,33 @@ def _print_human(data: dict) -> None:
         interesting = ["files_ok", "files_partial", "files_failed", "edges_stated", "edges_derived",
                        "symbols", "chunks", "secrets_skipped"]
         print("  покрытие: " + " ".join(f"{k}={int(cov[k])}" for k in interesting if k in cov))
+        # Доказательность графа (этап 8): виды рёбер и доля эвристики. Ранее
+        # печаталось только `edges_stated`/`edges_derived`, и агент не мог отличить
+        # 57 406 эвристических вызовов от 11 372 подтверждённых.
+        ek = res.get("edge_kinds") or {}
+        if ek:
+            kinds = ek.get("kinds") or []
+            top = ", ".join(f"{k['kind']}={k['count']} "
+                            f"({k['share'] * 100:.1f} %)" for k in kinds[:4])
+            print(f"  рёбра по видам: {top}")
+            print(f"  эвристика: {ek.get('heuristic_count')} из {ek.get('total')} "
+                  f"({(ek.get('heuristic_share') or 0) * 100:.1f} %) при бюджете "
+                  f"{ek.get('budget_percent')} % — "
+                  f"{'ВЫШЕ БЮДЖЕТА' if ek.get('budget_exceeded') else 'в пределах бюджета'}")
+            if ek.get("note"):
+                print(f"  · доказательность: {ek['note']}")
+            # Этап 8: виды ДОКАЗАТЕЛЬСТВА (а не виды рёбер). Числа берутся из
+            # того же ответа, что и JSON, поэтому текстовый и машинный вывод
+            # не могут разойтись.
+            evd = ek.get("evidence") or {}
+            if evd.get("kinds"):
+                print("  доказательство рёбер: " + ", ".join(
+                    f"{item['evidence_kind']}={item['count']}"
+                    for item in evd["kinds"][:5]))
+                print(f"  рёбра вызова: подтверждено CPG {evd.get('cpg_confirmed', 0)}, "
+                      f"выведено {evd.get('derived_call_edges', 0)} из "
+                      f"{evd.get('call_edges', 0)} "
+                      f"({(evd.get('derived_share') or 0) * 100:.1f} %)")
         # Блок качества (ПРОМТ-И12). JSON и панель несли его с самого начала, а
         # текстовый вывод — нет: наблюдаемость предела журнала, сделанная на
         # этапе И11, до него не дошла, и `query index_status` печатал ревизию,
@@ -205,6 +261,26 @@ def _print_human(data: dict) -> None:
             print(f"  сигнатуры: не прочитаны ({signatures['error']})")
         for problem in quality.get("problems") or []:
             print(f"  · качество: {problem}")
+        # Хранилище (этап 9): объём, свободные страницы и хвосты ротации.
+        storage = res.get("storage") or {}
+        if storage:
+            stores = storage.get("stores") or {}
+            parts = []
+            for label, data in stores.items():
+                if data.get("missing"):
+                    parts.append(f"{label}=НЕТ")
+                else:
+                    parts.append(f"{label}={data.get('mb')} МБ")
+            verdict = "ВЫШЕ ПОРОГА" if storage.get("over_budget") else "в пределах"
+            joined = ", ".join(parts)
+            print(f"  хранилище: {storage.get('total_gb')} ГБ при пороге "
+                  f"{storage.get('budget_gb')} ГБ — {verdict} ({joined})")
+            if storage.get("orphan_revisions"):
+                print(f"  · хвост ротации: {storage.get('orphan_document_rows')} строк "
+                      f"документного слоя от {storage.get('orphan_revisions')} ревизий, "
+                      f"которых нет в истории")
+            if storage.get("note"):
+                print(f"  · хранилище: {storage['note']}")
         for st in res.get("stages") or []:
             print(f"    {st['stage']:<8} {st['seconds']:>8.3f}s  items={st['items']}"
                   + (f"  {st['note']}" if st.get("note") else ""))
@@ -214,15 +290,39 @@ def _print_human(data: dict) -> None:
     elif op in ("callers", "callees"):
         print(f"  цель {res.get('target')} ({res.get('direction')}, глубина {res.get('depth')}): "
               f"stated={res.get('stated')} derived={res.get('derived')}")
+        ev = res.get("evidence") or {}
+        if ev.get("total"):
+            print(f"  доказательство: " + ", ".join(
+                f"{c['evidence_kind']}={c['count']}" for c in (ev.get("counts") or [])[:5])
+                + f"; выведено {ev.get('derived', 0)} из {ev.get('total', 0)} "
+                  f"({(ev.get('derived_share') or 0) * 100:.1f} %)")
         for it in (res.get("items") or [])[:15]:
-            mark = "=" if it.get("provenance") == "stated" else "~"
+            # Этап 8: знак «=» больше не означает «доказано»: ребро может быть
+            # `stated`, но выведенным по имени. Поэтому вид назван явно.
+            mark = "=" if it.get("evidence_kind") == "cpg_call" else "~"
             print(f"    {mark} [{it.get('level')}] {it.get('fqn')}  {it.get('path')}:{it.get('start_line')}"
-                  f"  ({it.get('edge_kind')})")
+                  f"  ({it.get('edge_kind')}, {it.get('evidence_kind')})")
     elif op == "impact":
         print(f"  цель {res.get('target')} режим={res.get('mode')} "
               f"затронуто: {res.get('affected_count')}")
+        # Этап 8: чем именно затронуто. Без этой строки `derived: 12` читается как
+        # «12 связей», хотя это 12 выводов по имени.
+        ekinds = res.get("edge_kinds") or []
+        if ekinds:
+            share = (res.get("heuristic_share") or 0) * 100
+            listed = ", ".join(f"{k['kind']}={k['count']}" for k in ekinds[:5])
+            print(f"  связи по видам: {listed}  эвристика: {share:.1f} % "
+                  f"при бюджете {res.get('heuristic_budget_percent')} %")
+        ev = res.get("evidence") or {}
+        if ev.get("total"):
+            print("  доказательство связей: " + ", ".join(
+                f"{c['evidence_kind']}={c['count']}" for c in (ev.get("counts") or [])[:5])
+                + f"; выведено {ev.get('derived', 0)} из {ev.get('total', 0)} "
+                  f"({(ev.get('derived_share') or 0) * 100:.1f} %)")
         for f in (res.get("affected_files") or [])[:20]:
             print(f"    {f['path']}  stated={f['stated']} derived={f['derived']}")
+    elif op == "edge_evidence":
+        _print_edges(res or {}, True, data.get("limits"))
     elif op == "search":
         for h in res[:20]:
             stale = " [STALE]" if h.get("stale") else ""
@@ -287,7 +387,9 @@ def cmd_index(args: argparse.Namespace, cfg: ProjectConfig) -> int:
 
     idx = Indexer(cfg)
     try:
-        report = idx.run(with_vectors=not args.no_vectors, limit_files=args.limit_files)
+        report = idx.run(with_vectors=not args.no_vectors,
+                         limit_files=args.limit_files,
+                         doc_graph=bool(getattr(args, "doc_graph", False)))
     finally:
         idx.close()
     data = report.to_dict()
@@ -343,7 +445,9 @@ def cmd_reindex(args: argparse.Namespace, cfg: ProjectConfig) -> int:
 
     idx = Indexer(cfg)
     try:
-        report = idx.run(with_vectors=not args.no_vectors, limit_files=args.limit_files)
+        report = idx.run(with_vectors=not args.no_vectors,
+                         limit_files=args.limit_files,
+                         doc_graph=bool(getattr(args, "doc_graph", False)))
     finally:
         idx.close()
     if report.ok:
@@ -514,7 +618,7 @@ def dispatch_op(fc, args: argparse.Namespace) -> dict:
                             kinds=([str(args.kind)] if getattr(args, "kind", None) else None),
                             with_text=bool(getattr(args, "with_text", False)),
                             text_width=int(getattr(args, "text_width", 160)),
-                            answer=answer)
+                            answer=answer, mode=resolve_mode(op, args.mode))
     if op == "search_multi":
         # Несколько запросов одним вызовом: разделитель `|`, чтобы не
         # добавлять в CLI формат, зависящий от оболочки (кавычки, запятые).
@@ -524,24 +628,63 @@ def dispatch_op(fc, args: argparse.Namespace) -> dict:
             queries, limit=args.limit, scope=args.scope,
             regex=bool(getattr(args, "regex", False)), answer=answer,
         )
+    if op == "doc_search":
+        return fc.op_doc_search(args.text or "", limit=args.limit,
+                                kind=getattr(args, "kind", None),
+                                doc=getattr(args, "doc", None))
+    if op == "doc_get":
+        return fc.op_doc_get(getattr(args, "locator", None) or args.text or "")
+    if op == "doc_status":
+        return fc.op_doc_status(getattr(args, "doc", None))
+    if op == "doc_validate":
+        return fc.op_doc_validate(getattr(args, "doc", None))
+    if op == "doc_ocr":
+        return fc.op_doc_ocr(getattr(args, "path", None)
+                             or getattr(args, "doc", None) or "")
+    if op == "entity_neighbors":
+        return fc.op_entity_neighbors(getattr(args, "name", None) or args.text or "",
+                                      depth=int(getattr(args, "depth", 1) or 1),
+                                      kind=str(getattr(args, "kind", None) or "entity"),
+                                      limit=int(args.limit or 50))
+    if op == "doc_relations":
+        return fc.op_doc_relations(doc=getattr(args, "doc", None),
+                                   entity=getattr(args, "name", None),
+                                   limit=int(args.limit or 50))
+    if op == "themes":
+        return fc.op_themes(scope=getattr(args, "scope", None),
+                            limit=int(args.limit or 20))
+    if op == "global_overview":
+        return fc.op_global_overview(limit=int(args.limit or 20))
+    if op == "doc_search_levels":
+        return fc.op_doc_search_levels(args.text or "",
+                                      limit=int(args.limit or 20),
+                                      mode=resolve_mode(op, args.mode))
     if op == "symbol":
         return fc.op_symbol(args.name or args.text or "", path=args.path,
                             limit=args.limit, answer=answer)
     if op == "references":
-        return fc.op_references(args.fqn or args.name or args.text or "", limit=args.limit)
+        return fc.op_references(args.fqn or args.name or args.text or "", limit=args.limit,
+                                min_confidence=getattr(args, "min_confidence", None))
     if op == "callers":
         return fc.op_callers(args.fqn or args.name or args.text or "", depth=args.depth,
-                             hard_only=args.hard, limit=args.limit, answer=answer)
+                             hard_only=args.hard, limit=args.limit, answer=answer,
+                             min_confidence=getattr(args, "min_confidence", None))
     if op == "callees":
         return fc.op_callees(args.fqn or args.name or args.text or "", depth=args.depth,
-                             hard_only=args.hard, limit=args.limit)
+                             hard_only=args.hard, limit=args.limit,
+                             min_confidence=getattr(args, "min_confidence", None))
     if op == "impact":
         return fc.op_impact(args.target or args.name or args.text or "",
                             mode=resolve_mode(op, args.mode),
-                            depth=args.depth, limit=args.limit, answer=answer)
+                            depth=args.depth, limit=args.limit, answer=answer,
+                            min_confidence=getattr(args, "min_confidence", None))
     if op == "slice":
         return fc.op_slice(args.fqn or args.name or args.text or "", direction=args.direction,
-                           limit=args.limit)
+                           limit=args.limit,
+                           min_confidence=getattr(args, "min_confidence", None))
+    if op == "edge_evidence":
+        return fc.op_edge_evidence(args.fqn or args.name or args.text or "",
+                                   kind=args.kind, limit=args.limit)
     if op == "code":
         return fc.op_code(fqn=args.fqn or args.name or args.text, path=args.path,
                           style=args.style, limit=args.limit,
@@ -596,6 +739,15 @@ def dispatch_op(fc, args: argparse.Namespace) -> dict:
         # Назвать текущую задачу: так работает RAGRAF_TASK без клиента.
         return fc.op_task_set(args.name or args.text or "",
                               clear=bool(getattr(args, "clear", False)))
+    if op == "excludes":
+        # Профиль «шумных» каталогов: show/impact/apply/disable. Действие
+        # передаётся --action, список имён — --target, осознанное решение —
+        # --force.
+        return fc.op_excludes(
+            action=getattr(args, "action", "show") or "show",
+            dirs=getattr(args, "target", "") or "",
+            force=bool(getattr(args, "force", False)),
+        )
     if op == "write_check":
         # Сверка плана записи со схемой (U1): закрывает дефект вроде 42S22
         # до выполнения запроса. Колонки передаются строкой через запятую.
@@ -653,7 +805,8 @@ def dispatch_op(fc, args: argparse.Namespace) -> dict:
     if op == "policy_trace":
         return fc.op_policy_trace(args.name or args.text or "",
                                   action=args.action, depth=args.depth,
-                                  limit=args.limit)
+                                  limit=args.limit,
+                                  min_confidence=getattr(args, "min_confidence", None))
     # ---------------- слой живых баз данных ----------------
     if op == "db_schema":
         return fc.op_db_schema(table=args.table, limit=args.limit)
@@ -751,7 +904,7 @@ def cmd_db(args: argparse.Namespace, cfg: ProjectConfig) -> int:
     from . import db_collect as collect_mod
     from .embeddings import Embedder
     from .lexvec import LexVecStore
-    from .revisions import GraphWriter
+    from .revisions import ControlStore, GraphWriter
 
     access = access_mod.DbAccessStore().load()
     if args.dialect:
@@ -828,12 +981,29 @@ def cmd_db(args: argparse.Namespace, cfg: ProjectConfig) -> int:
         return EXIT_ERROR
 
     graph = GraphWriter(cfg)
+    control = ControlStore(cfg)
     lex = LexVecStore(cfg)
     embedder = Embedder(cfg, allow_download=False)
-    stats = collect_mod.write(access, rev, collected, graph, lex, embedder)
+    try:
+        stats = collect_mod.write(access, rev, collected, graph, lex, embedder,
+                                  control=control.conn)
+    finally:
+        try:
+            lex.close()
+        except Exception:
+            pass
+        control.close()
     print(f"записано в индекс под ревизию {rev}: таблиц {stats['graph']['tables']}, "
           f"связей {stats['graph']['relations']}, закрытых колонок "
           f"{stats['graph']['sensitive_columns']}, чанков {stats['lexvec']['chunks']}")
+    # Факт отпечатка печатается отдельно: «структура записана» и «отпечаток
+    # записан» — разные записи в разные хранилища, и расходились они молча.
+    if stats["graph"].get("fingerprint_stored"):
+        print(f"отпечаток структуры записан: db_fingerprint:{rev} = "
+              f"{collected['fingerprint'][:16]}…")
+    else:
+        print("ВНИМАНИЕ: отпечаток структуры НЕ записан — сторож свежести "
+              "не увидит изменения структуры")
     if not args.json:
         print("подсказка: структура смотрится операциями db_schema, db_table, "
               "db_relations, db_sample, db_drift, db_cross")
@@ -1130,7 +1300,9 @@ def cmd_catalog(args: argparse.Namespace, cfg: ProjectConfig | None = None) -> i
         # индекс, хотя означает «индекс ещё не строился».
         state = row.get("state") or ("indexed" if row["rev_id"] else "registered")
         label = {"indexed": "проиндексирована",
-                 "registered": "заведена, индекс не строился"}.get(state, state)
+                 "registered": "заведена, индекс не строился",
+                 "aborted": "индекс есть, последний прогон прерван "
+                            "(действует прежняя ревизия)"}.get(state, state)
         print(f"    состояние реестра: {label}")
         print(f"    ревизия:  {row['rev_id'] or '(нет)'}  capability={row['capability'] or '—'}")
         print(f"    индексация: {row['indexed_at'] or '(не выполнялась)'}")
@@ -1428,6 +1600,7 @@ def cmd_ensure(args: argparse.Namespace) -> int:
         create=not args.no_create,
         index=not args.no_index,
         force_reindex=args.force,
+        with_vectors=not getattr(args, "no_vectors", False),
     )
     data = outcome.to_dict()
 
@@ -1539,6 +1712,120 @@ def cmd_drop(args: argparse.Namespace, cfg: ProjectConfig) -> int:
     finally:
         cs.close()
     return EXIT_OK
+
+
+def cmd_compact(args: argparse.Namespace, cfg: ProjectConfig) -> int:
+    """Политика хранения `.ragraf`: план (по умолчанию) или выполнение очистки.
+
+    Зачем команда, а не только настройка. Политика «что удаляется вместе с
+    ревизией» до этого жила в коде ротации и не имела ни отчёта, ни способа
+    посмотреть числа до удаления. Замер 30.10.2026: `.ragraf` занимал 26 829 МБ,
+    из них 17 831 МБ — артефакты CPG ревизий, данных которых в хранилищах уже
+    нет; увидеть это можно было только обходом диска.
+
+    Порядок, который команда НЕ даёт нарушить: `--apply` без `--yes` — отказ.
+    Отказ печатает, что нужно раньше: план, бэкап и согласие владельца.
+    """
+    from .facade import Facade
+
+    apply = bool(getattr(args, "apply", False))
+    if apply and not bool(getattr(args, "yes", False)):
+        print("очистка меняет диск необратимо и требует подтверждения:\n"
+              "  1) `ragraf compact --plan` — числа до;\n"
+              "  2) копия .ragraf вне дерева (бэкап);\n"
+              "  3) `ragraf compact --apply --yes`.", file=sys.stderr)
+        return EXIT_USAGE
+    vacuum: bool | None = None
+    if bool(getattr(args, "vacuum", False)):
+        vacuum = True
+    if bool(getattr(args, "no_vacuum", False)):
+        vacuum = False
+    fc = Facade(cfg, tool="cli", agent=_agent_from_env()[0],
+                agent_kind=_agent_from_env()[1], task=_task_from_env())
+    try:
+        data = fc.op_compact(apply=apply, vacuum=vacuum,
+                             retain=getattr(args, "retain", None))
+    finally:
+        fc.close()
+    if args.json:
+        _print(data, True)
+        return EXIT_OK if data.get("found") else EXIT_ERROR
+    _print_compact(data, apply)
+    return EXIT_OK if data.get("found") else EXIT_ERROR
+
+
+def _print_compact(answer: dict, applied: bool) -> None:
+    """Печать ответа `compact`: числа до/после и что именно удалено."""
+    if answer.get("error"):
+        print(f"[compact] ОТКАЗ: {answer['error']}", file=sys.stderr)
+        return
+    result = answer.get("result") or {}
+    if applied:
+        before = result.get("before") or {}
+        after = result.get("after") or {}
+        print(f"[compact] очистка выполнена за {result.get('seconds')} с")
+        for label in ("graph", "lexvec", "control", "cpg"):
+            one = before.get(label) or {}
+            two = after.get(label) or {}
+            freed = (result.get("freed_mb") or {}).get(label)
+            print(f"  {label:8s} {one.get('mb')} МБ → {two.get('mb')} МБ "
+                  f"(освобождено {freed} МБ)")
+        print(f"  всего освобождено: {result.get('freed_total_mb')} МБ")
+        active = result.get("active") or {}
+        print(f"  активная ревизия: {active.get('rev')} — числа до {active.get('before')}, "
+              f"после {active.get('after')}")
+        rows = result.get("removed_rows") or {}
+        for label, counters in rows.items():
+            total = sum(int(v) for v in counters.values())
+            print(f"  строк удалено из {label}: {total} ({len(counters)} таблиц)")
+        cpg = result.get("cpg_removed") or {}
+        print(f"  артефактов CPG удалено: файлов {cpg.get('bins')}, каталогов Joern "
+              f"{cpg.get('workspaces')}, выгрузок {cpg.get('exports')}")
+        temp = result.get("temp_removed") or {}
+        print(f"  временных файлов удалено: {temp.get('files')}")
+        for label, item in (result.get("vacuum") or {}).items():
+            if item.get("ran"):
+                print(f"  VACUUM {label}: {item.get('before_mb')} → {item.get('after_mb')} МБ "
+                      f"за {item.get('seconds')} с")
+            else:
+                print(f"  VACUUM {label}: не выполнялся — {item.get('reason')}")
+        left = result.get("orphans_left") or []
+        print(f"  хвоста ротации осталось: {len(left)} ревизий"
+              + (f" ({', '.join(left[:5])})" if left else ""))
+        return
+
+    policy = result.get("policy") or {}
+    print(f"[compact] план, ничего не изменено — {result.get('project')} "
+          f"({result.get('root')})")
+    print(f"  политика: хранить ревизий {policy.get('retain_revs')}, артефактов CPG "
+          f"{policy.get('storage_keep_cpg_revs')} ревизий, предел tmp "
+          f"{policy.get('storage_tmp_max_mb')} МБ, возраст {policy.get('storage_tmp_age_hours')} ч, "
+          f"порог VACUUM {policy.get('storage_vacuum_free_percent')} %")
+    print(f"  ревизий в хранилищах: {result.get('revisions_in_stores')}; "
+          f"хранятся: {', '.join(result.get('revisions_kept') or [])}")
+    for label, entry in (result.get("stores") or {}).items():
+        print(f"  {label:8s} {entry.get('mb')} МБ "
+              f"(свободных страниц {entry.get('free_mb')} МБ)")
+    cpg = result.get("cpg") or {}
+    print(f"  cpg      {cpg.get('mb')} МБ: файлов CPG {cpg.get('bins')}, каталогов Joern "
+          f"{cpg.get('workspaces')}, выгрузок {cpg.get('exports')}, tmp "
+          f"{round(int(cpg.get('tmp_bytes') or 0) / 1_048_576, 1)} МБ")
+    orphans = result.get("orphans") or {}
+    print(f"  хвост ротации: {orphans.get('revisions')} ревизий, "
+          f"{orphans.get('rows_total')} строк — {orphans.get('rows')}")
+    temp = result.get("temp") or {}
+    print(f"  временные выгрузки старше {temp.get('age_hours')} ч: {temp.get('files')} файлов; "
+          f"временные каталоги сверх предела: "
+          f"{round(int(temp.get('overflow_bytes') or 0) / 1_048_576, 1)} МБ")
+    print(f"  артефактов CPG к удалению: {cpg.get('remove_revs')} ревизий, "
+          f"{cpg.get('remove_mb')} МБ")
+    for label, needed in (result.get("vacuum") or {}).items():
+        reason = (result.get("vacuum_reason") or {}).get(label, "")
+        print(f"  VACUUM {label}: {'да' if needed else 'нет'} — {reason}")
+    print(f"  предполагается освободить: "
+          f"{round(int(result.get('delete_bytes') or 0) / 1_048_576, 1)} МБ "
+          f"(строки вернёт только VACUUM)")
+    print("  выполнение: `ragraf compact --apply --yes` после бэкапа")
 
 
 def cmd_selftest(args: argparse.Namespace, cfg: ProjectConfig) -> int:
@@ -1825,6 +2112,68 @@ def cmd_edition(args: argparse.Namespace) -> int:
     return EXIT_OK if payload["resolved"] else EXIT_ERROR
 
 
+def _print_edges(res: dict, with_evidence: bool, limits: list | None = None) -> None:
+    """Текстовый вывод рёбер символа: направления, доказательства, координаты.
+
+    Вынесено отдельной функцией, потому что этим отвечают две команды:
+    `query edge_evidence` и `edges --fqn … --evidence`. Два формата одного
+    ответа разошлись бы так же, как когда-то разошлись два списка операций.
+    """
+    print(f"  цель {res.get('target')}  {res.get('path')}:{res.get('start_line')}")
+    count = res.get("count") or {}
+    ev = res.get("evidence") or {}
+    print(f"  рёбер: исходящих {count.get('out', 0)}, входящих {count.get('in', 0)}; "
+          f"подтверждено CPG {ev.get('confirmed', 0)}, выведено {ev.get('derived', 0)} "
+          f"из {ev.get('total', 0)} ({(ev.get('derived_share') or 0) * 100:.1f} %)")
+    for title, key, arrow in (("исходящие", "out", "->"), ("входящие", "in", "<-")):
+        items = res.get(key) or []
+        if not items:
+            continue
+        print(f"  {title}:")
+        for it in items[:20]:
+            tail = ""
+            if with_evidence:
+                how = f"/{it['evidence_how']}" if it.get("evidence_how") else ""
+                tail = (f"  {it.get('evidence_kind')}{how}  {it.get('path')}:{it.get('line')}"
+                        + ("" if it.get("evidence_ok") else "  [координата не сверена]"))
+            print(f"    {arrow} {it.get('other')}  ({it.get('edge_kind')})"
+                  f"  conf={it.get('confidence')}{tail}")
+        if len(items) > 20:
+            print(f"    … ещё {len(items) - 20} (полный список — с --json)")
+    for line in (limits or []):
+        print(f"  · {line}")
+
+
+def cmd_edges(args: argparse.Namespace, cfg: ProjectConfig) -> int:
+    """Рёбра символа: `ragraf edges --fqn <имя> [--evidence] [--kind …]`.
+
+    Зачем отдельная команда, если есть `query edge_evidence`. Вопрос «что за
+    связи у этой функции и чем они подтверждены» задаётся чаще остальных, а
+    `query` требует помнить имя операции. Команда — тонкая обёртка: вся работа
+    в `Facade.op_edge_evidence`, чтобы ответ не разошёлся с MCP-инструментом.
+    """
+    from .facade import Facade
+
+    fqn = args.fqn or args.name or ""
+    if not fqn:
+        print("нужен символ: --fqn <имя>", file=sys.stderr)
+        return EXIT_USAGE
+    fc = Facade(cfg, tool="cli", agent=_agent_from_env()[0],
+                agent_kind=_agent_from_env()[1], task=_task_from_env())
+    try:
+        data = fc.op_edge_evidence(fqn, kind=args.kind, limit=args.limit)
+    finally:
+        fc.close()
+    if args.json:
+        _print(data, True)
+        return _exit_code("edge_evidence", data)
+    if not data.get("found"):
+        _print(data, False)
+        return _exit_code("edge_evidence", data)
+    _print_edges(data.get("result") or {}, bool(args.evidence), data.get("limits"))
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="ragraf",
@@ -1842,11 +2191,18 @@ def build_parser() -> argparse.ArgumentParser:
     pi = sub.add_parser("index", help="полная индексация корпуса")
     pi.add_argument("--no-vectors", action="store_true", help="без векторного слоя (быстрее)")
     pi.add_argument("--limit-files", type=int, default=None, help="ограничить число файлов (пилотная ревизия)")
+    # Документный граф: проход по документам через LLM. Флаг выключен по
+    # умолчанию, потому что это ПЛАТНЫЕ обращения и первая стадия, которая
+    # ходит в сеть. Без флага поведение индексации не меняется ни на байт.
+    pi.add_argument("--doc-graph", dest="doc_graph", action="store_true",
+                    help="собрать документный граф (извлечение фактов через LLM)")
     pi.set_defaults(func=cmd_index)
 
     pr = sub.add_parser("reindex", help="переиндексация + архивация журнала расхождений")
     pr.add_argument("--no-vectors", action="store_true")
     pr.add_argument("--limit-files", type=int, default=None)
+    pr.add_argument("--doc-graph", dest="doc_graph", action="store_true",
+                    help="собрать документный граф (извлечение фактов через LLM)")
     pr.set_defaults(func=cmd_reindex)
 
     pd = sub.add_parser("drift", help="обнаружить различия индекса и кода (индекс не меняется)")
@@ -1863,6 +2219,10 @@ def build_parser() -> argparse.ArgumentParser:
     pq.add_argument("--fqn")
     pq.add_argument("--target")
     pq.add_argument("--path")
+    pq.add_argument("--doc", default=None,
+                    help="doc_status/doc_validate: документ (путь или doc_id)")
+    pq.add_argument("--locator", default=None,
+                    help="doc_get: адрес чанка документа (path:12, path#anchor, …)")
     pq.add_argument("--table")
     pq.add_argument("--scope")
     pq.add_argument("--depth", type=int, default=1)
@@ -1873,10 +2233,18 @@ def build_parser() -> argparse.ArgumentParser:
     pq.add_argument("--mode", default=None, choices=MODE_ALL)
     pq.add_argument("--action", default=None,
                     help="policy_trace: имя действия, решение о котором нужно проследить")
-    pq.add_argument("--direction", default="back", choices=["back", "forward"])
-    pq.add_argument("--style", default="compact", choices=["compact", "signatures"])
-    pq.add_argument("--detail", default="normal", choices=["normal", "deep"])
+    pq.add_argument("--direction", default="back",
+                    choices=list(OP_CHOICES[("slice", "direction")]))
+    pq.add_argument("--style", default="compact",
+                    choices=list(OP_CHOICES[("code", "style")]))
+    pq.add_argument("--detail", default="normal",
+                    choices=list(OP_CHOICES[("repo_map", "detail")]))
     pq.add_argument("--hard", action="store_true", help="только доказанные связи")
+    # Этап 10: порог достоверности — решение, а не тайна. Зашитое значение
+    # остаётся по умолчанию, но ответ называет и значение, и правило отсечения.
+    pq.add_argument("--min-confidence", dest="min_confidence", type=float, default=None,
+                    help="порог достоверности связей 0..1 (по умолчанию 0.5; "
+                         "доказанные связи не отсекаются)")
     pq.add_argument("--budget", type=int, default=2000, help="бюджет токенов для repo_map")
     pq.add_argument("--no-verify", dest="verify", action="store_false", default=True,
                     help="route: не сверять отпечаток рекомендованного корпуса")
@@ -1957,7 +2325,8 @@ def build_parser() -> argparse.ArgumentParser:
     pq.add_argument("--start", type=int, default=None)
     pq.add_argument("--end", type=int, default=None)
     pq.add_argument("--kind", default=None,
-                    help="search: вид чанка (file, symbol, table, route, doc)")
+                    help="search: вид чанка (file, symbol, table, route, doc); "
+                         "edge_evidence: вид ребра (calls, calls_heuristic, …, all)")
     pq.add_argument("--note", default=None)
     # `search --with-text`: текст хитов из индекса одним вызовом. Замер rev-0031:
     # без него за 20 хитов приходилось читать 20 файлов вторым шагом.
@@ -1982,7 +2351,8 @@ def build_parser() -> argparse.ArgumentParser:
                     help="neighbors: не добавлять фрагмент текста к хитам")
     # `code --source`: по умолчанию текст берётся из индекса, `disk` — прежнее
     # поведение (чтение рабочего дерева).
-    pq.add_argument("--source", default="auto", choices=["auto", "index", "disk"])
+    pq.add_argument("--source", default="auto",
+                    choices=list(OP_CHOICES[("code", "source")]))
     pq.add_argument("--include-containers", action="store_true",
                     help="вернуть вложенные спаны (класс-контейнер отдаётся шапкой)")
     pq.add_argument("--columns", default=None,
@@ -2010,8 +2380,39 @@ def build_parser() -> argparse.ArgumentParser:
     ps = sub.add_parser("status", help="состояние индекса")
     ps.set_defaults(func=cmd_status)
 
+    pe = sub.add_parser("edges",
+                        help="рёбра символа: направления и вид доказательства")
+    pe.add_argument("--fqn", default=None, help="символ (или --name)")
+    pe.add_argument("--name", default=None)
+    pe.add_argument("--kind", default=None,
+                    help="вид ребра (calls, calls_heuristic, …, all); по умолчанию "
+                         "только рёбра вызовов")
+    pe.add_argument("--evidence", action="store_true",
+                    help="печатать вид доказательства и координату у каждого ребра")
+    pe.add_argument("--limit", type=int, default=200)
+    # `--json` объявлен и здесь: глобальный флаг разбирается ДО подкоманды, а
+    # `ragraf edges --fqn X --json` — обычная форма записи, и отказ на неё
+    # читался бы как «команда сломана».
+    pe.add_argument("--json", action="store_true", help="машиночитаемый вывод")
+    pe.set_defaults(func=cmd_edges)
+
     pdr = sub.add_parser("drop", help="удалить данные текущей ревизии (история сохраняется)")
     pdr.set_defaults(func=cmd_drop)
+
+    pco = sub.add_parser("compact", help="политика хранения: объём, хвост ротации, VACUUM")
+    pco.add_argument("--plan", action="store_true",
+                     help="только числа, ничего не менять (поведение по умолчанию)")
+    pco.add_argument("--apply", action="store_true",
+                     help="выполнить очистку; требует --yes")
+    pco.add_argument("--yes", action="store_true",
+                     help="подтверждение необратимой очистки")
+    pco.add_argument("--vacuum", action="store_true",
+                     help="выполнить VACUUM независимо от порога свободных страниц")
+    pco.add_argument("--no-vacuum", action="store_true",
+                     help="не выполнять VACUUM даже при превышении порога")
+    pco.add_argument("--retain", type=int, default=None,
+                     help="сколько последних ревизий хранить (по умолчанию retain_revs)")
+    pco.set_defaults(func=cmd_compact)
 
     pst = sub.add_parser("selftest", help="самопроверка окружения")
     pst.set_defaults(func=cmd_selftest)
@@ -2101,6 +2502,8 @@ def build_parser() -> argparse.ArgumentParser:
     pens.add_argument("--force", action="store_true",
                       help="проверить свежесть минуя кэш")
     pens.add_argument("--json", action="store_true", help="машиночитаемый вывод")
+    pens.add_argument("--no-vectors", action="store_true",
+                      help="индексировать без векторного слоя (нет загрузки модели)")
     pens.set_defaults(func=cmd_ensure, needs_config=False)
 
     pcat = sub.add_parser("catalog", help="реестр разработок: что индексировано и с какими суммами")
@@ -2209,6 +2612,25 @@ def build_parser() -> argparse.ArgumentParser:
     # --json здесь НЕ объявляется: он уже есть у главного разбора, а значение
     # подпарсера перебило бы его, и машиночитаемый вывод молча не включался.
     ped.set_defaults(func=cmd_edition, needs_config=False)
+
+    pdg = sub.add_parser("docgraph",
+                         help="документный граф: состояние слоя и план прогона")
+    dsub = pdg.add_subparsers(dest="docgraph_action", required=True)
+    dstatus = dsub.add_parser("status", help="что настроено и что собрано")
+    dstatus.set_defaults(func=cmd_docgraph, needs_config=True)
+    dbuild = dsub.add_parser("build", help="прогон извлечения (этап 2)")
+    dbuild.add_argument("--dry-run", dest="dry_run", action="store_true",
+                        help="только план: сколько чанков и вызовов, без сети")
+    dbuild.add_argument("--limit", type=int, default=None,
+                        help="ограничить число чанков в прогоне")
+    dbuild.set_defaults(func=cmd_docgraph, needs_config=True)
+    dthemes = dsub.add_parser("themes",
+                              help="построить темы слоя (бесплатно, без модели)")
+    dthemes.add_argument("--summaries", action="store_true",
+                         help="собрать и сводки тем (платно: обращение к LLM на тему)")
+    dthemes.add_argument("--limit", type=int, default=None,
+                         help="сколько тем сводить (по умолчанию все, до предела)")
+    dthemes.set_defaults(func=cmd_docgraph, needs_config=True)
 
     return p
 
@@ -2374,6 +2796,267 @@ def main(argv: list[str] | None = None) -> int:
     # ломал бы все следующие вызовы инструмента.
     _remember_interpreter()
     return code
+
+
+# ---------------------------------------------------------------------------
+# Документный граф: команда стоит В КОНЦЕ файла намеренно. Вставка в
+# середину сдвинула бы номера строк, на которые ссылаются документы и две
+# копии навыка (`tools/check_line_refs.py` держит шесть таких ссылок).
+# ---------------------------------------------------------------------------
+def _docgraph_denial() -> str:
+    """Причина отказа по возможности `doc-graph` или пустая строка.
+
+    Общая для двух путей запуска прохода (`docgraph build` и `index --doc-graph`):
+    гейт, реализованный в одном из них, был бы половиной гейта.
+    """
+    from . import edition as edition_mod
+
+    return edition_mod.feature_denial("doc-graph")
+
+
+def _run_docgraph_build(cfg: ProjectConfig, limit: int | None = None) -> dict:
+    """Выполнить проход извлечения по активной ревизии.
+
+    Проход — платная часть продукта, поэтому здесь стоит ТА ЖЕ проверка издания,
+    что и у операций чтения. Без неё гейт закрывал бы чтение и открывал запись:
+    `docgraph build` строил бы слой под Community, а `entity_neighbors` его не
+    показывал.
+
+    Ревизия берётся из паспорта (`rev.json`) — той же, по которой отвечают
+    операции чтения. Проход пишет слой В АКТИВНУЮ ревизию: так же поступает
+    живой слой баз (`cmd_db`), и второй ревизии ради фактов никто не заводит.
+    """
+    from . import docgraph as docgraph_mod
+    from . import docgraph_extract as extract_mod
+    from .facade import Facade
+
+    denial = _docgraph_denial()
+    if denial:
+        return {
+            "op": "docgraph_build", "index_rev": "", "collected": False,
+            "skipped": False, "code": "edition_refused", "reason": denial,
+            "llm": {"state": "unknown", "configured": False,
+                    "reason": "проверка не выполнялась: проход не разрешён изданием"},
+            "stats": {"chunks": 0, "calls": 0, "cache_hits": 0, "entities": 0,
+                      "mentions": 0, "relations": 0,
+                      "would_write": {"entities": 0, "mentions": 0, "relations": 0},
+                      "rejected": {}},
+            "notes": [denial], "seconds": 0.0,
+            "fingerprint": {"current": "", "recorded": "", "matches": False},
+        }
+
+    facade = Facade(cfg, tool="cli", telemetry=False, watch=False)
+    try:
+        rev = facade.current_rev()
+    finally:
+        facade.close()
+    if not rev:
+        return {
+            "op": "docgraph_build", "index_rev": "", "collected": False,
+            "skipped": False, "code": "no_revision",
+            "reason": "в корпусе нет активной ревизии: сначала `ragraf index`",
+            "llm": {"state": "unknown", "configured": False,
+                    "reason": "проверка не выполнялась"},
+            "stats": {"chunks": 0, "calls": 0, "cache_hits": 0, "entities": 0,
+                      "mentions": 0, "relations": 0,
+                      "would_write": {"entities": 0, "mentions": 0, "relations": 0},
+                      "rejected": {}},
+            "notes": [], "seconds": 0.0,
+            "fingerprint": docgraph_mod.current_fingerprint(),
+        }
+    return extract_mod.run(cfg, str(rev), limit=limit)
+
+
+def _run_docgraph_themes(cfg: ProjectConfig, *, summaries: bool = False,
+                         limit: int | None = None) -> dict:
+    """Построить темы слоя: кластеры бесплатны, сводки — только по флагу.
+
+    Гейт тот же, что у прохода извлечения: темы читают слой, который объявлен
+    возможностью `doc-graph`. Разница только в цене: кластеры считаются без
+    модели и без сети, поэтому их можно пересобирать сколько нужно.
+    """
+    from . import docgraph as docgraph_mod
+    from . import llm as llm_mod
+    from . import settings as settings_mod
+    from . import store
+    from . import themes as themes_mod
+    from .facade import Facade
+
+    denial = _docgraph_denial()
+    result: dict = {"op": "docgraph_themes", "index_rev": "", "collected": False,
+                    "code": "", "reason": "", "themes": 0, "summaries": 0,
+                    "notes": [], "limits": {"min_weight": themes_mod.MIN_WEIGHT_DEFAULT,
+                                            "max_size": themes_mod.MAX_SIZE}}
+    if denial:
+        result.update(code="edition_refused", reason=denial, notes=[denial])
+        return result
+
+    facade = Facade(cfg, tool="cli", telemetry=False, watch=False)
+    try:
+        rev = facade.current_rev()
+    finally:
+        facade.close()
+    result["index_rev"] = str(rev or "")
+    if not rev:
+        result.update(code="no_revision",
+                      reason="в корпусе нет активной ревизии: сначала `ragraf index`")
+        return result
+
+    conn = None
+    try:
+        conn = store.connect(cfg.lexvec_db)
+        built = themes_mod.build(conn, rev)
+        result["themes"] = int(built.get("stored") or 0)
+        result["stats"] = {key: built.get(key) for key in
+                           ("mentions", "edges", "kept_edges", "components")}
+        if built.get("reason"):
+            result["notes"].append(str(built["reason"]))
+        result["collected"] = bool(built.get("themes"))
+        if summaries and built.get("themes"):
+            values = dict(settings_mod.DEFAULTS)
+            try:
+                values.update(dict(settings_mod.SettingsStore().load()))
+            except Exception:  # noqa: BLE001 — настройки не имеют права ронять команду
+                pass
+            client = llm_mod.LLMClient(cfg, config=llm_mod.config_from_settings(values))
+            state = client.status()
+            if not state.get("configured"):
+                result.update(code=themes_mod.DEGRADE_NO_LLM,
+                              reason=str(state.get("reason") or "LLM не настроен"))
+                result["notes"].append(themes_mod.describe_degraded(
+                    themes_mod.DEGRADE_NO_LLM, result["reason"]))
+            else:
+                summary_stats = themes_mod.summaries(
+                    conn, rev, client,
+                    limit=int(limit) if limit else themes_mod.MAX_THEMES,
+                    model=str(values.get("llm_model") or ""))
+                result["summaries"] = int(summary_stats.get("written") or 0)
+                result["notes"].extend(str(n) for n in summary_stats.get("notes") or [])
+                if summary_stats.get("reason"):
+                    result["notes"].append(str(summary_stats["reason"]))
+        return result
+    except Exception as exc:  # noqa: BLE001 — отказ обязан быть текстом
+        result.update(code="themes_failed", reason=f"{type(exc).__name__}: {exc}")
+        return result
+    finally:
+        if conn is not None:
+            conn.close()
+
+
+def cmd_docgraph(args: argparse.Namespace, cfg: ProjectConfig) -> int:
+    """Документный граф: состояние слоя и план прогона.
+
+    Две подкоманды, и обе без сети. `status` отвечает, что настроено и что
+    собрано; `build --dry-run` считает вход будущего прогона — именно тогда он и
+    нужен, когда LLM ещё не настроен.
+
+    Извлечения на этом этапе нет, поэтому `build` без `--dry-run` отказывает
+    кодом 2 с названной причиной. Молча ничего не сделать значило бы выдать
+    несобранный слой за собранный — тот самый класс дефекта, ради которого
+    заведено правило «нет данных и не собрано различаются полем и причиной».
+    """
+    from . import docgraph as docgraph_mod
+
+    action = str(getattr(args, "docgraph_action", "") or "status")
+    try:
+        if action == "status":
+            data = docgraph_mod.build_status(cfg)
+        elif action == "themes":
+            data = _run_docgraph_themes(cfg,
+                                        summaries=bool(getattr(args, "summaries", False)),
+                                        limit=getattr(args, "limit", None))
+        elif getattr(args, "dry_run", False):
+            data = docgraph_mod.build_plan(cfg, limit=getattr(args, "limit", None))
+        else:
+            data = _run_docgraph_build(cfg, limit=getattr(args, "limit", None))
+    except Exception as exc:  # noqa: BLE001 — отказ обязан быть текстом, а не трассировкой
+        print(f"docgraph: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+    if args.json:
+        _print(data, True)
+    else:
+        _print_docgraph(data)
+    # Код возврата называет ФАКТ, и только у сборки. У `status` и сухого
+    # прогона он всегда успешный: это отчёты, а не работа. Молчаливый ноль при
+    # отказе провайдера означал бы «всё хорошо» там, где не собрано ничего.
+    if action == "build" and not getattr(args, "dry_run", False):
+        return EXIT_OK if data.get("collected") else EXIT_ERROR
+    return EXIT_OK
+
+
+def _print_docgraph(data: dict) -> None:
+    """Текстовый ответ `docgraph`: состояние, отпечаток, слой, план.
+
+    Печатается то же, что отдаётся в JSON, и теми же словами: два формата одного
+    ответа расходятся ровно так, как когда-то разошлись два списка операций.
+    """
+    op = data.get("op")
+    llm = data.get("llm") or {}
+    print(f"[{op}] ревизия {data.get('index_rev') or '—'} "
+          f"состояние {data.get('capability')}")
+    print(f"  LLM: {llm.get('state')} "
+          f"({'настроен' if llm.get('configured') else 'НЕ настроен'}), "
+          f"провайдер {llm.get('provider')}, модель {llm.get('model') or '—'}, "
+          f"адрес {llm.get('base_url')}")
+    if llm.get("reason"):
+        print(f"    причина: {llm['reason']}")
+    fp = data.get("fingerprint") or {}
+    if isinstance(fp, dict):
+        parts = fp.get("parts") or {}
+        print(f"  отпечаток: {str(fp.get('current') or '')[:16]}… "
+              f"записан: {'да' if fp.get('recorded') else 'нет'} "
+              f"совпадает: {'да' if fp.get('matches') else 'нет'}")
+        if parts:
+            print(f"    вход: модель {parts.get('model') or '—'}, "
+                  f"промпт {parts.get('prompt_version') or '—'}, "
+                  f"температура {parts.get('temperature')}, "
+                  f"извлечение {parts.get('extraction')}")
+    layer = data.get("layer") or {}
+    if layer:
+        print(f"  слой: документов {layer.get('documents', 0)}, "
+              f"чанков {layer.get('chunks', 0)}, "
+              f"сущностей {layer.get('entities', 0)}, "
+              f"упоминаний {layer.get('mentions', 0)}, "
+              f"отношений {layer.get('relations', 0)}, "
+              f"тем {layer.get('themes', 0)}, "
+              f"сводок {layer.get('summaries', 0)}")
+    stats = data.get("stats") or {}
+    if stats:
+        would = stats.get("would_write") or {}
+        print(f"  проход: чанков {stats.get('chunks', 0)}, "
+              f"отправлено {stats.get('chunks_sent', 0)}, "
+              f"вызовов {stats.get('calls', 0)}, из кэша {stats.get('cache_hits', 0)}")
+        print(f"  слой: сущностей {stats.get('entities', 0)}, "
+              f"упоминаний {stats.get('mentions', 0)}, "
+              f"отношений {stats.get('relations', 0)}"
+              + ("" if not would.get("entities") else
+                 f"; к записи было: сущностей {would.get('entities')}, "
+                 f"упоминаний {would.get('mentions')}, "
+                 f"отношений {would.get('relations')}")
+              + (" (пропущено: вход не изменился)" if data.get("skipped") else ""))
+        rejected = stats.get("rejected") or {}
+        if rejected:
+            print("  отказы разбора: " + ", ".join(
+                f"{k}={v}" for k, v in sorted(rejected.items())))
+    if (data.get("op") == "docgraph_build" and not data.get("collected")
+            and data.get("reason")):
+        print(f"  НЕ СОБРАНО ({data.get('code') or 'код не назван'}): {data['reason']}")
+    plan = data.get("plan") or {}
+    if plan:
+        print(f"  план: чанков {plan.get('chunks')} "
+              f"(в прогон {plan.get('chunks_selected')}), "
+              f"вызовов {plan.get('calls_estimated')}, "
+              f"знаков {plan.get('chars')} (~{plan.get('tokens_estimated')} токенов), "
+              f"в кэше уже {plan.get('cached_rows')}")
+    integrity = data.get("integrity") or {}
+    if integrity:
+        verdict = "норма" if integrity.get("ok") else "НАРУШЕНИЯ"
+        print(f"  целостность слоя: {verdict}, "
+              f"проблем {len(integrity.get('problems') or [])}")
+        if integrity.get("reason"):
+            print(f"    {integrity['reason']}")
+    for note in data.get("notes") or []:
+        print(f"  · {note}")
 
 
 if __name__ == "__main__":

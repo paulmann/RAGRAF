@@ -46,6 +46,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+from . import paths
 from . import registry_facts
 from . import util
 from .config import ProjectConfig
@@ -72,6 +73,11 @@ class RunRecord:
     edge_count: int = 0
     seconds: float = 0.0
     trigger: str = "manual"   # manual | guard | watch | cli
+    # `ready` — прогон построил и закрепил ревизию; `aborted` — прогон
+    # прерван (бюджет времени, падение стадии), ревизия не закреплена.
+    # Поле добавлено 28.10.2026: без него прерванный прогон в истории
+    # выглядел как обычный, отличаясь только нулями.
+    state: str = "ready"
 
 
 @dataclass
@@ -156,7 +162,8 @@ class Catalog:
         # По умолчанию реестр лежит рядом с RAGRAF, а не в конкретном проекте:
         # он описывает НЕСКОЛЬКО разработок, и привязка к одной была бы против
         # самого требования о раздельном учёте.
-        self.path = path or (Path(__file__).resolve().parents[2] / "catalog" / "catalog.json")
+        # Реестр — файл состояния: путь выбирает `paths` (см. этап 7).
+        self.path = Path(path) if path else paths.state_file("catalog.json")
         self.lock_path = self.path.with_suffix(".lock")
         self._data: dict[str, Any] | None = None
 
@@ -290,6 +297,7 @@ class Catalog:
         seconds: float = 0.0,
         capability: str = "",
         trigger: str = "manual",
+        completed: bool = True,
     ) -> Entry:
         """Записать результат прогона индексации в реестр.
 
@@ -310,7 +318,7 @@ class Catalog:
         # не существует). Правило P0-1 «пустая ревизия не записывается»
         # относится и к этому пути.
         rev_built = bool(str(rev_id or "").strip())
-        if rev_built:
+        if rev_built and completed:
             entry.rev_id = rev_id
             entry.capability = capability or entry.capability
             entry.corpus_hash = corpus_hash
@@ -332,6 +340,29 @@ class Catalog:
             )))
             entry.runs = entry.runs[:MAX_RUNS]
             entry.state = "indexed"
+        elif rev_built:
+            # Прерванный прогон: ревизия НЕ закреплена, действующей остаётся
+            # прежняя. Замер 28.10.2026 (batterypassport.ru): прогон упёрся в
+            # бюджет времени на стадии «databases», `index_status` показывал
+            # прежнюю ревизию с 842 файлами, а `catalog` — новую с нулями,
+            # потому что запись прогона переписывала ревизию и размеры.
+            entry.runs.insert(0, asdict(RunRecord(
+                rev_id=rev_id,
+                indexed_at=util.now_iso(),
+                corpus_hash=corpus_hash,
+                config_hash=config_hash,
+                file_count=file_count,
+                node_count=node_count,
+                edge_count=edge_count,
+                seconds=round(seconds, 3),
+                trigger=trigger,
+                state="aborted",
+            )))
+            entry.runs = entry.runs[:MAX_RUNS]
+            # Ревизия, суммы и время индексации НЕ переписываются: прерванный
+            # прогон ничего не построил, и объявлять его состоянием разработки
+            # значило бы выдать прошлое за настоящее.
+            entry.state = "aborted" if entry.rev_id else "registered"
         else:
             # Регистрация: заполняются ТОЛЬКО пустые поля.
             #

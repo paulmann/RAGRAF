@@ -50,6 +50,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -343,14 +344,20 @@ def _check_powershell(ctx: "Context") -> list[str]:
         "exit 0\n"
     )
     runner.write_bytes(body.encode("utf-8"))
+    # Каталог убирается ВСЕГДА: до 29.10.2026 он оставался после каждого вызова
+    # (замер: 2305 каталогов ragraf-verify-* за неделю), а гейт вызывает
+    # проверяльщика десяток раз за прогон.
     try:
-        completed = subprocess.run(
-            ["pwsh", "-NoLogo", "-NoProfile", "-NonInteractive", "-File", str(runner),
-             "-Root", str(ctx.tree), "-List", ",".join(scripts)],
-            capture_output=True, text=True, timeout=600, check=False,
-        )
-    except FileNotFoundError:
-        return ["NOT-IMPLEMENTED: pwsh не найден в PATH — разбор PowerShell не выполнен"]
+        try:
+            completed = subprocess.run(
+                ["pwsh", "-NoLogo", "-NoProfile", "-NonInteractive", "-File", str(runner),
+                 "-Root", str(ctx.tree), "-List", ",".join(scripts)],
+                capture_output=True, text=True, timeout=600, check=False,
+            )
+        except FileNotFoundError:
+            return ["NOT-IMPLEMENTED: pwsh не найден в PATH — разбор PowerShell не выполнен"]
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
     output = (completed.stdout or "") + (completed.stderr or "")
     problems = []
     for line in output.splitlines():

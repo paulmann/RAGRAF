@@ -234,11 +234,18 @@ def collect(access: access_mod.DbAccess | None = None,
 
 
 def write(access, rev_id: str, collected: dict[str, Any],
-          graph_writer, lexvec, embedder) -> dict[str, Any]:
-    """Записать собранное в граф и в лексику. Возвращает отчёт."""
+          graph_writer, lexvec, embedder, *, control=None) -> dict[str, Any]:
+    """Записать собранное в граф и в лексику. Возвращает отчёт.
+
+    `control` — соединение `control.sqlite`, куда пишется отпечаток
+    структуры. Передаётся вызывающим, чтобы не открывать второе
+    соединение к тому же файлу; без него писатель структуры откроет его
+    сам (см. `db_writer.write_introspection`).
+    """
     result: index_mod.IntrospectionResult = collected["result"]
     samples = collected.get("samples") or {}
-    graph_stats = writer_mod.write_introspection(graph_writer, rev_id, result, samples)
+    graph_stats = writer_mod.write_introspection(
+        graph_writer, rev_id, result, samples, control=control)
     lex_stats = writer_mod.write_lexvec(lexvec, embedder, rev_id, result, samples)
     return {"graph": graph_stats, "lexvec": lex_stats,
             "fingerprint": collected.get("fingerprint", "")}

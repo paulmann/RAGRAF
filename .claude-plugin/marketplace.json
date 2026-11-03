@@ -1,0 +1,41 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "ragraf",
+  "owner": {
+    "name": "Mikhail Deynekin",
+    "email": "Mikhail@Deynekin.com",
+    "url": "https://Deynekin.com"
+  },
+  "metadata": {
+    "description": "RAGRAF — local, offline code index for Claude Code: call graph, full-text search and vectors in one index, answers with path:line evidence.",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "ragraf",
+      "displayName": "RAGRAF Community",
+      "source": "./plugin",
+      "description": "Local index of your code: where it is defined, who calls it, what breaks — with path:line evidence and no code leaving the machine. Community edition.",
+      "version": "0.5.6",
+      "author": {
+        "name": "Mikhail Deynekin",
+        "email": "Mikhail@Deynekin.com",
+        "url": "https://Deynekin.com"
+      },
+      "homepage": "https://github.com/paulmann/RAGRAF",
+      "repository": "https://github.com/paulmann/RAGRAF",
+      "license": "BUSL-1.1",
+      "keywords": [
+        "code-search",
+        "code-index",
+        "code-navigation",
+        "graph",
+        "impact-analysis",
+        "offline",
+        "mcp"
+      ],
+      "category": "development"
+    }
+  ],
+  "version": "0.5.6"
+}

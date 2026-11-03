@@ -30,6 +30,28 @@ from ragraf.facade import Facade  # noqa: E402
 from ragraf.indexer import Indexer  # noqa: E402
 
 CFG = REPO / "config" / "fixture.yaml"
+#: Снимок живого реестра до прогона: сверка в конце набора (находка 7).
+LIVE_CATALOG = REPO / "catalog" / "catalog.json"
+
+
+def live_registry_composition() -> tuple[str, ...]:
+    """Состав живого реестра: имена разработок, без подвижных отметок времени.
+
+    Сравнивать байты нельзя: `Catalog.save()` двигает `updated_at` при записи
+    ЛЮБОГО корпуса, в том числе чужого процесса. Нарушение — появление или
+    исчезновение разработки (например, тестовой пробы), а не дата.
+    """
+    import json
+
+    try:
+        data = json.loads(LIVE_CATALOG.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ()
+    entries = data.get("entries") if isinstance(data, dict) else None
+    return tuple(sorted(entries)) if isinstance(entries, dict) else ()
+
+
+LIVE_REGISTRY_BEFORE = live_registry_composition()
 PROJ = REPO / "tests" / "fixtures" / "proj"
 
 ENGINE_V1 = """<?php
@@ -126,10 +148,26 @@ class Fail(Exception):
     pass
 
 
+PASSED = 0
+FAILED = 0
+
+
 def check(cond: bool, label: str) -> None:
-    print(f"  [{'OK ' if cond else 'FAIL'}] {label}")
-    if not cond:
-        raise Fail(label)
+    """Проверка с УЧЁТОМ: без чисел «всё пройдено» не отличить от «ничего не шло».
+
+    Набор не печатал итог, поэтому в прогоне ядра он выглядел одинаково и при
+    14 проверках, и при трёх: раннер видит только код возврата. Числа — не
+    украшение отчёта: набор, чьё число проверок равно нулю при непустом выводе,
+    это дефект, а не «нечего проверять».
+    """
+    global PASSED, FAILED
+    if cond:
+        PASSED += 1
+        print(f"  [OK ] {label}")
+        return
+    FAILED += 1
+    print(f"  [FAIL] {label}")
+    raise Fail(label)
 
 
 def hashes(paths: list[Path]) -> dict[str, str]:
@@ -142,7 +180,7 @@ def hashes(paths: list[Path]) -> dict[str, str]:
 
 def reset_corpus() -> None:
     if PROJ.exists():
-        shutil.rmtree(PROJ)
+        _rmtree_locked(PROJ)
     (PROJ / "src").mkdir(parents=True)
     (PROJ / "config").mkdir(parents=True)
     (PROJ / "src" / "Config.php").write_text(
@@ -157,6 +195,31 @@ def reset_corpus() -> None:
     (PROJ / "config" / "app.local.php").write_text(
         secret_fixture_text(), encoding="utf-8", newline="\n"
     )
+
+
+def _rmtree_locked(path: pathlib.Path, attempts: int = 6) -> None:
+    """Удалить каталог фикстуры, переживая краткие блокировки Windows.
+
+    Замер 31.10.2026 (полный прогон core): `shutil.rmtree(PROJ)` падал с
+    `PermissionError: WinError 5` на
+    `tests/fixtures/proj/.ragraf/cpg/tmp/jna-.../jna...dll` — файл держал процесс
+    Joern, поднятый СОСЕДНИМ набором, и отпускал его через мгновение. Из-за этого
+    набор, чьё дело — проверять дрейф, падал на уборке и весь прогон давал 57/58.
+    Повтор с паузой снимает гонку; на последней попытке отказ поднимается, чтобы
+    настоящая блокировка была видна, а не списана на «не повезло».
+    """
+    import time as _time
+
+    for attempt in range(attempts):
+        if not path.exists():
+            return
+        try:
+            shutil.rmtree(path)
+            return
+        except PermissionError:
+            if attempt == attempts - 1:
+                raise
+            _time.sleep(0.3 * (attempt + 1))
 
 
 def main() -> int:
@@ -311,7 +374,15 @@ def main() -> int:
     check(uids_a == uids_b, f"множества edge_uid совпали ({len(uids_a)} рёбер)")
     check(a.nodes == b.nodes and a.edges == b.edges, "число узлов и рёбер совпало")
 
-    print("\n=== все проверки пройдены ===")
+    # Живой реестр разработок не должен меняться от прогона проверок: набор
+    # работает на песочном корпусе, и запись в `catalog/catalog.json` означала бы,
+    # что проверка индексации правит состояние, на котором сама же проверяет
+    # (класс дефекта, закрытый этапом 7 через `RAGRAF_CATALOG_DIR`). Здесь это
+    # не предположение, а сверка байтов до и после.
+    check(live_registry_composition() == LIVE_REGISTRY_BEFORE,
+          "живой реестр: состав разработок не изменён прогоном набора",)
+
+    print(f"\n=== все проверки пройдены: пройдено {PASSED}, провалено {FAILED} ===")
     return 0
 
 

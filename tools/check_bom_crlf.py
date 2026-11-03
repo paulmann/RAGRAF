@@ -1,21 +1,42 @@
-"""Проверка BOM и CRLF у всех файлов, изменённых в этой задаче.
+"""Чистота текста: BOM и переводы строк у файлов, изменённых в задаче.
 
-Запуск: python tools/check_bom_crlf.py
+Запуск:
+    python tools/check_bom_crlf.py                      # список этой задачи
+    python tools/check_bom_crlf.py --paths a.py b.md    # явный список
+    python tools/check_bom_crlf.py --paths-from list.txt
 
-Требование: файлы с кодом должны быть без BOM и с переводами строк LF.
-Проверка печатает состояние каждого файла и итог: сколько требуют очистки.
-Скрипт ничего не меняет — только сообщает (очистка выполняется инструментом
-clean-bom-senior с явными путями).
+ПОЧЕМУ ПРОВЕРКА ПЕРЕПИСАНА (31.10.2026). Прежняя версия отвечала на вопрос
+«есть ли в байтах 0D 0A» и считала дефектом всё, что ответило «да». Измерено
+на живом дереве: так числились `assets/social-preview.png`,
+`catalog/secrets.sqlite` и `workspace/rev-0099.cpg.bin/cpg.bin` — в них `0D 0A`
+не перевод строки, а содержимое двоичного формата. Отдельно: проверка не
+различала файлы, у которых CRLF функционален (`.bat`, `.cmd`, `.reg`, данные
+RFC 4180 в `.csv`/`.tsv`), и записи с зафиксированным `sha256` (`archive/**`,
+копии `community/**`): «исправить» их значило сломать сверку с источником.
+
+Теперь решение принимает `tools/text_hygiene.py`: он смотрит фактические байты
+и называет причину. Проверка печатает пять групп — чистые, требующие очистки,
+только BOM, защищённые причиной и отклонённые (не текст), — и код возврата 1
+только за первую из них. Сама она по-прежнему НИЧЕГО не меняет: очистка —
+`tools/text_hygiene.py --paths ... --apply`.
+
+Список `FILES` ниже — история задачи: он собран правками этапов И1…И32, и в
+нём стоят причины, по которым файл в него попал. Он сохранён, потому что по
+нему видно, что уже осматривалось; новым файлам он не нужен — их подают
+через `--paths`.
 """
 
 from __future__ import annotations
 
+import argparse
 import pathlib
+import sys
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO / "tools"))
 
-# Файлы, созданные или изменённые в этой задаче. Список явный: рекурсивный
-# обход запрещён правилами очистки.
+import text_hygiene as hygiene  # noqa: E402
+
 FILES = [
     # ядро RAGRAF
     "src/ragraf/facade.py",
@@ -216,40 +237,70 @@ FILES = [
     "tools/check_list_items.py",
 ]
 
-# Проверка выполняется на копии файла: сравнение идёт по байтам.
-need_cleanup: list[str] = []
-missing: list[str] = []
-clean: list[str] = []
+def collect(paths: list[str]) -> tuple[hygiene.Plan, int]:
+    """Осмотреть пути модулем политики. Возвращает план и число отсутствующих."""
+    missing = 0
+    existing = []
+    for rel in paths:
+        path = pathlib.Path(rel)
+        if not path.is_absolute():
+            path = REPO / rel
+        if not path.exists():
+            missing += 1
+            continue
+        existing.append(path)
+    return hygiene.plan(existing, REPO), missing
 
-for rel in FILES:
-    path = REPO / rel
-    if not path.exists():
-        missing.append(rel)
-        continue
-    data = path.read_bytes()
-    has_bom = data.startswith(b"\xef\xbb\xbf")
-    has_crlf = b"\r\n" in data
-    if has_bom or has_crlf:
-        need_cleanup.append(rel)
-        marks = []
-        if has_bom:
-            marks.append("BOM")
-        if has_crlf:
-            marks.append("CRLF")
-        print(f"  требует очистки: {rel}  [{' '.join(marks)}]")
-    else:
-        clean.append(rel)
 
-print()
-print(f"всего проверено:  {len(FILES)}")
-print(f"чистых:           {len(clean)}")
-print(f"требуют очистки:  {len(need_cleanup)}")
-if missing:
-    print(f"не найдены ({len(missing)}):")
-    for name in missing:
-        print(f"  {name}")
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Чистота текста: BOM и переводы строк.")
+    parser.add_argument("--paths", nargs="+", default=[], help="явные пути (файлы, не каталоги)")
+    parser.add_argument("--paths-from", help="файл со списком путей, по одному в строке")
+    args = parser.parse_args(argv)
 
-if need_cleanup:
-    print("\nсписок для очистки (через инструмент clean-bom-senior, явными путями):")
-    for name in need_cleanup:
-        print(f"  {name}")
+    chosen = list(args.paths)
+    if args.paths_from:
+        source = pathlib.Path(args.paths_from)
+        if not source.exists():
+            print(f"нет файла списка: {source}", file=sys.stderr)
+            return 2
+        chosen.extend(line.strip() for line in source.read_text(encoding="utf-8").splitlines()
+                      if line.strip() and not line.startswith("#"))
+    listing = chosen or FILES
+
+    plan, missing = collect(listing)
+    print("=" * 78)
+    print("ЧИСТОТА ТЕКСТА: BOM И ПЕРЕВОДЫ СТРОК")
+    print("=" * 78)
+    print()
+    print(f"  осмотрено:                 {len(listing) - missing}")
+    print(f"  чистых:                    {len(plan.already)}")
+    print(f"  требуют очистки:           {len(plan.clean)}")
+    print(f"  только BOM (CRLF остаётся): {len(plan.bom_only)}")
+    print(f"  защищены причиной:         {len(plan.keep)}")
+    print(f"  отклонены (не текст):      {len(plan.refused)}")
+    if missing:
+        print(f"  нет в дереве:              {missing}")
+
+    for title, group in (("ТРЕБУЮТ ОЧИСТКИ", plan.clean), ("ТОЛЬКО BOM", plan.bom_only),
+                         ("ЗАЩИЩЕНЫ", plan.keep), ("ОТКЛОНЕНЫ", plan.refused)):
+        if not group:
+            continue
+        print()
+        print(f"  {title}:")
+        for finding in group:
+            print(f"    {finding.rel:<58} {finding.flags:<22} {finding.reason}")
+
+    if plan.changes:
+        print()
+        print("  очистка — явными путями и только после просмотра списка:")
+        print("    python tools/text_hygiene.py --paths " + " ".join(
+            str(f.rel) for f in plan.changes[:8]) + (" ..." if len(plan.changes) > 8 else ""))
+        print("  добавить --apply, чтобы выполнить.")
+    print()
+    print(f"  РЕЗУЛЬТАТ: {'требуется очистка' if plan.changes else 'чисто'}")
+    return 1 if plan.changes else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

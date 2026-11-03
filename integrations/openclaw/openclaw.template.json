@@ -1,0 +1,11 @@
+{
+  "mcp": {
+    "servers": {
+      "ragraf": {
+        "command": "ragraf-mcp",
+        "args": [],
+        "env": {}
+      }
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "ragraf": {
+      "command": "ragraf-mcp",
+      "args": [],
+      "disabled": false,
+      "autoApprove": []
+    }
+  }
+}

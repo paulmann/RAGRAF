@@ -38,10 +38,11 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from . import paths
 from . import util
 
 REPO = Path(__file__).resolve().parents[2]
-CATALOG_DIR = REPO / "catalog"
+CATALOG_DIR = paths.catalog_dir()
 SOURCES_NAME = "sources.json"
 LOCK_NAME = "sources.lock"
 MAX_SOURCES = 64

@@ -18,7 +18,7 @@
     результат Ok=$true при нулевом осмотре считается ложным PASS и валит прогон.
 
     Ожидаемый baseline на момент передачи проекта: 0 ошибок, 0 предупреждений,
-    40 проверок — ровно столько, сколько записей в реестре `$script:CheckFunctions`;
+    46 проверок — ровно столько, сколько записей в реестре `$script:CheckFunctions`;
     это сверяет Test-DocumentedNumbers. Прежние две ошибки («запись прогона в реестр
     не покрывала путь ensure» и «документы называли 18 и 16 инструментов там, где
     в коде 23») закрыты
@@ -26,6 +26,12 @@
     любая ошибка или новое предупреждение — находка. Ожидаемого красного
     состояния у чекера больше нет: если он падает — это либо новый дефект,
     либо сломанное исправление.
+
+    28.10.2026 добавлена проверка объявления настроек (Test-SettingsDeclaration):
+    файл `catalog/settings.json` не выдаёт умолчания за заявления владельца.
+    Причина: настройки читаются слиянием с умолчаниями, и одно сохранение из
+    панели записывало 56 ключей, 55 из которых были умолчаниями; после этого
+    записанное `edition: community` понижало действующую лицензию pro.
 
     27.10.2026 добавлена проверка терминологии переводов (Test-Glossary): термин
     основного документа назван в каждом переводе одним из разрешённых слов, и
@@ -213,7 +219,9 @@ function New-CheckResult {
     param(
         [Parameter(Mandatory)][string] $Name,
         [Parameter(Mandatory)][bool] $Ok,
-        [int] $Examined = -1,
+        # [long], а не [int]: проверка хранилища осматривает БАЙТЫ, и 9 ГБ не влезают
+        # в Int32 (измерено 30.10.2026: «Cannot convert value 9154142208»).
+        [long] $Examined = -1,
         [string[]] $Details = @(),
         [switch] $Warning,
         [string] $NotApplicable
@@ -286,6 +294,210 @@ foreach ($guard in @(
 }
 
 # ------------------------------------------------------------------ проверки
+
+function Test-CorpusRevisionAgreement {
+    # Активная ревизия и корпус — одно множество файлов. Дефект, ради которого правило
+    # появилось (29.10.2026): трижды за сутки ревизия называла не то число файлов, что
+    # даёт скан корня (912 против 908, 910 против 906), и каждый раз это ловилось
+    # косвенно — числами README в гейте, — то есть сообщение говорило про документ.
+    # Здесь сверка прямая: запись ревизии против скана, с именами расходящихся файлов.
+    $tool = Join-Path $script:ProjectRoot 'tools/check_corpus_revision.py'
+    $examined = 1
+    if (-not (Test-Path -LiteralPath $tool -PathType Leaf)) {
+        return New-CheckResult -Name 'active revision matches the corpus' `
+            -Ok $false -Examined $examined `
+            -Details @("NOT-IMPLEMENTED: нет tools/check_corpus_revision.py — сверять нечем")
+    }
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $python) {
+        return New-CheckResult -Name 'active revision matches the corpus' `
+            -Ok $false -Examined $examined `
+            -Details @('NOT-IMPLEMENTED: python не найден в PATH')
+    }
+    $config = Join-Path $script:ProjectRoot 'config/ragraf.yaml'
+    $output = & $python.Source $tool -p $config 2>&1
+    $code = $LASTEXITCODE
+    $problems = @()
+    if ($code -ne 0) {
+        $problems = @($output | Where-Object { "$_".StartsWith('FAIL:') } |
+            ForEach-Object { "$_".Substring(5).Trim() })
+        if ($problems.Count -eq 0) {
+            $problems = @("инструмент завершился кодом $code без объяснения: " +
+                (($output | Select-Object -Last 2) -join ' '))
+        }
+    }
+    return New-CheckResult -Name 'active revision matches the corpus' `
+        -Ok ($problems.Count -eq 0) -Examined $examined -Details $problems
+}
+
+
+function Test-DocumentedCommands {
+    <#
+    .SYNOPSIS
+        Команда в примере документации обязана быть выполнимой.
+
+    .DESCRIPTION
+        Измеренный дефект (30.10.2026). Документ публикации называл проверку
+        установки командой `python -m ragraf --version`. Модуля `ragraf/__main__.py`
+        в дереве НЕТ, поэтому команда невыполнима — и это выяснилось только при
+        запуске на собранном дереве, хотя именно запуск документ и описывает.
+
+        Свойство, а не написание: команда внутри огороженного блока считается
+        ОБЕЩАНИЕМ и обязана быть выполнимой. Упоминание в обычном тексте обещанием
+        не считается — там документ объясняет, что команда неверна, и это законное
+        место. Поэтому `tools/check_doc_commands.py` разбирает границы блоков, а не
+        ищет слова вроде «невозможно».
+
+        Архивные издания (`editions/legacy-*`) не проверяются: в них описаны
+        исторические дефекты, а не обещания текущей поставки.
+
+        Молчаливый пропуск запрещён: нет скрипта, нет python или ноль осмотренных
+        команд — это провал, а не «нечего проверять».
+    #>
+    $checkName = 'documented commands are executable'
+    $toolPath = Join-Path $script:ProjectRoot 'tools/check_doc_commands.py'
+    if (-not (Test-Path -LiteralPath $toolPath -PathType Leaf)) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: нет tools/check_doc_commands.py')
+    }
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $python) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: python не найден в PATH')
+    }
+    $output = & $python.Source $toolPath --root $script:ProjectRoot 2>&1
+    $code = $LASTEXITCODE
+    $problems = @()
+    if ($code -ne 0) {
+        $problems = @($output | Where-Object { "$_".TrimStart().StartsWith('НАХОДКА') } |
+            ForEach-Object { "$_".Trim() })
+        if ($problems.Count -eq 0) {
+            $problems = @("инструмент завершился кодом $code без объяснения: " +
+                (($output | Select-Object -Last 2) -join ' '))
+        }
+    }
+    $examined = 1
+    foreach ($line in $output) {
+        $text = "$line"
+        if ($text -match 'команд в примерах:\s*(\d+)') {
+            $examined = [int]$Matches[1]
+        }
+    }
+    if ($code -eq 0 -and $examined -eq 0) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('осмотрено 0 команд — проверка ничего не проверила')
+    }
+    return New-CheckResult -Name $checkName -Ok ($code -eq 0) -Examined $examined `
+        -Details $problems
+}
+
+
+function Test-HeuristicShareDisclosed {
+    <#
+    .SYNOPSIS
+        Ответ называет виды рёбер и долю эвристики, и числа сходятся с графом.
+
+    .DESCRIPTION
+        Измеренный дефект (30.10.2026). `index_status` отдавал
+        `edges_stated` / `edges_derived`, а вид ребра — нет. 75,1 % рёбер проекта —
+        `calls_heuristic`: вывод по имени с достоверностью 0,4, а не подтверждённый
+        вызов. `impact` в режиме `full` отсекал такие рёбра порогом 0,5 и не говорил
+        об этом: на контрольном наборе из 12 вопросов попадание в эталон было 8,3 %,
+        и ответ «затронуто: 0» читался как «связей нет».
+
+        Проверяется СВОЙСТВО: инструмент `tools/check_heuristic_share.py` сравнивает
+        ответ операции с прямым SQL по таблице `edge` — сумма видов равна числу рёбер,
+        доля эвристики равна расчёту, признак превышения бюджета согласован с порогом.
+        Наличие полей без согласованности чисел считалось бы выполнением.
+
+        Молчаливый пропуск запрещён: нет скрипта, нет python или ноль осмотренных
+        рёбер — провал, а не «нечего проверять».
+    #>
+    $checkName = 'edge kinds and heuristic share are disclosed'
+    $toolPath = Join-Path $script:ProjectRoot 'tools/check_heuristic_share.py'
+    if (-not (Test-Path -LiteralPath $toolPath -PathType Leaf)) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: нет tools/check_heuristic_share.py')
+    }
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $python) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: python не найден в PATH')
+    }
+    $output = & $python.Source $toolPath --root $script:ProjectRoot 2>&1
+    $code = $LASTEXITCODE
+    $examined = 0
+    $problems = @()
+    foreach ($line in $output) {
+        $value = "$line"
+        if ($value -match 'рёбер в ответе\s+(\d+)') { $examined = [int]$Matches[1] }
+        if ($value.TrimStart().StartsWith('НАХОДКА')) { $problems += $value.Trim() }
+    }
+    if ($code -ne 0 -and $problems.Count -eq 0) {
+        $problems = @("инструмент завершился кодом $code без объяснения: " +
+            (($output | Select-Object -Last 2) -join ' '))
+    }
+    if ($code -eq 0 -and $examined -eq 0) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('осмотрено 0 рёбер — проверка ничего не проверила')
+    }
+    return New-CheckResult -Name $checkName -Ok ($code -eq 0) -Examined $examined `
+        -Details $problems
+}
+
+
+function Test-StorageDisclosed {
+    <#
+    .SYNOPSIS
+        Ответ называет объём хранилища, свободные страницы и хвост ротации — числами.
+
+    .DESCRIPTION
+        Измеренный дефект (30.10.2026). Живое хранилище занимало 8,49 ГБ при трёх
+        ревизиях данных; `document_chunk` держал 3 835 216 строк от 265 ревизий,
+        которых в истории нет. Ротация их не удаляла, а ответ `index_status` не
+        называл ни объёма, ни хвоста — поэтому дефект был невидим.
+
+        Проверяется свойство: `tools/check_storage_disclosure.py` сравнивает блок
+        `storage` из ответа с фактическим размером файлов на диске и с прямым
+        подсчётом осиротевших строк SQL-запросом. Расхождение — находка.
+
+        Молчаливый пропуск запрещён: нет скрипта, нет python или нулевой размер
+        хранилища — провал, а не «нечего проверять».
+    #>
+    $checkName = 'storage volume and rotation tail are disclosed'
+    $toolPath = Join-Path $script:ProjectRoot 'tools/check_storage_disclosure.py'
+    if (-not (Test-Path -LiteralPath $toolPath -PathType Leaf)) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: нет tools/check_storage_disclosure.py')
+    }
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $python) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: python не найден в PATH')
+    }
+    $output = & $python.Source $toolPath --root $script:ProjectRoot 2>&1
+    $code = $LASTEXITCODE
+    $examined = 0
+    $problems = @()
+    foreach ($line in $output) {
+        $value = "$line"
+        # Размер хранилища — [long]: 9 ГБ в байтах не влезает в Int32 (измерено 30.10.2026:
+        # правило падало с «Cannot convert value 9153368064 to type System.Int32»).
+        if ($value -match 'хранилищ[а-я]*\s+(\d+)') { $examined = [long]$Matches[1] }
+        if ($value.TrimStart().StartsWith('НАХОДКА')) { $problems += $value.Trim() }
+    }
+    if ($code -ne 0 -and $problems.Count -eq 0) {
+        $problems = @("инструмент завершился кодом $code без объяснения: " +
+            (($output | Select-Object -Last 2) -join ' '))
+    }
+    if ($code -eq 0 -and $examined -eq 0) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('осмотрено 0 байт хранилища — проверка ничего не проверила')
+    }
+    return New-CheckResult -Name $checkName -Ok ($code -eq 0) -Examined $examined `
+        -Details $problems
+}
+
 
 function Test-ProjectLayout {
     <#
@@ -1058,8 +1270,15 @@ function Test-LexvecSchemaContract {
     if (Test-Path -LiteralPath $revisionsPath) {
         $examined++
         $revText = Get-ProjectText $revisionsPath
-        if ($revText -notmatch 'chunk_text') {
-            $problems.Add('ротация ревизий не удаляет chunk_text: текст копится по ревизиям и не освобождается')
+        # Правило проверяет СМЫСЛ, а не имя таблицы в тексте. До этапа 9 ротация
+        # несла рукописный список таблиц, и проверка искала в нём слово
+        # `chunk_text`. Список стал ВЫЧИСЛЯТЬСЯ по схеме (`storage.tables_with_rev`),
+        # и поиск по имени перестал что-либо доказывать: он находил бы имя в
+        # комментарии. Поэтому принимаются оба способа, и вычисляемый назван
+        # первым: он покрывает любую таблицу с колонкой `rev_id`, включая ту,
+        # которой сегодня ещё нет.
+        if ($revText -notmatch 'tables_with_rev' -and $revText -notmatch 'chunk_text') {
+            $problems.Add('ротация ревизий не удаляет текст чанков: ни вычисляемого списка таблиц (storage.tables_with_rev), ни таблицы chunk_text в коде нет')
         }
     }
 
@@ -1294,7 +1513,7 @@ function Test-DocumentedNumbers {
     # интеграции добавлены 25.10.2026 (ПРОМТ-И13): они отстали на 10 операций,
     # 18 инструментов, 2 подкоманды, 7 проверок и 13 языков дерева, при этом
     # читаются как действующее описание. `Kind` — из какого числа брать факт.
-    $documents = @(
+$documents = @(
         @{ Path = 'README.md'; Pattern = '\*\*(\d+)\s*(?:\*\*)?\s*operations?\b'; Kind = 'ops'; Label = 'операций фасада' },
         @{ Path = 'README.md'; Pattern = '\*\*(\d+)\s*(?:\*\*)?\s*MCP tools?\b'; Kind = 'tools'; Label = 'инструментов поверхности для агентов' },
         @{ Path = 'docs/03_implementation/INTEGRATION.md'; Pattern = '\*\*(\d+)\s*(?:\*\*)?\s*инструмент'; Kind = 'tools'; Label = 'инструментов поверхности для агентов' },
@@ -1560,6 +1779,90 @@ function Test-DocumentedNumbers {
             foreach ($item in @($registryPayload.notes)) { $notes.Add([string]$item) }
             if ($registryCode -ne 0 -and $problems.Count -eq 0) {
                 $problems.Add("tools/registry_line.py завершился кодом $registryCode, не назвав находок — это и есть дефект")
+            }
+        }
+    }
+
+    # --- сверка: объявленное число равно посчитанному ------------------------
+    # Проверяются ВСЕ совпадения образца в документе, а не первое совпадение:
+    # README называет число трижды (тело, раздел инструментов, блок публикуемых
+    # чисел), и «первое совпало» не значит «документ прав». Именно так зелёный
+    # результат скрывал 61 против фактических 67.
+    $surface = $null
+    $surfaceTool = Join-Path $script:ProjectRoot 'tools/surface_counts.py'
+    $pythonForSurface = Get-Command python -ErrorAction SilentlyContinue
+    if (-not (Test-Path -LiteralPath $surfaceTool) -or -not $pythonForSurface) {
+        $problems.Add('нет tools/surface_counts.py или python: числа поверхности посчитать нечем')
+    }
+    else {
+        $examined++
+        $rawSurface = & $pythonForSurface.Source $surfaceTool 2>&1
+        try { $surface = ($rawSurface | Out-String) | ConvertFrom-Json -DateKind String } catch { $surface = $null }
+        $surfaceProblem = $false
+        $surfaceDetail = 'ответ не разобран'
+        if (-not $surface) { $surfaceProblem = $true }
+        elseif ($surface.PSObject.Properties['problems'] -and @($surface.problems).Count -gt 0) {
+            $surfaceProblem = $true
+            $surfaceDetail = (@($surface.problems) -join '; ')
+        }
+        if ($surfaceProblem) {
+            $problems.Add("числа поверхности не прочитаны: $surfaceDetail")
+            $surface = $null
+        }
+    }
+
+    # Переводы входят в список: расхождение 61 / 66 при 67 фактических жило именно
+    # там — перевода не было в перечне, и проверять его было нечем.
+    $extraDocuments = @(
+        @{ Path = 'community/README.de.md'; Pattern = '\*\*(\d+)\s+Operationen'; Kind = 'ops'; Label = 'операций фасада (de)' },
+        @{ Path = 'community/README.de.md'; Pattern = '\*\*(\d+)\s+MCP-Werkzeuge'; Kind = 'tools'; Label = 'инструментов MCP (de)' },
+        @{ Path = 'community/README.zh.md'; Pattern = '\*\*(\d+)\s*个操作'; Kind = 'ops'; Label = 'операций фасада (zh)' },
+        @{ Path = 'community/README.zh.md'; Pattern = '\*\*(\d+)\s*个\s*MCP\s*工具'; Kind = 'tools'; Label = 'инструментов MCP (zh)' },
+        @{ Path = 'community/README.ru.md'; Pattern = '\*\*(\d+)\s+операци'; Kind = 'ops'; Label = 'операций фасада (ru)' },
+        @{ Path = 'community/README.ru.md'; Pattern = '\*\*(\d+)\s+инструмент\w*\s+MCP'; Kind = 'tools'; Label = 'инструментов MCP (ru)' },
+        @{ Path = 'community/README.hi.md'; Pattern = '\*\*(\d+)\s+ऑपरेशन'; Kind = 'ops'; Label = 'операций фасада (hi)' },
+        @{ Path = 'community/README.hi.md'; Pattern = '\*\*(\d+)\s+MCP\s+टूल'; Kind = 'tools'; Label = 'инструментов MCP (hi)' },
+        @{ Path = 'community/README.es.md'; Pattern = '\*\*(\d+)\s+operaciones'; Kind = 'ops'; Label = 'операций фасада (es)' },
+        @{ Path = 'community/README.es.md'; Pattern = '\*\*(\d+)\s+herramientas\s+MCP'; Kind = 'tools'; Label = 'инструментов MCP (es)' }
+        # Alt-текст — тоже заявление о продукте: он показывается в карточке ссылки,
+        # и он называл 61 инструмент, не попадая ни под один образец.
+        @{ Path = 'README.md'; Pattern = ': (\d+) MCP tools,'; Kind = 'tools'; Label = 'инструментов (alt)' },
+        @{ Path = 'community/README.de.md'; Pattern = ': (\d+) MCP-Werkzeuge,'; Kind = 'tools'; Label = 'инструментов (alt de)' },
+        @{ Path = 'community/README.zh.md'; Pattern = '(\d+)\s*个 MCP 工具'; Kind = 'tools'; Label = 'инструментов (alt zh)' },
+        @{ Path = 'community/README.ru.md'; Pattern = ': (\d+) инструмент\w* MCP,'; Kind = 'tools'; Label = 'инструментов (alt ru)' },
+        @{ Path = 'community/README.hi.md'; Pattern = ': (\d+) MCP टूल,'; Kind = 'tools'; Label = 'инструментов (alt hi)' },
+        @{ Path = 'community/README.es.md'; Pattern = ': (\d+) herramientas MCP,'; Kind = 'tools'; Label = 'инструментов (alt es)' }
+    )
+
+    if ($surface) {
+        $expected = @{
+            ops         = [int]$surface.facade_ops
+            tools       = [int]$surface.mcp_tools
+            subcommands = [int]$surface.cli_subcommands
+            tree        = [int]$surface.tree_languages
+            text        = [int]$surface.text_languages
+            checks      = @($script:CheckFunctions).Count
+        }
+        foreach ($doc in @($documents) + @($extraDocuments)) {
+            $full = Join-Path $script:ProjectRoot $doc.Path
+            if (-not (Test-Path -LiteralPath $full)) {
+                $problems.Add("нет документа $($doc.Path): объявленное в нём число проверить нечем")
+                continue
+            }
+            $examined++
+            $docText = (Get-ProjectText $full) -replace [char]0x00A0, ' '
+            $found = [regex]::Matches($docText, $doc.Pattern)
+            if ($found.Count -lt 1) {
+                $problems.Add("$($doc.Path) не называет $($doc.Label): заявление о поверхности исчезло, сверять нечего")
+                continue
+            }
+            $want = $expected[$doc.Kind]
+            foreach ($hit in $found) {
+                $stated = [int]$hit.Groups[1].Value
+                if ($stated -ne $want) {
+                    $lineNo = ($docText.Substring(0, $hit.Index) -split "`n").Count
+                    $problems.Add("$($doc.Path):$lineNo называет $stated $($doc.Label), а по коду их $want")
+                }
             }
         }
     }
@@ -2064,12 +2367,60 @@ function Test-RouteAndDocumentWiring {
     if ($indexerText -notmatch 'DOCUMENT_LANG') {
         $problems.Add('indexer.py не различает язык document')
     }
-    $corpusPath = Join-Path $script:ProjectRoot 'src/ragraf/corpus.py'
-    if (Test-Path -LiteralPath $corpusPath) {
+    # --- фаза D документного слоя: архив и OCR ---
+    #
+    # Здесь проверяется ПОВЕДЕНИЕ, а не наличие слов: прогоняется набор свойств
+    # `tests/test_doc_layer_archive.py`. Он держит ровно то, ради чего фаза
+    # сделана, и падает, если защита от zip-slip исчезнет, если выключенная
+    # настройка начнёт молча выбрасывать файл из отчёта или если режим HTML
+    # отнимет у разбора деревом классы оформления.
+    foreach ($reader in @('src/ragraf/docread/archive.py', 'src/ragraf/docread/ocr.py')) {
         $examined++
-        $corpusText = Get-ProjectText $corpusPath
-        if ($corpusText -notmatch 'DOCUMENT_LANG') {
-            $problems.Add('corpus.py отсекает документы как двоичные: язык document не учтён')
+        if (-not (Test-Path -LiteralPath (Join-Path $script:ProjectRoot $reader))) {
+            $problems.Add("нет $reader : читатель фазы D отсутствует в сборке")
+        }
+    }
+    # Фаза E: массовый набор держит то, что нашлось ТОЛЬКО на реальном корпусе
+    # (имена листов с пробелом, NUL в тексте, бюджет при любом статусе,
+    # содержимое вместо расширения, указатели Git LFS, бюджет по видам).
+    $phaseE = Join-Path $script:ProjectRoot 'tests/test_doc_layer_mass.py'
+    if (-not (Test-Path -LiteralPath $phaseE)) {
+        $problems.Add('NOT-IMPLEMENTED: нет tests/test_doc_layer_mass.py — свойства фазы E не проверяются')
+    } else {
+        $pythonE = Get-Command python -ErrorAction SilentlyContinue
+        if (-not $pythonE) {
+            $problems.Add('python не найден в PATH: свойства фазы E не проверены')
+        } else {
+            $massOut = (& $pythonE.Source $phaseE 2>&1 | Out-String)
+            $massPassed = ([regex]::Match($massOut, 'пройдено\s*(\d+)')).Groups[1].Value
+            $massFailed = ([regex]::Match($massOut, 'провалено\s*(\d+)')).Groups[1].Value
+            $examined += [int]($massPassed -notmatch '^\d+$' ? 0 : $massPassed)
+            if ($massFailed -ne '0') {
+                $problems.Add("свойства массового слоя: провалено $massFailed из $massPassed")
+            }
+            if (-not $massPassed) {
+                $problems.Add('набор фазы E не отчитался: ноль осмотренных свойств — ложный успех')
+            }
+        }
+    }
+    $phaseD = Join-Path $script:ProjectRoot 'tests/test_doc_layer_archive.py'
+    if (-not (Test-Path -LiteralPath $phaseD)) {
+        $problems.Add('NOT-IMPLEMENTED: нет tests/test_doc_layer_archive.py — архив, OCR и режим HTML не проверяются')
+    } else {
+        $pythonExe = Get-Command python -ErrorAction SilentlyContinue
+        if (-not $pythonExe) {
+            $problems.Add('python не найден в PATH: свойства фазы D не проверены')
+        } else {
+            $phaseOut = (& $pythonExe.Source $phaseD 2>&1 | Out-String)
+            $passed = ([regex]::Match($phaseOut, 'пройдено\s*(\d+)')).Groups[1].Value
+            $failed = ([regex]::Match($phaseOut, 'провалено\s*(\d+)')).Groups[1].Value
+            $examined += [int]($passed -notmatch '^\d+$' ? 0 : $passed)
+            if ($failed -ne '0') {
+                $problems.Add("свойства слоя документов (архив, OCR, режим HTML): провалено $failed из $passed")
+            }
+            if (-not $passed) {
+                $problems.Add('набор свойств фазы D не отчитался: ноль осмотренных свойств — ложный успех')
+            }
         }
     }
     return New-CheckResult -Name 'route and documents share one extraction contract' -Ok ($problems.Count -eq 0) -Examined $examined -Details $problems
@@ -2302,6 +2653,7 @@ function Test-ReleaseManifest {
         'tools/release/verify_release.py'
         'tools/release/gate_release.py'
         'tools/check_release_manifest.py'
+        'tools/check_release_runs.py'
     )
     foreach ($relative in $pipeline) {
         $examined++
@@ -2321,7 +2673,29 @@ function Test-ReleaseManifest {
     }
 
     $probe = Join-Path $script:ProjectRoot 'tools/check_release_manifest.py'
+    # Снимок песочниц ДО прогона: проверка обязана убирать за собой. Замер
+    # 29.10.2026: 2305 каталогов `ragraf-verify-*` и 437 `ragraf-manifest-check-*`
+    # скопились за неделю, потому что проверяльщик и проверка манифеста свои
+    # временные каталоги не удаляли.
+    $sandboxPrefixes = @('ragraf-verify-', 'ragraf-manifest-check-', 'ragraf-gate-')
+    $sandboxesBefore = @()
+    if ($env:TEMP -and (Test-Path -LiteralPath $env:TEMP)) {
+        $sandboxesBefore = @(Get-ChildItem -LiteralPath $env:TEMP -Directory -ErrorAction SilentlyContinue |
+            Where-Object { $name = $_.Name; @($sandboxPrefixes | Where-Object { $name.StartsWith($_) }).Count -gt 0 } |
+            ForEach-Object { $_.Name })
+    }
     $output = & $python.Source $probe 2>&1
+    if ($env:TEMP -and (Test-Path -LiteralPath $env:TEMP)) {
+        $examined++
+        $sandboxesAfter = @(Get-ChildItem -LiteralPath $env:TEMP -Directory -ErrorAction SilentlyContinue |
+            Where-Object { $name = $_.Name; @($sandboxPrefixes | Where-Object { $name.StartsWith($_) }).Count -gt 0 } |
+            ForEach-Object { $_.Name })
+        $appeared = @($sandboxesAfter | Where-Object { $sandboxesBefore -notcontains $_ })
+        if ($appeared.Count -gt 0) {
+            $problems.Add("проверка манифеста оставила песочницы во временном каталоге: " +
+                (($appeared | Select-Object -First 5) -join ', ') + " (всего $($appeared.Count))")
+        }
+    }
     $code = $LASTEXITCODE
     $text = ($output | Out-String).Trim()
     Write-Host "    проверка поставки: $text"
@@ -2673,7 +3047,7 @@ function Test-OfflineAttestation {
             подписанной лицензией работают, и обе попытки видны в журнале доступа.
 
         Отдельно проверяется обратное: с действующей лицензией у enterprise
-        РОВНО девять возможностей (пять базовых и четыре платные). Без этого
+        РОВНО пятнадцать возможностей (шесть базовых и девять платных). Без этого
         «работает» означало бы только «не отказывает по изданию».
 
         Молчаливый пропуск запрещён: нет файла проверки или python — провал, а не
@@ -4058,6 +4432,144 @@ function Test-ListItems {
     return New-CheckResult -Name $checkName -Ok ($problems.Count -eq 0) -Examined $examined -Details $problems
 }
 
+function Test-SettingsDeclaration {
+    <#
+    .SYNOPSIS
+        Файл настроек не выдаёт умолчания за заявления владельца.
+
+    .DESCRIPTION
+        Измеренный дефект (задание И42, причина в И41): настройки читаются
+        слиянием с умолчаниями, и панель рисовала ВСЁ это как поля. Пока
+        сборщик на фронте отправлял весь набор, одно сохранение записывало
+        56 ключей, 55 из которых были умолчаниями. После этого записанное
+        `edition: community` читалось как ЯВНОЕ заявление владельца
+        (`edition.declared_edition`), действующая лицензия pro понижалась
+        до community, и три проверки лицензий краснели по чужой причине.
+
+        Проверка ищет СВОЙСТВО, а не написание: значение каждого записанного
+        ключа сравнивается с `settings.DEFAULTS`. Равенство умолчанию значит
+        «не заявление», и такого в файле быть не должно. Отдельно проверяется
+        `edition`: записанный умолчанием, он не должен читаться как заявление —
+        проверяется через сам слой изданий, а не поиском слова в файле.
+
+        Проверка проверки встроена в пробу: детектор обязан назвать
+        подсаженные умолчания в песочнице (приманки при этом целы, файл не
+        изменён). Правило, которое зеленеет всегда, ничего не проверяет.
+
+        Молчаливый пропуск запрещён: нет файла настроек, нет пробы или нет
+        python — провал, а не «нечего проверять». Ноль осмотренных свойств
+        при успехе — тоже провал (ложный PASS).
+    #>
+    $problems = [System.Collections.Generic.List[string]]::new()
+    $examined = 0
+    $probeRel = 'tests/test_server_settings.py'
+    $settingsRel = 'catalog/settings.json'
+
+    if (-not (Test-Path -LiteralPath (Join-Path $script:ProjectRoot $settingsRel))) {
+        return New-CheckResult -Name 'settings file does not pass defaults off as declarations' `
+            -Ok $false -Examined 0 -Details @("NOT-IMPLEMENTED: нет $settingsRel — сравнивать нечего")
+    }
+    $probe = Join-Path $script:ProjectRoot $probeRel
+    if (-not (Test-Path -LiteralPath $probe)) {
+        return New-CheckResult -Name 'settings file does not pass defaults off as declarations' `
+            -Ok $false -Examined 0 -Details @("NOT-IMPLEMENTED: нет $probeRel — свойство не проверяется")
+    }
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $python) {
+        return New-CheckResult -Name 'settings file does not pass defaults off as declarations' `
+            -Ok $false -Examined 0 -Details @('NOT-IMPLEMENTED: python не найден в PATH')
+    }
+
+    $output = & $python.Source $probe 2>&1
+    $code = $LASTEXITCODE
+    $text = ($output | Out-String).Trim()
+    $countText = ([regex]::Match($text, 'проверок:\s*(\d+)')).Groups[1].Value
+    $failText = ([regex]::Match($text, 'провалов:\s*(\d+)')).Groups[1].Value
+    $examined = if ($countText) { [int]$countText } else { 0 }
+    $failed = if ($failText) { [int]$failText } else { 0 }
+    Write-Host "    объявление настроек: проверок $examined, провалов $failed, код $code"
+
+    if ($code -ne 0 -or $failed -gt 0) {
+        $lines = @($output | Where-Object { $_ -is [string] -and $_ -match '\[FAIL\]' })
+        foreach ($line in $lines) {
+            $problems.Add(($line -replace '.*\[FAIL\]\s*', ''))
+        }
+        if ($lines.Count -eq 0) {
+            $problems.Add("проверка объявления настроек завершилась кодом $code без расшифровки")
+        }
+    }
+    if ($examined -lt 8) {
+        $problems.Add("осмотрено $examined свойств — меньше 8: часть осталась без наблюдения")
+    }
+    if ($examined -eq 0) {
+        return New-CheckResult -Name 'settings file does not pass defaults off as declarations' `
+            -Ok $false -Examined 0 -Details @('NOT-IMPLEMENTED: ни одного свойства не осмотрено — это ложный PASS')
+    }
+
+    return New-CheckResult -Name 'settings file does not pass defaults off as declarations' `
+        -Ok ($problems.Count -eq 0) -Examined $examined -Details $problems
+}
+
+function Test-AgentIntegrations {
+    <#
+    .SYNOPSIS
+        Агентские интеграции: каталоги, шаблоны, уровни и названные границы.
+
+    .DESCRIPTION
+        Измеренный дефект, ради которого проверка заведена: «поддержка продукта»
+        держалась на упоминании в README. Шаблон конфигурации не разбирался,
+        секрет в шаблоне никто не искал, а заявленный уровень L2 (смоук) мог не
+        иметь файла вовсе. Проверка переносит это в машину: объявление
+        `integrations/index.json` разбирается, у каждого продукта есть каталог,
+        README с разделами «Подключение», «Проверка», «Границы», шаблон
+        разбирается тем же разборщиком, что продукт, и не содержит значений,
+        похожих на секреты, у уровня L2 есть смоук с кодом возврата, а таблица
+        уровней в документе совпадает с объявлением.
+
+        Молчаливый пропуск запрещён: нет инструмента, нет python или проверка не
+        вернула JSON — провал, а не «нечего проверять». Ноль осмотренных
+        проверок при успехе — ложный PASS и тоже провал.
+    #>
+    $problems = [System.Collections.Generic.List[string]]::new()
+    $toolRel = 'tools/check_integrations.py'
+    $checkTitle = 'agent integrations: templates parse, levels match, boundaries named'
+    $tool = Join-Path $script:ProjectRoot $toolRel
+    if (-not (Test-Path -LiteralPath $tool -PathType Leaf)) {
+        return New-CheckResult -Name $checkTitle -Ok $false -Examined 0 -Details @("NOT-IMPLEMENTED: нет $toolRel — интеграции не проверяются")
+    }
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $python) {
+        return New-CheckResult -Name $checkTitle -Ok $false -Examined 0 -Details @('NOT-IMPLEMENTED: python не найден в PATH')
+    }
+
+    $raw = & $python.Source $tool --root $script:ProjectRoot --json 2>&1
+    $code = $LASTEXITCODE
+    $text = ($raw | Out-String).Trim()
+    $payload = $null
+    try { $payload = $text | ConvertFrom-Json } catch { $payload = $null }
+    if (-not $payload) {
+        $head = if ($text.Length -gt 200) { $text.Substring(0, 200) } else { $text }
+        return New-CheckResult -Name $checkTitle -Ok $false -Examined 0 -Details @("проверка интеграций не вернула JSON (код $code): $head")
+    }
+
+    $examined = [int]$payload.checks
+    $failed = [int]$payload.failed
+    Write-Host "    интеграции: проверок $examined, провалов $failed, код $code"
+    foreach ($problem in @($payload.problems)) {
+        if ("$problem".Trim()) { $problems.Add([string]$problem) }
+    }
+    if ($code -ne 0 -and $problems.Count -eq 0) {
+        $problems.Add("проверка интеграций завершилась кодом $code без расшифровки")
+    }
+    if ($examined -lt 6) {
+        $problems.Add("осмотрено проверок $examined — меньше 6: часть осталась без наблюдения")
+    }
+    if ($examined -eq 0) {
+        return New-CheckResult -Name $checkTitle -Ok $false -Examined 0 -Details @('NOT-IMPLEMENTED: ни одной проверки не выполнено — это ложный PASS')
+    }
+    return New-CheckResult -Name $checkTitle -Ok ($problems.Count -eq 0) -Examined $examined -Details $problems
+}
+
 $script:CheckFunctions = @(
     'Test-ProjectLayout'
     'Test-SecretHygiene'
@@ -4093,12 +4605,18 @@ $script:CheckFunctions = @(
     'Test-RagrafIgnored'
     'Test-SingleDeliveryCopy'
     'Test-TranslationStates'
+    'Test-CorpusRevisionAgreement'
+    'Test-DocumentedCommands'
+    'Test-HeuristicShareDisclosed'
+    'Test-StorageDisclosed'
     'Test-Glossary'
     'Test-ProseProfile'
     'Test-TranslationAddresses'
     'Test-CommandBlocks'
     'Test-TableRows'
     'Test-ListItems'
+    'Test-SettingsDeclaration'
+    'Test-AgentIntegrations'
 )
 
 $script:CheckNames = @()

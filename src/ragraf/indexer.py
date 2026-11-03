@@ -19,9 +19,37 @@ from .corpus import CorpusScan
 from .embeddings import Embedder, EmbeddingUnavailable, truncate_for_embedding
 from .extract.css_html import MultiExtractor
 from .extract.php_ast import ChunkRec, PhpExtractor, build_chunks
+from . import docread
 from .lexvec import LexVecStore
 from .pipeline import StageContext
 from .revisions import ControlStore, GraphWriter
+
+
+def _cpg_how_note(stats: dict) -> str:
+    """Строка «по какому признаку привязаны цели CPG» — одно правило на три пути.
+
+    Три пути получения вызовов (сервер Joern, экспорт, запросы к файлу CPG)
+    строили эту фразу каждый сам. Доктрина проекта запрещает второй список
+    правил: разошлись бы молча. Поэтому фраза собирается здесь.
+
+    Числа «по полному имени» названы ВМЕСТЕ с числом полных имён в выдаче
+    (этап 10): ноль без этого числа читается как дефект сопоставления, хотя
+    причиной может быть сама CPG — для Python Joern вместо имени цели отдаёт
+    заглушку `<unknownFullName>`.
+    """
+    by_full = int(stats.get("by_fullname", 0) or 0)
+    by_norm = int(stats.get("by_fullname_norm", 0) or 0)
+    real = stats.get("fullname_real")
+    total = int(real or 0) + int(stats.get("fullname_placeholder", 0) or 0)
+    # Два числа называются РАЗДЕЛЬНО: буквальное полное имя Joern и наше
+    # `путь:метод`. Сумма скрывала бы, что именно совпало.
+    text = (f"по полному имени Joern {by_full}, по полному имени в нашей форме "
+            f"{by_norm}, по имени и файлу {stats.get('by_name_file', 0)}, "
+            f"по имени без файла {stats.get('by_name_only', 0)}")
+    if real is not None:
+        text += (f"; полных имён в выдаче CPG {real} из {total}"
+                 f" (заглушек <unknownFullName> {stats.get('fullname_placeholder', 0)})")
+    return text
 
 
 @dataclass
@@ -56,6 +84,11 @@ class IndexReport:
     # на `ast` помогает исключение каталога, на `resolve` — сокращение корпуса.
     budget_stage: str = ""
     budget_files_done: int = 0
+    # Этап 10: целостность ссылок графа. Числа о том, сколько адресов рёбер не
+    # имели узла и сколько заглушек заведено, чтобы ребро вело в существующий
+    # узел. Пустой словарь — стадия не выполнялась (старая ревизия, прерванный
+    # прогон); это отличается от «рёбер в никуда нет».
+    references: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -81,6 +114,7 @@ class IndexReport:
             "budget_exceeded": self.budget_exceeded,
             "budget_stage": self.budget_stage,
             "budget_files_done": self.budget_files_done,
+            "references": self.references,
         }
 
 
@@ -101,9 +135,63 @@ class _BudgetExceeded(Exception):
         self.files_done = files_done
 
 
+def want_db_samples(mode: str, values: dict) -> bool:
+    """Собирать ли снимки строк баз в прогоне такой глубины.
+
+    Вынесено в функцию, чтобы правило было проверяемым без СУБД: снимок — это
+    КОНТЕНТ (строки таблиц), а не структура, и в быстрой переиндексации он стоит
+    ~8 с (замер 31.10.2026: `databases` 2,41 с без снимков против 10,24–11,90 с
+    со снимками при одинаковой структуре). Полный прогон собирает всегда;
+    быстрый — только если настройка `db_samples_in_fast` включена.
+    """
+    if mode != "fast":
+        return True
+    return bool((values or {}).get("db_samples_in_fast", False))
+
+
+def describe_db_layer(db_stats: dict) -> str | None:
+    """Почему живой слой баз не собран — одной строкой В ЗАПИСЬ ревизии.
+
+    Замер 01.11.2026 (этап 15). Ревизии rev-1193, rev-1195, rev-1204 и rev-1221
+    не имели живого слоя баз, и узнать причину было нельзя: `_collect_databases`
+    причину возвращала, но в `report.databases` — а стадия `databases` писалась
+    без неё, поэтому `index_status` показывал `items=0` и больше ничего. «Слой
+    пуст» и «сбор выключен» выглядели одинаково, хотя это разные состояния.
+
+    Теперь причина идёт в `stage_timing.note` и остаётся в записи ревизии.
+    Отдельная строка про отведённый каталог состояния: причина найденных
+    ревизий — прогон с чужим каталогом (`RAGRAF_CATALOG_DIR` песочницы), где
+    `db_access.json` нет, то есть доступ к живым базам «выключен» не решением,
+    а окружением.
+    """
+    if not db_stats or db_stats.get("collected"):
+        return None
+    reason = str(db_stats.get("reason") or "причина не названа")
+    tail = ("каталог состояния отведён переменной RAGRAF_CATALOG_DIR: доступ к живым "
+            "базам берётся ИЗ НЕГО, а не из рабочей копии"
+            if _catalog_dir_overridden() else
+            "пересоберите с доступным каталогом состояния и включённым доступом к базам")
+    return (f"живой слой баз не собран: {reason}. Запросы db_schema, db_table, "
+            f"write_check по этой ревизии пусты; {tail}")
+
+
+def _catalog_dir_overridden() -> bool:
+    """Каталог состояния отведён переменной окружения (песочница, второй профиль)."""
+    import os
+    return bool(os.environ.get("RAGRAF_CATALOG_DIR", "").strip())
+
+
 class Indexer:
-    def __init__(self, cfg: ProjectConfig) -> None:
+    def __init__(self, cfg: ProjectConfig, *, mode: str = "full") -> None:
+        """`mode` — глубина прогона: `"full"` (с CPG) или `"fast"`.
+
+        Режим нужен не только индексатору: от него зависит, собирать ли снимки
+        строк баз. Это КОНТЕНТ, а не структура, и в быстрой переиндексации он
+        стоит 7,5 с из 45 с (замер 31.10.2026). Раньше режим нигде не был
+        известен, и оба прогона делали одинаковую работу.
+        """
         self.cfg = cfg
+        self.mode = mode
         self.control = ControlStore(cfg)
         self.graph = GraphWriter(cfg)
         self.lexvec = LexVecStore(cfg)
@@ -120,12 +208,36 @@ class Indexer:
     # ------------------------------------------------------------------
 
     def run(self, *, with_vectors: bool = True, limit_files: int | None = None,
-            budget_seconds: float | None = None) -> IndexReport:
+            budget_seconds: float | None = None,
+            doc_graph: bool = False) -> IndexReport:
+        """Полный прогон. `doc_graph` включает проход извлечения фактов.
+
+        Флаг, а не настройка: это единственная стадия, которая ходит в сеть и
+        стоит денег. Умолчание `False` означает, что без явного согласия
+        индексация ведёт себя ровно как прежде.
+        """
         t_start = time.perf_counter()
         cfg = self.cfg
         cfg.ensure_dirs()
         # --vectors явно разрешает получение модели; без флага — только из кэша.
         self.embedder.allow_download = bool(with_vectors)
+
+        # Находка 2: запись в состоянии `building`, чей прогон оборвался,
+        # закрывается по признаку живости — до того, как заводится новая.
+        # Порог заметно больше самой долгой стадии, поэтому живой
+        # параллельный прогон этот шаг не задевает.
+        try:
+            for item in self.control.close_abandoned(
+                    getattr(cfg.index, "stale_revision_seconds", 900)):
+                self.report.notes.append(
+                    f"закрыта брошенная ревизия {item['rev_id']}: признак живости "
+                    f"не обновлялся {item['idle_seconds']} с (событие rev_closed_stale)"
+                )
+        except Exception as error:  # noqa: BLE001 — закрытие не имеет права ронять прогон
+            self.report.notes.append(
+                f"закрытие брошенных ревизий не выполнено "
+                f"({type(error).__name__}: {error})"
+            )
 
         rev_id = self.control.next_rev_id()
         parent_rev = self.control.current_rev()
@@ -458,11 +570,70 @@ class Indexer:
         # наборе баз стоит десятки секунд.
         if budget_over("databases"):
             return self.report
+        # Время стадии записывается ЗДЕСЬ: раньше в `stage_timing` уходил
+        # литерал 0.0, и стадия, которая ходит в СУБД, объявляла себя
+        # бесплатной. Замер 31.10.2026 (профиль быстрой переиндексации):
+        # `databases` 0.000 с в ответе против ~10 с факта — расхождение больше,
+        # чем весь остаток необъяснённого времени (строки `databases 0.000s`).
+        t_db = time.perf_counter()
         db_stats = self._collect_databases(rev_id)
+        db_seconds = round(time.perf_counter() - t_db, 3)
 
         # --- стадия 6: лексика и вектор ---
         # Лексика с векторами на BWO идёт 150–180 с: не начинаем её без
         # остатка бюджета, иначе прогон выйдет за предел обязательно.
+        if budget_over("lexvec"):
+            return self.report
+        t0 = time.perf_counter()
+        # --- стадия 6а: документный слой ---
+        doc_info = self._write_documents(rev_id, built.get("documents") or [])
+        if doc_info.get("documents"):
+            self.report.notes.append(
+                f"документы: файлов {doc_info['documents']}, чанков "
+                f"{doc_info.get('chunks', 0)}, failed {doc_info['failed']}, "
+                f"not_indexed_by_edition {doc_info['not_indexed_by_edition']}, "
+                f"токенов p95 {doc_info.get('tokens_p95', 0)}"
+            )
+        if doc_info.get("problems"):
+            first = doc_info["problems"][0]
+            self._abort(
+                rev_id,
+                "документный слой: валидатор нашёл нарушений "
+                f"{len(doc_info['problems'])} (проверка {first.get('check')}: "
+                f"{first.get('detail')}). Ревизия не закреплена, прежний индекс "
+                "остался рабочим.",
+                t_start,
+            )
+            return self.report
+        # --- стадия 6б: документный граф (этап 2, только с флагом) ---
+        # Стоит ПОСЛЕ записи документных чанков (иначе адресовать упоминания
+        # некуда) и ДО лексики (там уже нечего ждать). Отказ прохода не
+        # прерывает прогон: кодовый слой от него не зависит, а причина попадает
+        # в заметки и в запись стадии — «не собрано» остаётся отличимым от
+        # «собрано и пусто».
+        if doc_graph:
+            t_graph = time.perf_counter()
+            from . import docgraph_extract as extract_mod
+            from . import edition as edition_mod
+
+            denial = edition_mod.feature_denial("doc-graph")
+            if denial:
+                self._stage(rev_id, "docgraph",
+                            round(time.perf_counter() - t_graph, 3), 0, note=denial)
+                self.report.notes.append(denial)
+                self.report.docgraph = {"collected": False, "code": "edition_refused",
+                                        "reason": denial, "stats": {}}
+                graph_info = None
+            else:
+                graph_info = extract_mod.run(self.cfg, rev_id, limit=limit_files)
+            if graph_info is not None:
+                graph_note = extract_mod.describe(graph_info)
+                self._stage(rev_id, "docgraph",
+                            round(time.perf_counter() - t_graph, 3),
+                            int((graph_info.get("stats") or {}).get("entities") or 0),
+                            note=graph_note)
+                self.report.notes.append(graph_note)
+                self.report.docgraph = graph_info
         if budget_over("lexvec"):
             return self.report
         t0 = time.perf_counter()
@@ -473,11 +644,35 @@ class Indexer:
         if db_stats:
             self.report.databases = db_stats
             graph_stats = db_stats.get("graph") or {}
-            self._stage(rev_id, "databases", 0.0,
-                        int(graph_stats.get("tables", 0)))
+            db_note = describe_db_layer(db_stats)
+            self._stage(rev_id, "databases", db_seconds,
+                        int(graph_stats.get("tables", 0)), note=db_note)
+            if db_note:
+                self.report.notes.append(db_note)
         self._stage(rev_id, "lexvec", round(time.perf_counter() - t0, 3), len(built["chunks"]))
         if lex["note"]:
             self.report.notes.append(f"векторный слой: {lex['note']}")
+
+        # --- стадия 4в: целостность ссылок (этап 10) ---
+        # Ребро обязано вести в СУЩЕСТВУЮЩИЙ узел. Замер 30.10.2026 (rev-0925):
+        # 249 рёбер вели на адреса `@ext:`/`@file:`/`@table:`/`@php:`, которых
+        # не было среди узлов ни одной ревизии хранилища. Такое ребро нельзя
+        # открыть по адресу, а ответ, показавший его, выдаёт вывод за связь:
+        # у связи нет ни определения, ни места.
+        #
+        # Стадия стоит ПОСЛЕ разрешения имён и после CPG: разрешение имён
+        # удаляет заменённые рёбра (иначе задвоение факта), поэтому заглушки,
+        # заведённые раньше, остались бы без рёбер — узлами-сиротами.
+        t0 = time.perf_counter()
+        from . import references as references_mod
+
+        refs_info = references_mod.materialize(
+            self.graph.conn, rev_id, add_nodes=self.graph.add_nodes
+        )
+        self._stage(rev_id, "refs", round(time.perf_counter() - t0, 3),
+                    int(refs_info.get("created") or 0))
+        self.report.notes.append(references_mod.describe_note(refs_info))
+        self.report.references = refs_info
 
         # --- покрытие и запечатывание ---
         self._write_coverage(rev_id, scan, built, resolved_cnt, ambiguous_cnt, lex, cpg_info)
@@ -506,6 +701,15 @@ class Indexer:
         # схлопываний НОЛЬ. Все 920 схлопываний — это классы CSS (1441 строка
         # → 521 узел), и так задумано: имя класса — общий ключ без пути, иначе
         # определение в стилях и использование в разметке не сопоставить.
+        # Число файлов — из таблицы, а не из длины списка строк: ключ `file`
+        # (rev_id, path) перезаписывает повторную строку, и `.html` в режиме
+        # `document` даёт две строки на один файл (измерено: +4 на корпусе
+        # RAGRAF, ревизия называла 912 при фактических 908).
+        actual_files = self.graph.count_files(rev_id)
+        if not actual_files:
+            # Пустая таблица — не «ноль файлов», а повод считать по списку:
+            # иначе запись ревизии противоречила бы отчёту прогона.
+            actual_files = len(built["file_rows"])
         unique_nodes = self.graph.count_nodes(rev_id)
         # Число рёбер тоже берётся из таблицы, а не из длины списка.
         #
@@ -515,12 +719,17 @@ class Indexer:
         # (_carry_cpg_edges). На z журнал показывал 12499, а таблица
         # содержала 12956.
         actual_edges = self.graph.count_edges(rev_id)
+        # Запечатывание — тоже стадия, и раньше она не попадала в профиль:
+        # сумма стадий была меньше фактического прогона на величину открытия
+        # хранилищ, запечатывания, ротации и закрытия. Профиль обязан
+        # покрывать прогон целиком, иначе «где ушло время» отвечается догадкой.
+        t_seal = time.perf_counter()
         self.graph.finish_rev(
-            rev_id, len(built["file_rows"]), unique_nodes,
+            rev_id, actual_files, unique_nodes,
             actual_edges, capability, joern_used,
         )
         self.control.seal_rev(
-            rev_id, len(built["file_rows"]), unique_nodes,
+            rev_id, actual_files, unique_nodes,
             actual_edges, capability, joern_used,
             # Паспорт ревизии: окружение (версии извлекателей), режим CPG и
             # суммы — в rev.json, а не только в graph.sqlite. Замер
@@ -537,14 +746,41 @@ class Indexer:
             corpus_hash=scan.corpus_hash,
             config_hash=cfg.config_hash,
         )
+        self._stage(rev_id, "seal", round(time.perf_counter() - t_seal, 3),
+                    int(actual_edges))
         if budget_over("lexvec"):
             return self.report
 
-        rotated = self.control.rotate(cfg.index.retain_revs)
+        t_rotate = time.perf_counter()
+        rotated = self.control.rotate(cfg.index.retain_revs,
+                                      getattr(cfg.index, "rotate_batch", 1))
+        self._stage(rev_id, "rotate", round(time.perf_counter() - t_rotate, 3),
+                    len(rotated))
         if rotated:
             self.report.notes.append(
                 f"ротация: данные ревизий {', '.join(rotated)} удалены из хранилищ "
                 f"(история сохранена)"
+            )
+        # Политика хранения (этап 9): артефакты CPG и временные файлы убираются
+        # здесь же. Они растут при каждой ПОЛНОЙ переиндексации, а команду
+        # `compact` никто не запускает по расписанию — без этого шага политика
+        # остаётся объявлением (замер 30.10.2026: 17,8 ГБ в `.ragraf/cpg`).
+        # VACUUM тут не выполняется: он блокирует файл на десятки секунд.
+        try:
+            from . import storage as storage_mod
+
+            compacted = storage_mod.auto_compact(cfg)
+            if not compacted.get("skipped"):
+                cpg_mb = round(int((compacted.get("cpg_removed") or {}).get("bytes", 0)) / 1_048_576, 1)
+                temp_files = int((compacted.get("temp_removed") or {}).get("files", 0))
+                if cpg_mb or temp_files:
+                    self.report.notes.append(
+                        f"хранение: убрано артефактов CPG {cpg_mb} МБ, "
+                        f"временных файлов {temp_files} (VACUUM — отдельной командой)"
+                    )
+        except Exception as error:  # noqa: BLE001 — уборка не имеет права ронять индексацию
+            self.report.notes.append(
+                f"хранение: автоочистка не выполнена ({type(error).__name__}: {error})"
             )
 
         self.report.ok = True
@@ -585,6 +821,14 @@ class Indexer:
         edge_rows: list[tuple] = []
         text_rows: list[tuple] = []
         chunks: list[ChunkRec] = []
+        # Документы, разобранные документным слоем: паспорт, узлы и чанки.
+        # Отдельный список, а не часть `chunks`: паспорт документа (в том числе
+        # НЕразобранного) обязан попасть в отчёт, а чанк — нет.
+        #
+        # Имя НЕ `documents`: внутри ветки документов стоит `from . import documents`,
+        # и список был бы затён модулем — ошибка «module object is not iterable»
+        # при записи. Проверено прогоном: с затением индексация падала.
+        doc_layer_docs: list = []
         route_rows: list[tuple] = []
         kind_counts: dict[str, int] = {}
         edge_counts: dict[str, int] = {}
@@ -608,11 +852,81 @@ class Indexer:
         # `time.perf_counter` и проверка дедлайна дешевы, но не бесплатны, а
         # стадия идёт по тысячам файлов. Шаг выбран так, чтобы остановка
         # укладывалась в доли секунды от момента исчерпания бюджета.
+        # Режим HTML читается ОДИН раз на прогон: настройка глобальная, а вызов
+        # хранилища настроек на каждый файл — это чтение файла тысячи раз.
+        html_mode = "code"
+        try:
+            from .settings import SettingsStore
+
+            html_mode = str(SettingsStore().load().get("documents_html_mode")
+                            or "code")
+        except Exception:  # noqa: BLE001 — без настроек работает прежний путь
+            html_mode = "code"
+        # Файлы, чьи ЧАНКИ уже сделал документный слой: у них разбор деревом
+        # остаётся ради символов и маршрутов, но своих чанков он не добавляет —
+        # иначе один файл дал бы два набора чанков и поиск показывал бы дубли.
+        doc_chunked: set[str] = set()
         processed = 0
         for cf in scan.files:
             processed += 1
             if check_budget is not None and processed % 32 == 0:
                 check_budget("ast", processed)
+            declined = docread.declines(cf.path)
+            if declined:
+                # Формат наш, но возможность выключена. Файл не читается вовсе:
+                # причина уже известна, а чтение четырёхгигабайтного архива ради
+                # неё — работа без пользы. В отчёт он попадает со статусом и
+                # причиной, поэтому «выключено» не выглядит как «файла нет».
+                from . import docindex as docindex_mod
+
+                declined_doc = docindex_mod.Document(
+                    path=cf.path, status="not_indexed_by_edition",
+                    reason=declined, reader="archive", sha256=cf.sha256 or "",
+                )
+                doc_layer_docs.append(declined_doc)
+                file_rows.append((rev_id, cf.path, cf.lang, 0, cf.sha256,
+                                  "metadata_only",
+                                  f"docread:archive; {declined}", "utf-8"))
+                parse_status["metadata_only"] = (
+                    parse_status.get("metadata_only", 0) + 1
+                )
+                continue
+            if docread.handled_in_index(cf.path, html_mode):
+                # Документный слой (фаза A). Стоит ПЕРЕД ветвлением по языкам,
+                # потому что `.md`, `.txt`, `.log` приходят как ТЕКСТОВЫЕ языки,
+                # а не как `document`: проверка внутри ветки DOCUMENT_LANG не
+                # увидела бы ни одного файла.
+                #
+                # Отличие от прежнего пути принципиальное: адрес чанка — адрес
+                # ФАЙЛА (строки, якорь), а не строка извлечённого текста. Прежний
+                # путь давал `path:12`, которого в PDF нет; такое свойство было
+                # закреплено проверкой `tests/test_documents_index.py`.
+                document = self._read_document(cf.path, cf.abs_path, cf.sha256)
+                doc_layer_docs.append(document)
+                note = f"docread:{document.reader or '—'}"
+                if document.reason:
+                    note += f"; {document.reason}"
+                if document.status == "ok":
+                    file_status = "text"
+                    parse_status["text"] = parse_status.get("text", 0) + 1
+                else:
+                    file_status = "metadata_only"
+                    parse_status["metadata_only"] = (
+                        parse_status.get("metadata_only", 0) + 1
+                    )
+                file_rows.append(
+                    (rev_id, cf.path, cf.lang, int(document.lines or 0),
+                     cf.sha256, file_status, note, "utf-8")
+                )
+                chunks.extend(self._document_chunks(document))
+                doc_chunked.add(cf.path)
+                # HTML в режиме `document`: чанки даёт слой, но символы, классы
+                # и маршруты приходят только из разбора деревом. Поэтому файл
+                # не выходит из цикла: ниже он будет разобран, а его собственные
+                # чанки подавлены (иначе дубли в поиске).
+                if not (cf.lang == "html" and html_mode == "document"):
+                    continue
+
             if cf.lang == DOCUMENT_LANG:
                 # Документы читает извлекатель, а не голый `read_bytes`: PDF и
                 # Office — контейнеры. Нет библиотеки или формат старый — файл
@@ -748,18 +1062,23 @@ class Indexer:
                         0.9,
                     )
                 )
-            file_chunks = self.extractor.chunks(
-                res, data,
-                by_symbol=cfg.chunking.by_symbol,
-                max_lines=cfg.chunking.max_chunk_lines,
-                min_lines=cfg.chunking.min_chunk_lines,
-            )
+            if cf.path in doc_chunked:
+                # Чанки этого файла уже сделал документный слой: разбор деревом
+                # здесь работает только для символов, рёбер и маршрутов.
+                file_chunks = []
+            else:
+                file_chunks = self.extractor.chunks(
+                    res, data,
+                    by_symbol=cfg.chunking.by_symbol,
+                    max_lines=cfg.chunking.max_chunk_lines,
+                    min_lines=cfg.chunking.min_chunk_lines,
+                )
             # Извлекатель нового языка может вернуть пустой список чанков,
             # если структура не нашлась (например, файл без объявлений).
             # Тогда файл должен попасть в поиск текстовыми чанками — иначе
             # он окажется в индексе в виде одних рёбер без текста, и поиск
             # по содержимому его не найдёт.
-            if not file_chunks:
+            if not file_chunks and cf.path not in doc_chunked:
                 file_chunks = self._text_chunks(cf.path, data, cfg, cf.lang)
             chunks.extend(file_chunks)
             if res.parse_status != "ok":
@@ -772,6 +1091,7 @@ class Indexer:
             "text_rows": text_rows,
             "route_rows": route_rows,
             "chunks": chunks,
+            "documents": doc_layer_docs,
             "kind_counts": kind_counts,
             "edge_counts": edge_counts,
             "parse_status": parse_status,
@@ -975,10 +1295,38 @@ class Indexer:
             if "::" not in target and not target.startswith("method:"):
                 cls_part = target
             hit = None
+            if cls_part is not None:
+                # Ветка привязки ПО ИМЕНИ КЛАССА (этап 10). До этой правки здесь
+                # стояло только вычисление `cls_part`, а поиск выполнялся лишь
+                # при `cls_part is None` — то есть для имён БЕЗ "::" не
+                # выполнялся НИКОГДА. Замер 30.10.2026 на rev-0925: `use
+                # App\Pipeline\Engine` (2 ребра `imports`) не привязывался,
+                # хотя класс с таким полным именем в ревизии ровно один.
+                # Условие, обещанное докстрокой и не исполняемое, выглядит как
+                # проверка — поэтому его отсутствие и не замечалось.
+                #
+                # Правило строгое, как у разрешения наследования: привязка
+                # только при РОВНО ОДНОМ объявлении с этим полным именем.
+                # Два объявления (например `App\Core\Config` в двух
+                # фикстурах) — цель не выбрана, ребро остаётся внешним:
+                # выбрать одно из двух значило бы выдумать связь.
+                found = self.graph.conn.execute(
+                    "SELECT node_id FROM node WHERE rev_id = ? AND fqn = ?"
+                    " AND path IS NOT NULL ORDER BY path, node_id LIMIT 2",
+                    (rev_id, cls_part),
+                ).fetchall()
+                if len(found) == 1:
+                    hit = found[0]
             if cls_part is None:
                 hit = self.graph.conn.execute(
                     "SELECT node_id FROM node WHERE rev_id = ? AND fqn = ? LIMIT 1", (rev_id, target)
                 ).fetchone()
+                if hit is None:
+                    hit = self.graph.conn.execute(
+                        "SELECT node_id FROM node WHERE rev_id = ? AND fqn LIKE ?"
+                        " ORDER BY LENGTH(fqn) LIMIT 1",
+                        (rev_id, f"%{target}"),
+                    ).fetchone()
                 if hit is None:
                     hit = self.graph.conn.execute(
                         "SELECT node_id FROM node WHERE rev_id = ? AND fqn LIKE ?"
@@ -997,6 +1345,11 @@ class Indexer:
                 base_props = util.loads(cr["props"]) if cr["props"] else {}
             except Exception:
                 base_props = {}
+            # Способ привязки записывается в свойства: имя совпало по полному
+            # имени, но CPG в этом не участвовала (этап 8). Без признака такое
+            # ребро не отличить от привязки по одному имени, и `evidence_kind`
+            # пришлось бы угадывать по достоверности.
+            base_props["resolved_by"] = "fqn-name"
             new_rows.append(
                 (
                     rev_id, uid, str(cr["src"]), str(hit["node_id"]), str(cr["kind"]), "stated",
@@ -1150,25 +1503,34 @@ class Indexer:
         try:
             from . import db_collect as collect_mod
 
-            collected = collect_mod.collect(access)
+            from . import settings as settings_mod
+
+            try:
+                declared = settings_mod.SettingsStore().load()
+            except Exception:  # noqa: BLE001 — недоступные настройки не ломают сбор
+                declared = dict(settings_mod.DEFAULTS)
+            want_samples = want_db_samples(self.mode, declared)
+            collected = collect_mod.collect(access, with_samples=want_samples)
+            if not want_samples:
+                self.report.notes.append(
+                    "снимки строк баз не собирались: быстрая переиндексация "
+                    "(настройка db_samples_in_fast=false, экономия ~7,5 с). "
+                    "Структура собрана; снимок обновит полный пересбор"
+                )
             if collected.get("result") is None:
                 return {"collected": False,
                         "reason": collected.get("reason") or "сбор не выполнен"}
             from . import db_writer as writer_mod
 
-            stats = writer_mod.write_introspection(self.graph, rev_id,
-                                                   collected["result"],
-                                                   collected.get("samples") or {})
+            stats = writer_mod.write_introspection(
+                self.graph, rev_id, collected["result"],
+                collected.get("samples") or {}, control=self.control.conn)
             lex = writer_mod.write_lexvec(self.lexvec, self.embedder, rev_id,
                                           collected["result"],
                                           collected.get("samples") or {})
-            # Отпечаток запоминается: по нему сторож поймёт, изменилась ли
-            # структура, не читая базу заново.
-            from . import db_index as db_index_mod
-
-            db_index_mod.record_fingerprint(self.control.conn, rev_id,
-                                            collected["fingerprint"],
-                                            access.dialect)
+            # Отпечаток структуры записывает сама запись структуры
+            # (db_writer.write_introspection): ключ живёт в control.sqlite,
+            # и путь не должен помнить о нём отдельно.
             return {"collected": True, "graph": stats, "lexvec": lex,
                     "fingerprint": collected["fingerprint"]}
         except Exception as exc:
@@ -1181,20 +1543,53 @@ class Indexer:
         vectors: dict[str, list[float]] = {}
         reused = 0
         created = 0
+        present: set[str] = set()
+        copies: dict[str, str] = {}
 
         if with_vectors and chunks and self.lexvec.vec_ok:
-            status = self.embedder.status()
-            if not status.available:
-                note = status.reason
-            else:
-                hashes = [c.text_hash for c in chunks]
-                vectors = self.lexvec.reusable_vectors(self.cfg.embedding.model, hashes)
-                reused = len(vectors)
-                missing = [c for c in chunks if c.text_hash not in vectors]
-                uniq: dict[str, str] = {}
-                for c in missing:
-                    uniq.setdefault(c.text_hash, truncate_for_embedding(c.text))
-                if uniq:
+            # Модель эмбеддингов может отсутствовать в кэше: тогда начинается
+            # загрузка (~240 МБ). Молчать нельзя — замер 01.11.2026: на чистой
+            # установке `ensure` висел так 10+ минут без вывода, и это не
+            # отличить от зависания.
+            try:
+                if not self.embedder.cached():
+                    self.report.notes.append(
+                        "векторы: модели нет в кэше, начинается загрузка "
+                        f"({self.cfg.embedding.model}, ориентир ~240 МБ). Если сети "
+                        "до HuggingFace нет — прервите и запустите с --no-vectors: "
+                        "лексический поиск работает без модели"
+                    )
+            except Exception:  # noqa: BLE001 — проверка кэша не должна ломать прогон
+                pass
+            model = self.cfg.embedding.model
+            # Что уже посчитано — двумя сканами, а не соединением с vec0:
+            # замер 31.10.2026 на этом корпусе дал 16,98 с на соединении
+            # (SCAN vec_chunk на каждую строку vec_meta) против 0,17 с здесь.
+            hash_to_chunk, present = self.lexvec.reuse_index(model)
+            hashes = [c.text_hash for c in chunks]
+            reused = len({h for h in hashes if h in hash_to_chunk})
+            # Вектор ПЕРЕНОСИТСЯ, когда текст тот же, а идентификатор чанка
+            # сменился (правка выше по файлу сдвинула строки): в vec0 вектор уже
+            # лежит под другим chunk_id. Перенос идёт запросом INSERT…SELECT
+            # (замер: vec0 его поддерживает — 5 строк из 5), то есть без чтения
+            # вектор-блобов в Python.
+            for c in chunks:
+                source = hash_to_chunk.get(c.text_hash)
+                if source and c.chunk_id not in present:
+                    copies.setdefault(c.chunk_id, source)
+            missing = [c for c in chunks if c.text_hash not in hash_to_chunk]
+            uniq: dict[str, str] = {}
+            for c in missing:
+                uniq.setdefault(c.text_hash, truncate_for_embedding(c.text))
+            if uniq:
+                # Доступность модели проверяется только когда есть что кодировать:
+                # status() загружает ONNX (замер 0,95 с), и раньше эта плата
+                # взималась на каждом прогоне, даже когда все векторы
+                # переиспользовались и кодировать было нечего.
+                status = self.embedder.status()
+                if not status.available:
+                    note = status.reason
+                else:
                     keys = list(uniq.keys())
                     try:
                         new_vecs = self.embedder.embed([uniq[k] for k in keys])
@@ -1209,14 +1604,14 @@ class Indexer:
             # расширение загружено, а падает вставка (замер 16.10.2026).
             note = f"векторный слой недоступен: {self.lexvec.vec_unavailable_reason()}"
 
-        self.lexvec.add_chunks(rev_id, chunks, vectors)
+        self.lexvec.add_chunks(rev_id, chunks, vectors, present=present, copies=copies)
         # Отказ записи мог случиться ВНУТРИ add_chunks (там сбрасывается vec_ok) —
         # заметка обязана сказать об этом в ЭТОМ же прогоне, а не в следующем:
         # ветка выше решает про vec_ok, каким он был ДО записи.
         if note is None and getattr(self.lexvec, "vec_error", ""):
             note = f"векторный слой отключён: {self.lexvec.vec_error}"
-        return {"note": note, "reused": reused, "created": created}
-
+        return {"note": note, "reused": reused, "created": created,
+                "copied": int(getattr(self.lexvec, "vectors_copied", 0) or 0)}
     def _build_cpg_via_server(self, runner, rev_id: str) -> dict | None:
         """Построить граф свойств кода через сервер Joern.
 
@@ -1234,6 +1629,7 @@ class Indexer:
         разойтись, и это было бы незаметно.
         """
         from . import cpg as cpg_mod
+        from .joern_export import normalize_joern_path
 
         started = time.perf_counter()
         build = runner.build_via_server(rev_id)
@@ -1284,9 +1680,7 @@ class Indexer:
             "note": (
                 f"CPG (через сервер): вызовов после фильтрации {len(calls)} "
                 f"из {len(raw_calls)}, подтверждено в графе {stats['added']} "
-                f"(по полному имени {stats.get('by_fullname', 0)}, "
-                f"по имени и файлу {stats.get('by_name_file', 0)}, "
-                f"по имени без файла {stats.get('by_name_only', 0)}), "
+                f"{_cpg_how_note(stats)}, "
                 f"встроенных PHP {stats.get('builtin_skipped', 0)}, "
                 f"не разрешено {stats['unresolved']}, уже было {stats['duplicate']}"
             ),
@@ -1305,6 +1699,13 @@ class Indexer:
         resolved_cnt: int, ambiguous_cnt: int, lex: dict, cpg_info: dict | None = None,
     ) -> None:
         ps = built["parse_status"]
+        # Этап 10: числа целостности ссылок снимаются ИЗ ХРАНИЛИЩА, а не из
+        # отчёта прогона. Отчёт мог быть изменён стадиями, которые добавляют
+        # рёбра, а покрытие обязано совпадать с тем, что реально лежит в
+        # таблице: иначе `index_status` и `check_corpus_revision` разойдутся.
+        from . import references as references_mod
+
+        refs = references_mod.audit(self.graph.conn, rev_id)
         # Числа по схлопыванию дублей попадают в покрытие только тогда, когда
         # оно было включено. Если включено — показываются явно, потому что
         # иначе разница между «нашлось на диске» и «попало в индекс»
@@ -1327,6 +1728,17 @@ class Indexer:
              "объём отброшенных копий" if dup else None),
             ("dup_lines", float(dup.get("dropped_lines", 0)),
              "строк отброшенных копий" if dup else None),
+            # Этап 10: ребро в никуда — дефект, а не «внешняя ссылка». Ноль
+            # пишется явно: «проверено, рёбер в никуда нет» и «проверки не
+            # было» (ревизии до этапа 10) — разные состояния.
+            ("refs_dangling_edges", float(refs["dangling_edges"]),
+             "рёбер, ведущих в отсутствующий узел (0 — проверено, дефекта нет)"),
+            ("refs_stub_nodes", float(
+                self.graph.conn.execute(
+                    "SELECT COUNT(*) FROM node WHERE rev_id = ? AND kind = 'external'"
+                    " AND node_id LIKE '@%'", (rev_id,)
+                ).fetchone()[0] or 0),
+             "узлы-заглушки для внешних адресов: определения в корпусе нет"),
             ("symbols", float(len(built["node_rows"])), None),
             ("edges", float(len(built["edge_rows"])), None),
             ("edges_stated", float(sum(1 for r in built["edge_rows"] if r[5] == "stated")), None),
@@ -1382,6 +1794,8 @@ class Indexer:
         (`get`, `run`) есть у десятков классов, и привязка по имени дала бы выдуманные
         связи. Поэтому: точное полное имя → совпадение имени метода и файла → отказ.
         """
+        from .joern_export import normalize_joern_path
+
         cache: dict[tuple[str, str | None], tuple[str | None, float, str]] = {}
 
         def resolve(fqn: str, path: str | None, mode: str = "src") -> tuple[str | None, float, str]:
@@ -1406,6 +1820,39 @@ class Indexer:
                     # без row_factory до того, как дефект дошёл до чужого кода.
                     cache[key] = (str(row[0]), 1.0, "fullname")
                     return cache[key]
+
+            # Попытка 1б (этап 10): полное имя Joern, приведённое к НАШЕЙ форме.
+            #
+            # Joern для Python отдаёт `<module>.Class.method`, а наш fqn метода —
+            # `путь:метод` (класс в fqn не входит; измерено: в
+            # `src/ragraf/indexer.py` класс `Indexer`, а fqn его метода — 
+            # `src/ragraf/indexer.py:run`). Поэтому «полное имя» сравнивалось с
+            # нашей формой буквально и не совпадало НИ РАЗУ (by_fullname=0 на
+            # 45 234 записях). Здесь имя приводится к нашей форме: путь владельца
+            # плюс последний сегмент.
+            #
+            # Это НЕ то же самое, что поиск по паре (файл, имя): совпадение
+            # требуется по ВСЕМУ fqn, поэтому результат детерминирован и не
+            # зависит от числа одноимённых методов в корпусе. Кандидат обязан
+            # быть ровно один — иначе цель не выбрана (переопределённый метод
+            # в двух классах одного файла даёт два узла с одним fqn).
+            path_only = normalize_joern_path(path) if path else None
+            if path_only:
+                # Сегменты берутся из `norm`, а не из `short`: `short`
+                # вычисляется ниже, и обращение к нему здесь падало
+                # (`UnboundLocalError`) — поймано первым же прогоном.
+                norm_meth = norm.rpartition("::")[2]
+                if "." in norm_meth:
+                    norm_meth = norm_meth.rsplit(".", 1)[-1]
+                if norm_meth:
+                    found_norm = self.graph.conn.execute(
+                        "SELECT node_id FROM node WHERE rev_id = ? AND fqn = ?"
+                        " ORDER BY node_id LIMIT 2",
+                        (rev_id, f"{path_only}:{norm_meth}"),
+                    ).fetchall()
+                    if len(found_norm) == 1:
+                        cache[key] = (str(found_norm[0][0]), 1.0, "fullname_norm")
+                        return cache[key]
 
             short = norm.split("<module>.")[-1]
             # Короткое имя — ПОСЛЕДНИЙ сегмент после разделителя `::` или точки.
@@ -1552,9 +1999,7 @@ class Indexer:
             "note": (
                 f"CPG: {build.note}; {ratio}; вызовов после фильтрации {len(calls)} "
                 f"из {len(raw_calls)}, подтверждено в графе {stats['added']} "
-                f"(по полному имени {stats.get('by_fullname', 0)}, "
-                f"по имени и файлу {stats.get('by_name_file', 0)}, "
-                f"по имени без файла {stats.get('by_name_only', 0)}), "
+                f"{_cpg_how_note(stats)}, "
                 f"встроенных PHP {stats.get('builtin_skipped', 0)}, "
                 f"не разрешено {stats['unresolved']}, уже было {stats['duplicate']}"
             ),
@@ -1737,9 +2182,7 @@ class Indexer:
                 f"вызовы получены запросами к файлу CPG (экспорт недоступен): "
                 f"{len(calls)} после фильтрации из {len(raw_calls)}, "
                 f"подтверждено в графе {stats['added']} "
-                f"(по полному имени {stats.get('by_fullname', 0)}, "
-                f"по имени и файлу {stats.get('by_name_file', 0)}, "
-                f"по имени без файла {stats.get('by_name_only', 0)}), "
+                f"{_cpg_how_note(stats)}, "
                 f"не разрешено {stats['unresolved']}, "
                 f"уже было {stats['duplicate']}"
             ),
@@ -1841,10 +2284,99 @@ class Indexer:
             )
         return out
 
+    # ------------------------------------------------------------------
+    # Документный слой
+    # ------------------------------------------------------------------
+
+    def _read_document(self, rel: str, abs_path: Path, sha256: str):
+        """Разобрать документ в узлы и чанки. Никогда не бросает.
+
+        Отказ читателя — это `status` и `reason`, а не исключение: спецификация
+        требует `extraction_failed` в отчёте, а исключение индексатор переживёт
+        и файл исчезнет из отчёта молча.
+        """
+        from . import docchunk, docindex, docread
+
+        try:
+            raw = abs_path.read_bytes()
+        except OSError as exc:
+            return docindex.Document(
+                path=rel, status="failed", sha256=sha256 or "",
+                reason=f"чтение файла: {type(exc).__name__}: {exc}",
+            )
+        result = docread.read(rel, raw)
+        document = docindex.Document(
+            path=rel,
+            status=result.status,
+            reason=result.reason,
+            reader=result.reader,
+            converter=result.converter,
+            sha256=sha256 or "",
+            warnings=list(result.warnings),
+            nodes=list(result.nodes),
+            metadata=dict(result.metadata),
+            lines=int(result.metadata.get("lines") or 0),
+        )
+        # Чанки строятся по ИЗВЛЕЧЁННОМУ тексту, а не по «полному успеху»:
+        # `degraded` означает «структура не выделена» (нет заголовков, таблиц,
+        # LibreOffice отсутствует), а не «текста нет». Разница измерена: `notes.odt`
+        # отдавал текст `HELLO-ODT-IDX` и НЕ находился поиском, потому что чанки не
+        # строились вовсе, — покрытие терялось молча. Статус при этом не
+        # завышается: он переносится на каждый чанк (`extraction_status`) и виден
+        # в `doc_status` как `degraded`.
+        if result.nodes and result.status in ("ok", "degraded"):
+            document.chunks = docchunk.chunk_nodes(result.nodes, document.doc_id)
+        return document
+
+    def _document_chunks(self, document) -> list[ChunkRec]:
+        """Чанки документа в форму лексического индекса.
+
+        `source_kind="doc"` — не украшение: по нему `search --kind doc` и
+        `doc_search` отличают документ от кода, не заглядывая в расширение.
+        """
+        out: list[ChunkRec] = []
+        for chunk in document.chunks:
+            out.append(
+                ChunkRec(
+                    chunk_id=chunk.chunk_id,
+                    source_kind="doc",
+                    path=chunk.path,
+                    node_id=None,
+                    start_line=int(chunk.start_line or 0),
+                    end_line=int(chunk.end_line or 0),
+                    lang="document",
+                    text=chunk.text,
+                    text_hash=util.sha256_text(chunk.text),
+                    label=chunk.locator,
+                    tokens=chunk.tokens,
+                )
+            )
+        return out
+
+    def _write_documents(self, rev_id: str, documents: list) -> dict:
+        """Записать документы и прогнать валидатор ДО запечатывания ревизии."""
+        if not documents:
+            return {}
+        from . import docindex
+
+        conn = self.lexvec.conn
+        counts = docindex.write(conn, rev_id, documents)
+        conn.commit()
+        verdict = docindex.validate(conn, rev_id)
+        summary = docindex.summary(documents)
+        summary["nodes"] = counts["nodes"]
+        summary["problems"] = verdict["problems"]
+        return summary
+
     def _stage(self, rev_id: str, name: str, seconds: float, items: int,
                note: str | None = None) -> None:
         self.graph.add_stage_time(rev_id, name, seconds, items, note)
         self.graph.commit()
+        # Признак живости прогона: стадии идут одна за другой, поэтому
+        # отметка на каждой из них и есть «прогон жив». Отдельного потока
+        # здесь нет намеренно: он тянул бы блокировку записи в журнал и
+        # мешал второму процессу.
+        self.control.touch_revision(rev_id)
         self._stages.append(
             {"stage": name, "seconds": seconds, "items": items, "note": note}
         )

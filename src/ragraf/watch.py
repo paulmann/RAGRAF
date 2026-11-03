@@ -76,6 +76,11 @@ class Freshness:
     reindex_seconds: float = 0.0
     stale: bool = False
     note: str = ""
+    # Почему активной считается не самая новая ревизия графа. Пусто,
+    # когда самая новая и есть активная. Показывать номер ревизии без
+    # данных и молчать о причине — то же, что выдавать недостроенное
+    # за проиндексированное.
+    revision_note: str = ""
     from_cache: bool = False
     # Чем доказана свежесть: "fingerprint" — дешёвой сверкой по путям, размерам
     # и времени правки; пусто — полной сверкой контрольных сумм. Разница
@@ -147,11 +152,60 @@ class Freshness:
             out["from_cache"] = True
         if self.verified_by:
             out["verified_by"] = self.verified_by
+        # Причина выбора активной ревизии. Печатается только когда самая
+        # новая ревизия не завершена: тогда без неё ответ показывал бы
+        # номер, за которым нет данных, и молчал бы о причине.
+        if self.revision_note:
+            out["revision_note"] = self.revision_note
         return out
+
+
+@dataclass(frozen=True)
+class CorpusState:
+    """Состояние входа, снятое ОДНИМ проходом по корпусу.
+
+    Все четыре величины считаются из одного `corpus.scan(digest=True)`, поэтому
+    они не могут разойтись между собой: сумма и отпечаток описывают ОДИН И ТОТ
+    ЖЕ набор файлов. Раздельные вызовы такой гарантии не дают — файл, изменённый
+    между двумя обходами, давал пару «сумма от старого входа, отпечаток от нового».
+
+    `by_path` — карта путь→sha256: по ней видно, ЧТО именно изменилось, а не только
+    факт расхождения.
+    """
+
+    corpus_hash: str
+    config_hash: str
+    files: int
+    by_path: dict[str, str]
+    fingerprint: str
+    total_bytes: int = 0
 
 
 # Кэш результатов на время процесса: ключ — каталог категории.
 _CACHE: dict[str, tuple[float, Freshness]] = {}
+
+
+def current_state(cfg: ProjectConfig) -> "CorpusState":
+    """Одна сверка корпуса: контрольная сумма, карта файлов И отпечаток входа.
+
+    Зачем одна функция на три величины. Раньше `ensure` считал сумму трижды за
+    вызов (в `check`, в `run_reindex` и снова после успеха), а отпечаток брался
+    отдельным обходом дерева. На корпусе 944 файла один обход с чтением — 1,20 с,
+    без чтения — 0,18 с (замер 01.11.2026), и эта плата набиралась на каждом
+    шаге агента, потому что сторож проверяет свежесть перед каждой операцией.
+
+    Смысл не изменился: сумма по-прежнему считается по `corpus.scan`, то есть
+    тем же сканером, что и у индексатора (инвариант §4.4 AGENTS.md).
+    """
+    scanned = corpus.scan(cfg, digest=True)
+    return CorpusState(
+        corpus_hash=scanned.corpus_hash,
+        config_hash=cfg.config_hash,
+        files=len(scanned.files),
+        by_path={f.path: f.sha256 for f in scanned.files},
+        fingerprint=corpus.fingerprint_of(scanned),
+        total_bytes=scanned.total_bytes,
+    )
 
 
 def current_hashes(cfg: ProjectConfig) -> tuple[str, str, int, dict[str, str]]:
@@ -159,9 +213,11 @@ def current_hashes(cfg: ProjectConfig) -> tuple[str, str, int, dict[str, str]]:
 
     Возвращает (corpus_hash, config_hash, число файлов, карта путь→sha256).
     Карта нужна, чтобы показать, ЧТО именно изменилось, а не только факт.
+    Остаётся ради совместимости (attest, admin, синхронизация реестра); новая
+    работа идёт через `current_state` — тот же скан плюс отпечаток входа.
     """
-    scan = corpus.scan(cfg)
-    return scan.corpus_hash, cfg.config_hash, len(scan.files), {f.path: f.sha256 for f in scan.files}
+    state = current_state(cfg)
+    return state.corpus_hash, state.config_hash, state.files, state.by_path
 
 
 def indexed_hashes(category: str, cfg: ProjectConfig) -> tuple[str, str, str]:
@@ -185,9 +241,26 @@ def indexed_hashes(category: str, cfg: ProjectConfig) -> tuple[str, str, str]:
         # реиндексации бралась прежняя ревизия, и сумма «не совпадала»).
         # rev_id — монотонный номер с ведущими нулями, поэтому его сортировка
         # совпадает с порядком создания (так уже сделано в revisions.py).
+        # Берётся ЗАВЕРШЁННАЯ ревизия (`state='ready'`). Незавершённая
+        # индексом не является, даже если её номер больше: в ней нет
+        # данных, а сумма корпуса записана на момент начала сборки.
+        # Замер 28.10.2026 (задание И42) на корпусе revoap.com: активной
+        # считалась rev-0040 в состоянии `building` с 0 файлов, тогда как
+        # готовой была rev-0039 с 2 722 файлами. Сторож сравнивал сумму
+        # корпуса с числом недостроенной ревизии, и ответ «свежо/отстал»
+        # ничего не говорил о том, что реально проиндексировано.
         row = conn.execute(
-            "SELECT rev_id, corpus_hash, config_hash FROM rev ORDER BY rev_id DESC LIMIT 1"
+            "SELECT rev_id, corpus_hash, config_hash FROM rev"
+            " WHERE state = 'ready' ORDER BY rev_id DESC LIMIT 1"
         ).fetchone()
+        if row is None:
+            # Ни одной завершённой ревизии: корпус в первой сборке.
+            # Тогда берётся последняя по номеру, а причина выбора видна
+            # в ответе через `revision_note`.
+            row = conn.execute(
+                "SELECT rev_id, corpus_hash, config_hash FROM rev"
+                " ORDER BY rev_id DESC LIMIT 1"
+            ).fetchone()
         if row is not None:
             rev_id = str(row["rev_id"])
             corpus_hash = str(row["corpus_hash"] or "")
@@ -205,6 +278,36 @@ def indexed_hashes(category: str, cfg: ProjectConfig) -> tuple[str, str, str]:
 
     return corpus_hash, config_hash, rev_id
 
+
+def unfinished_revision(cfg: ProjectConfig, active_rev: str) -> str:
+    """Почему активной считается не самая новая ревизия графа.
+
+    Пустая строка — самая новая ревизия и есть активная. Иначе
+    возвращается причина: незавершённая ревизия (`state='building'`)
+    индексом не является, и молчать о том, что номер ревизии относится
+    к недостроенной, значит выдавать её за проиндексированную.
+    """
+    try:
+        from . import store
+
+        conn = store.connect(cfg.graph_db, readonly=True)
+        row = conn.execute(
+            "SELECT rev_id, state, file_count FROM rev"
+            " ORDER BY rev_id DESC LIMIT 1"
+        ).fetchone()
+        conn.close()
+    except Exception:
+        return ""
+    if row is None:
+        return ""
+    newest = str(row["rev_id"])
+    if newest == active_rev:
+        return ""
+    return (
+        f"последняя ревизия {newest} не завершена (state={row['state']}, "
+        f"файлов {int(row['file_count'] or 0)}): активной считается "
+        f"{active_rev or 'ни одна'}"
+    )
 
 def measure_accumulation(cfg: ProjectConfig, rev_id: str) -> tuple[int, int]:
     """Сколько правок накопилось от последней индексации и сколько минут прошло.
@@ -349,6 +452,7 @@ def check(
     force: bool = False,
     use_cache: bool = True,
     budget_seconds: float | None = None,
+    with_vectors: bool = True,
 ) -> Freshness:
     """Сверить индекс с кодом и при необходимости переиндексировать.
 
@@ -386,8 +490,13 @@ def check(
             _CACHE[cat] = (now, quick)
             return quick
 
-    corpus_hash, config_hash, files_now, actual = current_hashes(cfg)
+    state = current_state(cfg)
+    corpus_hash, config_hash, files_now, actual = (state.corpus_hash, state.config_hash,
+                                                   state.files, state.by_path)
     expected_hash, expected_config, rev_id = indexed_hashes(cat, cfg)
+    # Новая ревизия могла начать собираться и не завершиться: тогда
+    # активной считается прежняя, и причина названа явно.
+    _rev_note = unfinished_revision(cfg, rev_id)
 
     fresh = Freshness(
         category=cat,
@@ -400,6 +509,7 @@ def check(
         expected_config_hash=expected_config,
         rev_id=rev_id,
         files_now=files_now,
+        revision_note=_rev_note,
     )
 
     if not expected_hash:
@@ -410,6 +520,17 @@ def check(
     else:
         index_changed = expected_config and config_hash != expected_config
         if corpus_hash == expected_hash and not index_changed:
+            # Отпечаток ЛЕЧИТСЯ здесь, и это не косметика. `write_fingerprint`
+            # вызывался только после индексации, а отпечаток отпечатка — уже
+            # ПОСЛЕ правки; любое касание файла (перезапись без изменения
+            # содержимого, утилита чистки, распаковка архива) расходило его с
+            # сохранённым НАВСЕГДА: `quick_check` больше никогда не подтверждал
+            # свежесть, и каждый вызов операции читал весь корпус.
+            # Замер 01.11.2026 на этом корпусе: две правки в день делали
+            # дешёвый путь мёртвым, и `ensure` шёл 2,2 с вместо 0,2 с.
+            if state.fingerprint:
+                write_fingerprint(cfg, rev_id, fingerprint=state.fingerprint,
+                                  files=state.files, total_bytes=state.total_bytes)
             # Код не менялся. Проверяем структуру баз — но ТОЛЬКО если сбор
             # включён: при выключенном сборе это лишний запуск клиента СУБД на
             # каждой проверке, а при недоступной базе корпус кода не устаревает.
@@ -493,15 +614,21 @@ def check(
         _CACHE[cat] = (now, fresh)
         return fresh
 
+    recorded: dict[str, Any] = {}
     ok, rev, seconds, note = run_reindex(cfg, cat, trigger="guard", mode=mode,
-                                     budget_seconds=budget_seconds)
+                                     budget_seconds=budget_seconds,
+                                     state=state, recorded=recorded,
+                                     with_vectors=with_vectors)
     fresh.reindexed = ok
     fresh.reindex_rev = rev
     fresh.reindex_seconds = seconds
     fresh.reindex_mode = mode
     if ok:
-        # После успешной индексации расхождения нет: суммы перечитаны.
-        new_hash, new_config, new_files, _ = current_hashes(cfg)
+        # После успешной индексации расхождения нет: суммы ПЕРЕСЧИТАНЫ там же,
+        # где записаны в реестр (третьего обхода корпуса больше нет).
+        new_hash = str(recorded.get("corpus_hash") or corpus_hash)
+        new_config = str(recorded.get("config_hash") or config_hash)
+        new_files = int(recorded.get("files") or files_now)
         fresh.corpus_hash = new_hash
         fresh.expected_hash = new_hash
         fresh.config_hash = new_config
@@ -568,6 +695,9 @@ def index_changed_reason(fresh: Freshness) -> str:
 def run_reindex(
     cfg: ProjectConfig, category: str, *, trigger: str = "guard", mode: str = "full",
     budget_seconds: float | None = None,
+    state: "CorpusState | None" = None,
+    recorded: dict[str, Any] | None = None,
+    with_vectors: bool = True,
 ) -> tuple[bool, str, float, str]:
     """Выполнить индексацию и записать результат в реестр.
 
@@ -575,6 +705,17 @@ def run_reindex(
       * "full" — с построением CPG (медленно, но с межпроцедурными связями);
       * "fast" — без CPG (только AST, схема, лексика): в 3,7 раза быстрее,
         что замерено на этом корпусе (5,6 с против 20,8 с).
+
+    `state` — состояние входа, УЖЕ снятое вызывающим (сторожем). Если оно передано,
+    контрольная сумма в реестр пишется по нему, БЕЗ повторного чтения корпуса.
+    Обязательное условие честности: перед записью заново снимается ДЕШЁВЫЙ
+    отпечаток (`путь/размер/время`), и если файлы менялись во время прогона,
+    сумма пересчитывается полностью. Инвариант «записанная сумма соответствует
+    содержимому» остаётся, а третий полный обход в обычном случае исчезает.
+
+    `recorded` — необязательный словарь, куда кладутся записанные величины
+    (`corpus_hash`, `config_hash`, `files`, `fingerprint`, `rescan`): вызывающий
+    берёт оттуда результат вместо нового обхода дерева.
 
     Возвращает (успех, ревизия, секунды, примечание). Ошибки не поднимаются
     наружу: вызывающий код должен получить состояние «устарело с причиной»,
@@ -593,21 +734,47 @@ def run_reindex(
     # читается из файла, и её нельзя менять навсегда из кода.
     joern_before = cfg.index.joern_enabled
     try:
-        if mode == "fast":
-            cfg.index.joern_enabled = False
         from .indexer import Indexer
 
-        indexer = Indexer(cfg)
-        try:
-            # Бюджет: явный из ensure, иначе из конфига корпуса (run_reindex
-            # вызывается и сторожем, где явного бюджета нет).
-            effective_budget = (
-                budget_seconds if budget_seconds is not None
-                else getattr(cfg.index, "budget_seconds", None)
-            )
-            report = indexer.run(budget_seconds=effective_budget)
-        finally:
-            indexer.close()
+        # Бюджет: явный из ensure, иначе из конфига корпуса (run_reindex
+        # вызывается и сторожем, где явного бюджета нет).
+        effective_budget = (
+            budget_seconds if budget_seconds is not None
+            else getattr(cfg.index, "budget_seconds", None)
+        )
+
+        def _index(use_mode: str):
+            """Один прогон индексатора в заданном режиме."""
+            cfg.index.joern_enabled = False if use_mode == "fast" else joern_before
+            indexer = Indexer(cfg, mode=use_mode)
+            try:
+                return indexer.run(budget_seconds=effective_budget,
+                                    with_vectors=with_vectors)
+            finally:
+                indexer.close()
+
+        report = _index(mode)
+        # Бюджет исчерпан НА ПОЛНОМ прогоне — это не «ничего не вышло», а
+        # «выбранная глубина в бюджет не влезает». Замер 01.11.2026 на этом
+        # корпусе: полный прогон 208 с при бюджете 120 с, то есть ЛЮБАЯ правка
+        # старше получаса не могла попасть в индекс вообще: сторож запускал
+        # обречённый полный прогон при каждом обращении, прогон обрывался, и так
+        # по кругу (4 брошенные ревизии за час). Поэтому один ограниченный шаг
+        # вниз по глубине: быстрый прогон того же корпуса укладывается в бюджет
+        # и обновляет лексику, AST и схему; связи CPG остаются от последнего
+        # полного — это названо в ответе, а не спрятано.
+        downgraded = ""
+        if mode == "full" and not getattr(report, "ok", False) \
+                and getattr(report, "budget_exceeded", False):
+            report_fast = _index("fast")
+            if getattr(report_fast, "ok", False):
+                report = report_fast
+                downgraded = ("полный прогон не уложился в бюджет "
+                              f"({time.time() - started:.0f} с): выполнен быстрый, "
+                              "связи CPG остались от последнего полного")
+                mode = "fast"
+            else:
+                report = report_fast or report
         seconds = time.time() - started
 
         rev_id = ""
@@ -618,23 +785,68 @@ def run_reindex(
             from . import store
 
             conn = store.connect(cfg.graph_db, readonly=True)
-            row = conn.execute(
-                "SELECT rev_id, file_count, node_count, edge_count, capability"
-                " FROM rev ORDER BY rev_id DESC LIMIT 1"
-            ).fetchone()
-            if row is not None:
-                rev_id = str(row["rev_id"])
-                files = int(row["file_count"] or 0)
-                nodes = int(row["node_count"] or 0)
-                edges = int(row["edge_count"] or 0)
-                capability = str(row["capability"] or "")
+            # В реестр идут числа ЗАПЕЧАТАННОЙ ревизии: у прерванного прогона
+            # числа нулевые или неполные, и запись в реестр делала бы его лживым.
+            active, skipped = store.active_revision(conn)
+            if active is not None:
+                rev_id = str(active.get("rev_id"))
+                files = int(active.get("file_count") or 0)
+                nodes = int(active.get("node_count") or 0)
+                edges = int(active.get("edge_count") or 0)
+                capability = str(active.get("capability") or "")
+            if skipped:
+                note = store.describe_skipped(skipped)
             conn.close()
         except Exception as exc:
             note = f"ревизия записана, но счётчики не прочитаны: {type(exc).__name__}"
 
+        # ПРОГОН, КОТОРЫЙ НЕ ЗАКРЕПИЛ РЕВИЗИЮ, НЕ ЗАПИСЫВАЕТСЯ В РЕЕСТР.
+        # Измеренный дефект 01.11.2026: прерванный по бюджету прогон записывался
+        # как успешный, и реестр начинал утверждать, что текущий корпус лежит
+        # в индексе ревизии, которой он не касается: сумма в реестре — новая,
+        # файлы в графе — старые. Следом `ensure` отвечал «индекс актуален»,
+        # хотя факты отставали. Это тот самый класс «сторож врёт», ради которого
+        # он и заведён.
+        sealed = bool(getattr(report, "ok", False)) and not getattr(
+            report, "budget_exceeded", False)
+        sealed_rev = str(getattr(report, "rev_id", "") or "")
+        if not sealed or (sealed_rev and rev_id and sealed_rev != rev_id):
+            reason = ("прогон прерван до закрепления ревизии"
+                      if getattr(report, "budget_exceeded", False)
+                      else "прогон завершился без закреплённой ревизии")
+            stage = str(getattr(report, "budget_stage", "") or "")
+            detail = (f"бюджет времени исчерпан на стадии «{stage}»" if stage else reason)
+            if downgraded:
+                detail = f"{downgraded}; {detail}"
+            if recorded is not None:
+                recorded.clear()
+                recorded.update({"rescan": True, "recorded": False})
+            invalidate_cache(category)
+            return False, "", seconds, (
+                f"{detail}: ревизия не закреплена, в реестр ничего не записано, "
+                "прежний индекс остался рабочим")
+
         # Контрольная сумма фиксируется ПОСЛЕ индексации, но считается по файлам
         # корпуса, поэтому совпадает с суммой до индексации (проверяется тестом).
-        corpus_hash, config_hash, _, _ = current_hashes(cfg)
+        # Берётся из УЖЕ СДЕЛАННОГО скана, если таковой передан и вход за время
+        # прогона не изменился: дешёвый отпечаток после прогона доказывает это
+        # за 0,18 с вместо 1,20 с на корпусе 944 файла (замер 01.11.2026).
+        now_fp, now_files, now_bytes = corpus.stat_fingerprint(cfg)
+        rescan = False
+        if state is not None and state.fingerprint and now_fp == state.fingerprint:
+            corpus_hash = state.corpus_hash
+            config_hash = state.config_hash
+            file_total = state.files
+            fingerprint = state.fingerprint
+        else:
+            # Файлы менялись во время прогона (или скана не было): считать заново.
+            # Это редкий случай, и он обязан быть дорогим, а не неточным.
+            rescan = True
+            fresh_state = current_state(cfg)
+            corpus_hash = fresh_state.corpus_hash
+            config_hash = fresh_state.config_hash
+            file_total = fresh_state.files
+            fingerprint = fresh_state.fingerprint
         catalog.record_run(
             category,
             rev_id=rev_id,
@@ -655,11 +867,20 @@ def run_reindex(
         # «проверка перед каждым вызовом» превратилась бы в полную сверку на
         # каждом вызове. Измерено на живом корпусе 13.10.2026.
         try:
-            write_fingerprint(cfg, rev_id)
+            write_fingerprint(cfg, rev_id, fingerprint=fingerprint,
+                              files=file_total, total_bytes=now_bytes)
         except Exception as exc:  # noqa: BLE001 — отпечаток вспомогательный
             sys.stderr.write(
                 f"[ragraf-watch] отпечаток не записан (guard): {type(exc).__name__}: {exc}\n"
             )
+        if recorded is not None:
+            recorded.update({
+                "corpus_hash": corpus_hash,
+                "config_hash": config_hash,
+                "files": file_total,
+                "fingerprint": fingerprint,
+                "rescan": rescan,
+            })
         # Кэш проверки относился к прежней ревизии.
         invalidate_cache(category)
         return True, rev_id, seconds, note
@@ -705,18 +926,26 @@ def fingerprint_file(cfg: ProjectConfig) -> Path:
     return cfg.index_dir / FINGERPRINT_NAME
 
 
-def write_fingerprint(cfg: ProjectConfig, rev_id: str) -> str:
+def write_fingerprint(cfg: ProjectConfig, rev_id: str, *,
+                      fingerprint: str | None = None,
+                      files: int | None = None,
+                      total_bytes: int | None = None) -> str:
     """Запомнить отпечаток входа, соответствующий проиндексированной ревизии.
 
-    Вызывается из ЕДИНСТВЕННОЙ точки записи прогона (`record_index_run`),
-    поэтому покрывает все пути индексации — ensure, CLI и сторожа. Без этого
+    Вызывается из ДВУХ мест, и оба обязательны: `record_index_run` (все пути
+    индексации: ensure, CLI, админка) и `run_reindex` (сторож). Без этого
     дешёвая проверка не могла бы отличить «вход не менялся» от «сравнивать не
     с чем», и сторож был бы вынужден перечитывать корпус на каждом вызове.
+
+    Готовый отпечаток можно передать аргументами: вызывающий обычно уже снял его
+    тем же сканом, который дал контрольную сумму, и второй обход дерева только
+    за ним — чистая плата (0,18 с на 942 файлах, замер 01.11.2026).
 
     Ошибка записи не роняет операцию: следующий вызов просто пойдёт полной
     сверкой — это дороже, но не неправильно.
     """
-    fingerprint, files, total_bytes = corpus.stat_fingerprint(cfg)
+    if fingerprint is None or files is None or total_bytes is None:
+        fingerprint, files, total_bytes = corpus.stat_fingerprint(cfg)
     payload = {
         "rev_id": rev_id,
         "fingerprint": fingerprint,
@@ -827,6 +1056,9 @@ def record_index_run(cfg: ProjectConfig, report, *, trigger: str = "manual") -> 
     catalog.record_run(
         category,
         rev_id=rev_id,
+        # Прерванный прогон (report.ok = False) не становится состоянием
+        # разработки: ревизия не закреплена, действует прежняя.
+        completed=bool(getattr(report, "ok", True)),
         corpus_hash=corpus_hash,
         config_hash=config_hash,
         file_count=int(getattr(report, "files", 0) or files_now),

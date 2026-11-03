@@ -100,8 +100,8 @@ class ControlStore:
         self.conn.execute(
             """INSERT OR REPLACE INTO rev_history
                (rev_id, parent_rev, project, state, capability, created_at, corpus_hash,
-                config_hash, files, nodes, edges, joern_used)
-               VALUES (?, ?, ?, 'building', ?, ?, ?, ?, NULL, NULL, NULL, ?)""",
+                config_hash, files, nodes, edges, joern_used, heartbeat_at)
+               VALUES (?, ?, ?, 'building', ?, ?, ?, ?, NULL, NULL, NULL, ?, ?)""",
             (
                 rev_id,
                 parent_rev,
@@ -111,9 +111,79 @@ class ControlStore:
                 corpus_hash,
                 config_hash,
                 1 if joern_used else 0,
+                util.now_iso(),
             ),
         )
         self.conn.commit()
+
+    def touch_revision(self, rev_id: str) -> None:
+        """Отметить, что прогон ЭТОЙ ревизии жив (признак живости).
+
+        Нужен потому, что оборванный прогон оставлял запись в состоянии
+        `building` навсегда: политика хранения говорит про ДАННЫЕ ревизии, а не
+        про запись, и закрывать её было некому. Замер 31.10.2026: 9 таких записей,
+        самая старая от 28.10, события в `event_log` нет.
+
+        Закрывать «все `building` старше суток» нельзя: рядом может идти ЖИВОЙ
+        прогон другого процесса, и второй закрыл бы чужую работу. Поэтому запись
+        несёт время последнего признака жизни, а закрытие требует, чтобы оно
+        устарело.
+        """
+        self.conn.execute(
+            "UPDATE rev_history SET heartbeat_at = ? WHERE rev_id = ? AND state = 'building'",
+            (util.now_iso(), rev_id),
+        )
+        self.conn.commit()
+
+    def close_abandoned(self, idle_seconds: float) -> list[dict]:
+        """Закрыть записи, чей прогон оборвался. Возвращает закрытые, с числами.
+
+        Порог `idle_seconds` должен быть заметно больше самой долгой стадии:
+        признак живости обновляется на каждой стадии, поэтому живой прогон
+        устареть не успевает. Проверка «сколько прошло» идёт по времени в записи,
+        а не по порядку ревизий: порядок говорит о номере, а не о живости.
+
+        Закрытие атомарно: `UPDATE ... WHERE state = 'building'` и проверка
+        `rowcount` не дают двум процессам закрыть одну запись дважды и не дают
+        закрыть ту, что успела запечататься между чтением и записью.
+        """
+        from datetime import datetime, timedelta, timezone
+
+        limit = float(idle_seconds)
+        now = datetime.now(timezone.utc)
+        rows = self.conn.execute(
+            "SELECT rev_id, created_at, heartbeat_at FROM rev_history WHERE state = 'building'"
+        ).fetchall()
+        closed: list[dict] = []
+        for r in rows:
+            stamp = r["heartbeat_at"] or r["created_at"]
+            try:
+                moment = datetime.fromisoformat(str(stamp))
+            except ValueError:
+                continue
+            if moment.tzinfo is None:
+                moment = moment.replace(tzinfo=timezone.utc)
+            idle = (now - moment).total_seconds()
+            if idle < limit:
+                continue
+            cur = self.conn.execute(
+                "UPDATE rev_history SET state = 'aborted' WHERE rev_id = ? AND state = 'building'",
+                (r["rev_id"],),
+            )
+            if int(cur.rowcount or 0) != 1:
+                continue
+            payload = {
+                "rev_id": r["rev_id"],
+                "created_at": r["created_at"],
+                "heartbeat_at": r["heartbeat_at"],
+                "idle_seconds": round(idle, 1),
+                "threshold_seconds": limit,
+                "reason": "признак живости прогона не обновлялся дольше порога",
+            }
+            self.log_event("rev_closed_stale", payload)
+            closed.append(payload)
+        self.conn.commit()
+        return closed
 
     def seal_rev(
         self,
@@ -237,10 +307,32 @@ class ControlStore:
             for r in rows
         ]
 
-    def rotate(self, retain: int) -> list[str]:
-        """Удалить данные самых старых ревизий из хранилищ. История сохраняется."""
+    def rotate(self, retain: int, batch: int = 3) -> list[str]:
+        """Удалить данные самых старых ревизий из хранилищ. История сохраняется.
+
+        ПАКЕТНАЯ РОТАЦИЯ — по замеру, а не по вкусу. Удаление данных одной
+        ревизии стоит 4,5 с (профиль 31.10.2026: 29 запросов DELETE по 21 тыс.
+        строк, 3,46 с в них и 0,94 с в фиксации), то есть прежняя ротация «одна
+        ревизия на каждый прогон» забирала 14 % быстрой переиндексации.
+
+        Здесь данные живут до `retain + batch` ревизий и убираются пачкой. Цена
+        названа объёмом: одна ревизия корпуса ragraf занимает около 0,6 ГБ
+        (lexvec 443 МБ + graph 170 МБ при трёх хранилищах ревизий), поэтому
+        `batch=3` поднимает пик с 1,8 ГБ до ≈3,6 ГБ — это ниже порога
+        предупреждения 6 ГБ, а плата за прогон падает с 4,5 с до ≈1,5 с.
+
+        `batch=1` возвращает прежнее поведение: удалять на каждом прогоне.
+        """
         ready = [r.rev_id for r in self.history(limit=10_000) if r.state == "ready"]
         keep = set(ready[:retain])
+        # Порог — «сколько ревизий ещё терпим сверх retain», то есть batch - 1:
+        # при batch=1 запись убирается СРАЗУ, как только появилась лишняя, и
+        # каждый прогон платит за одну ревизию (ровный график). Проверка
+        # «<= retain + batch» давала обратное: пачка из двух ревизий через прогон,
+        # то есть 8,9 с в одном прогоне и 0 в следующем — замер 31.10.2026:
+        # 33,9 с и 26,2 с на одном и том же корпусе.
+        if len(ready) <= retain + max(1, batch) - 1:
+            return []
         removed: list[str] = []
         for rev_id in ready[retain:]:
             if rev_id in keep:  # pragma: no cover
@@ -252,19 +344,28 @@ class ControlStore:
             removed.append(rev_id)
         self.conn.commit()
         return removed
-
     def _purge_rev_data(self, rev_id: str) -> None:
-        """Удаление данных ревизии из графа и лексики. drift не трогается."""
+        """Удаление данных ревизии из графа, лексики и каталога CPG.
+
+        Список таблиц ВЫЧИСЛЯЕТСЯ по схеме (`storage.tables_with_rev`), а не
+        пишется здесь руками. Рукописный список не пополнялся, и документный
+        слой (`document_chunk`, `document_node`, `document`) прожил вне политики:
+        замер 30.10.2026 — 7 729 196 строк от 265 ревизий, которых в истории уже
+        нет, 8,12 ГБ при 61 МБ свободных страниц. Ротация «работала» и не
+        освобождала ничего: удалять было нечего из её списка.
+
+        Артефакты CPG удаляются вместе с ревизией: файл `.cpg.bin`, распакованный
+        каталог Joern и выгрузка `neo4jcsv`. Замер там же: 17,8 ГБ в `.ragraf/cpg`
+        от 473 ревизий, данных которых в хранилищах нет; артефакт восстанавливается
+        переиндексацией, поэтому хранить его для ротированной ревизии нечего.
+        """
+        from . import storage as storage_mod
+
         if self.cfg.graph_db.exists():
             conn = store.connect(self.cfg.graph_db)
             try:
-                for table in (
-                    "file", "node", "edge", "text_chunk", "cfg_edge", "dfg_edge",
-                    "db_table", "db_column", "db_fk", "web_route", "invalidated",
-                    "coverage", "stage_timing",
-                ):
-                    if store.table_exists(conn, table):
-                        conn.execute(f"DELETE FROM {table} WHERE rev_id = ?", (rev_id,))
+                for table in storage_mod.tables_with_rev(conn):
+                    conn.execute(f"DELETE FROM {table} WHERE rev_id = ?", (rev_id,))
                 conn.execute("DELETE FROM rev WHERE rev_id = ?", (rev_id,))
                 conn.commit()
             finally:
@@ -272,32 +373,44 @@ class ControlStore:
         if self.cfg.lexvec_db.exists():
             conn = store.connect(self.cfg.lexvec_db)
             try:
-                # В vec0 нет колонки rev_id: идентификаторы собираем из vec_meta.
-                try:
-                    ids = [
-                        str(r["chunk_id"])
-                        for r in conn.execute(
-                            "SELECT chunk_id FROM vec_meta WHERE rev_id = ?", (rev_id,)
-                        ).fetchall()
-                    ]
-                except sqlite3.Error:
-                    ids = []
-                for table in ("ft_chunk", "chunk_map", "vec_meta", "chunk_text"):
-                    if store.table_exists(conn, table):
-                        conn.execute(f"DELETE FROM {table} WHERE rev_id = ?", (rev_id,))
-                if store.table_exists(conn, "vec_chunk") and ids:
-                    for start in range(0, len(ids), 400):
-                        part = ids[start : start + 400]
-                        marks = ",".join("?" for _ in part)
-                        try:
+                for table in storage_mod.tables_with_rev(conn):
+                    conn.execute(f"DELETE FROM {table} WHERE rev_id = ?", (rev_id,))
+                # Векторы убираются ТОЛЬКО осиротевшие — после удаления строк
+                # ревизии. Прежняя редакция удаляла их по chunk_id удаляемой
+                # ревизии, но не удаляла НИЧЕГО: расширение vec0 на этом
+                # соединении не загружалось, `table_exists` отвечал True (имя
+                # есть в sqlite_master), DELETE падал с «no such module: vec0»,
+                # а ошибка глушилась `break`. Замер 31.10.2026 на корпусе ragraf:
+                # 19 709 строк из 41 356 (48 %) были недостижимы для поиска и
+                # никем не убраны.
+                if store.table_exists(conn, "vec_chunk"):
+                    store.try_load_extension(conn, "vec0")
+                    try:
+                        referenced = {
+                            str(r[0])
+                            for r in conn.execute("SELECT chunk_id FROM vec_meta")
+                        }
+                        orphan = [
+                            str(r[0])
+                            for r in conn.execute("SELECT chunk_id FROM vec_chunk")
+                            if str(r[0]) not in referenced
+                        ]
+                        for start in range(0, len(orphan), 400):
+                            part = orphan[start : start + 400]
+                            marks = ",".join("?" for _ in part)
                             conn.execute(
-                                f"DELETE FROM vec_chunk WHERE chunk_id IN ({marks})", tuple(part)
+                                f"DELETE FROM vec_chunk WHERE chunk_id IN ({marks})",
+                                tuple(part),
                             )
-                        except sqlite3.Error:
-                            break
+                    except sqlite3.Error:
+                        # Векторный слой недоступен: строки ревизии уже удалены,
+                        # остаток векторов уберёт отдельная уборка `compact`.
+                        pass
                 conn.commit()
             finally:
                 conn.close()
+        # Артефакты CPG ревизии: три пути, без обхода всего каталога.
+        storage_mod.remove_artifacts(self.cfg, [rev_id])
 
     # ---------------- события ----------------
 
@@ -374,14 +487,15 @@ class GraphWriter:
         )
 
     def add_edges(self, rows: list[tuple]) -> int:
-        return store.executemany_chunked(
-            self.conn,
-            """INSERT OR REPLACE INTO edge(rev_id, edge_uid, src, dst, kind, provenance,
-                                          evidence_path, evidence_line, confidence, sources, props)
-               VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            rows,
-            batch=self.cfg.index.batch_size,
-        )
+        """Записать рёбра ревизии.
+
+        Вид доказательства связи (этап 8) вычисляется НЕ здесь, а в
+        `store.insert_edges`: через него пишут все производители рёбер (разбор
+        деревом, разрешение имён, слияние CPG), поэтому правило одно. Свой
+        классификатор в этом методе означал бы второй список правил, который
+        разошёлся бы с первым молча.
+        """
+        return store.insert_edges(self.conn, rows, batch=self.cfg.index.batch_size)
 
     def add_text_chunks(self, rows: list[tuple]) -> int:
         return store.executemany_chunked(
@@ -410,6 +524,25 @@ class GraphWriter:
             rows,
             batch=self.cfg.index.batch_size,
         )
+
+    def count_files(self, rev_id: str) -> int:
+        """Фактическое число ФАЙЛОВ ревизии в таблице, а не длина списка строк.
+
+        Причина та же, что у узлов и рёбер, и измерена 29.10.2026: ключ таблицы `file` —
+        (rev_id, path), поэтому файл, обработанный дважды (документный слой и разбор
+        деревом), перезаписывает свою строку, а длина списка остаётся больше. Для `.html`
+        в режиме `document` это давало ровно +4 файла на корпусе RAGRAF, и ревизия
+        называла 912/910/914 файлов при фактических 908/910.
+
+        Считается DISTINCT path: перезапись строки не должна выглядеть как новый файл.
+        """
+        try:
+            row = self.conn.execute(
+                "SELECT COUNT(DISTINCT path) AS n FROM file WHERE rev_id = ?", (rev_id,)
+            ).fetchone()
+            return int(row["n"]) if row else 0
+        except sqlite3.Error:
+            return 0
 
     def count_edges(self, rev_id: str) -> int:
         """Фактическое число рёбер ревизии в таблице.

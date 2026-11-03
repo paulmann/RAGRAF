@@ -36,9 +36,10 @@ from pathlib import Path
 from typing import Any
 
 from . import util
+from . import paths
 
 REPO = Path(__file__).resolve().parents[2]
-CATALOG_DIR = REPO / "catalog"
+CATALOG_DIR = paths.catalog_dir()
 
 DIALECTS = ("mysql", "postgresql")
 

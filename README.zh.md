@@ -3,7 +3,7 @@
 <!-- md-i18n:switcher -->
 **其他语言：** [Русский](README.ru.md) · [Deutsch](README.de.md) · [English](README.md) · [Español](README.es.md) · [हिन्दी](README.hi.md) · 中文
 
-> **0.4.0 完整译本。** 本文件是主文档 [`README.md`](README.md) 的中文译本：改动只发生在主文档，两者不一致时以英文文本为准。本译本状态：27.10.2026。
+> **0.5.0 完整译本。** 本文件是主文档 [`README.md`](README.md) 的中文译本：改动只发生在主文档，两者不一致时以英文文本为准。本译本状态：27.10.2026。
 
 **面向 LLM 智能体的图-向量代码知识库。**
 
@@ -12,11 +12,11 @@
 [![License](https://img.shields.io/badge/license-BUSL--1.1-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.13%2B-informational)](pyproject.toml)
 
-![RAGRAF — 面向 LLM 智能体的图-向量代码知识库：61 个 MCP 工具、带 file:line 引用的可验证事实、完全本地运行](assets/social-preview.png)
+![RAGRAF — 面向 LLM 智能体的图-向量代码知识库：74 个 MCP 工具、带 file:line 引用的可验证事实、完全本地运行](assets/social-preview.png)
 
 [**快速开始**](#第一步) · [**文档**](#文档) · [**Wiki**](https://github.com/paulmann/RAGRAF/wiki) · [**更新日志**](CHANGELOG.md) · [**English version**](README.md)
 
-> **文档状态。** 下文每个数字都在 2026 年 10 月 26–27 日针对 0.4.0 版实测；RAGRAF 索引的规模由 `Test-DocumentedNumbers` 与活动修订记录比对，属于过去修订的数字会让发布闸门失败，而不会被当成今天的实测值放过。
+> **文档状态。** 下文每个数字都在 2026 年 10 月 28–29 日针对 0.5.0 版实测；RAGRAF 索引的规模由 `Test-DocumentedNumbers` 与活动修订记录比对，属于过去修订的数字会让发布闸门失败，而不会被当成今天的实测值放过。
 
 一个回答智能体关于代码库问题的助手——*代码在哪里、谁在调用它、改动会破坏什么、附近类似功能是怎么做的*——给出可验证的事实（`file:line`），而不是盲目的 `rg` 和整文件通读。Python 3.13+、SQLite（图 + FTS5 + 向量在同一个地方）、tree-sitter、无需 torch 的本地嵌入。可选的代码属性图层（Java + Joern）解锁切片；没有它，产品照常工作，并如实说明这一点。
 
@@ -63,11 +63,14 @@ RAGRAF 用索引取代这条路径。智能体通过固定操作提问，得到�
 
 ## 能力
 
-**54 个操作**作用于代码仓库——固定集合，没有面向图的查询语言：
+**67 个操作**作用于代码仓库——固定集合，没有面向图的查询语言：
 
 | 操作 | 回答什么问题 |
 |---|---|
-| `search` | 关于这件事写在哪里（混合检索：BM25 词法 + 向量） |
+| `search` | 关于这件事写在哪里（混合检索：BM25 词法 + 向量）；`mode=code` 只看代码，`mode=docs` 增加主题层 |
+| `doc_search_levels` | 一次回答给出两个层级：本地事实（片段及其 `path:line`）与全局层级——这些片段所属文档图中的实体与关系。层间联系是明说的：命中项上的 `via_entities`、全局事实上的 `via_chunk`。`mode` 取 `local`、`global` 或 `both`（默认）；本地层级不受版本限制，全局层级需要 `doc-graph` |
+| `themes` | 文档图的主题：共同出现的实体分组，每个成员带引用地址；若有模型，附基于引用的摘要（否则 `summary=null` 并给出原因）。确定性：同一层始终给出相同的 `theme_id` |
+| `global_overview` | 文档图的地图：文档、实体、关系、主题、摘要，以及带地址的主要主题——回答「这里总体上有什么」，而不是「查询命中了什么」 |
 | `search_multi` | 哪几处同时出现多个字符串；哪些文件互为副本、哪一份是活跃的 |
 | `duplicates` | 哪些文件互为副本，以及靠什么证明哪一份是活跃的 |
 | `entrypoints` | 入口点：路由、HTTP 处理器、CLI、标记中的端点 |
@@ -103,7 +106,19 @@ RAGRAF 用索引取代这条路径。智能体通过固定操作提问，得到�
 
 另有两种模式不是操作，而是回答的形式：**`answer=true`** 返回带引用的成文回答，而不是结构化结果（P2-2）；`brief=true` 返回回答的简短外壳。`usage` 给出效果指标（`saved_calls`、`hit_rate`、`avg_ms`、`misses`、`stale_served`）。
 
-同一批操作也以 **61 个 MCP 工具**（`ragraf_*`）提供——用于作为服务器接入智能体，同时也通过 CLI 提供。其中一组工具是数据库活层：`ragraf_db_schema`、`ragraf_db_table`、`ragraf_db_relations`、`ragraf_db_sample`、`ragraf_db_drift`、`ragraf_db_cross`。封闭层级（enterprise 版）的两个操作以工具形式声明：`ragraf_license_offline`（离线许可证：申请、签发、接受、转移）与 `ragraf_attest_bundle`（交付认证：带签名的证据包及其校验）。质量回路（pro 版）是 `ragraf_quality_suite`（索引检查套件加运行记录）、`ragraf_quality_diff`（两次运行之间的差异）与 `ragraf_quality_prune`（精简运行日志：默认只做演练，删除仅在确认并在日志副本之后）。共享索引的三个操作（同样属于 pro）不在 MCP 集合里：它们管理发布与网络通道，而不是索引读取，以 `python -m ragraf.shared_index` 运行（见 `docs/03_implementation/SHARED-INDEX.md`）。机密代理（pro）由两个工具表示——`ragraf_broker_issue`（租约：期限、保管人、原因、一次性兑换）与 `ragraf_broker_rotate`（计划状态、排期、带租约撤销的轮换）；租约状态存放在 `catalog/broker.json`，存储模式不变。
+**搜索有两层。** 带 `mode=docs` 的 `search` 会把请求拆成主题（`high_level`）与具体术语
+（`low_level`），并用主题去匹配文档图的实体：一个从未出现「许可」字样的片段，仍然可能
+在讲许可——主题层通过实体的提及地址把它找出来。词法结果保持不变：主题层只**追加**
+命中，每条都带 `match_kind`（`lexical`、`vector`、`entity`）与地址 `path:起-止`；没有
+地址的命中一律不返回。键按提示词版本缓存，因此重复提问不产生费用。当这一层无法工作
+时，回答会在 `degraded` 中说明原因（`edition`、`llm_unavailable`、`layer_empty`、
+`no_keys`），`mode=docs` 退化为普通词法，而不是假装什么都没找到。
+
+**同样两个层级、一次回答**由 `doc_search_levels` 给出：本地事实与全局层级，层间联系明说——`via_entities` 与 `via_chunk`。该操作放在 `search` 旁边而不是里面，因为 `search` 的契约是扁平列表，既有测量与客户端都依赖它。空层绝不会被报告为「没有关系」：它有自己的代码（`layer_empty`）和自己的原因；在 `mode=both` 下，回答会在 `limits` 中点明全局层级不完整，同时仍然返回本地事实。
+
+**主题与图的地图。** `themes` 返回文档图的实体分组——确定性：同一层始终给出相同的 `theme_id`——每个成员都带引用地址；若有模型，附基于引用的摘要，没有模型时主题保留而 `summary=null` 说明原因。`global_overview` 回答「这里总体上有什么」：文档、实体、关系、主题、摘要，以及带地址的主要主题。两者都读取文档图，缺少 `doc-graph` 能力时拒绝执行；分组本身不需要模型（`ragraf docgraph themes`）。
+
+同一批操作也以 **74 个 MCP 工具**（`ragraf_*`）提供——用于作为服务器接入智能体，同时也通过 CLI 提供。其中一组工具是数据库活层：`ragraf_db_schema`、`ragraf_db_table`、`ragraf_db_relations`、`ragraf_db_sample`、`ragraf_db_drift`、`ragraf_db_cross`。封闭层级（enterprise 版）的两个操作以工具形式声明：`ragraf_license_offline`（离线许可证：申请、签发、接受、转移）与 `ragraf_attest_bundle`（交付认证：带签名的证据包及其校验）。质量回路（pro 版）是 `ragraf_quality_suite`（索引检查套件加运行记录）、`ragraf_quality_diff`（两次运行之间的差异）与 `ragraf_quality_prune`（精简运行日志：默认只做演练，删除仅在确认并在日志副本之后）。共享索引的三个操作（同样属于 pro）不在 MCP 集合里：它们管理发布与网络通道，而不是索引读取，以 `python -m ragraf.shared_index` 运行（见 `docs/03_implementation/SHARED-INDEX.md`）。机密代理（pro）由两个工具表示——`ragraf_broker_issue`（租约：期限、保管人、原因、一次性兑换）与 `ragraf_broker_rotate`（计划状态、排期、带租约撤销的轮换）；租约状态存放在 `catalog/broker.json`，存储模式不变。
 第二十四个是 `use_project`：当一个服务器服务多个项目时选择语料。`context` 回答选中了哪个语料、依据是什么——没有它，关于别的项目的回答与本项目的回答无法区分。
 
 **二十九种语言**被解析成语法树（图的节点与边）。其中十六种由配置文件描述节点映射：PHP、Python、JavaScript、TypeScript、Java、C#、C、C++、Ruby、Lua、Go、Perl、bash、PowerShell、CSS、HTML。其余十三种（Rust、Kotlin、Swift、Scala、Dart、R、F#、OCaml、Solidity、Fortran、MATLAB、Elm、Lisp）从语法自身的标签查询获取节点名：它们的节点名与熟悉的那些不一致，而为每种语言写一份配置等于凭空发明名字。每种语言都在样例文件上校验——至少找到一个符号（`tests/test_new_languages.py`）。
@@ -111,6 +126,8 @@ RAGRAF 用索引取代这条路径。智能体通过固定操作提问，得到�
 另有四十种以纯文本方式接入：搜索能找到这些文件，但它们不产生节点。它们是 Julia、Elixir、Erlang、Haskell、Clojure、Groovy、Visual Basic、Pascal/Delphi、Objective-C、Zig、Nim、Crystal、Tcl、Prolog、Ada、Verilog、VHDL、汇编、HCL/Terraform、Dockerfile、Makefile、CMake、SCSS、Less、Vue、Svelte、GraphQL、Protobuf、SQL、batch、Markdown、RST、YAML、JSON、TOML、INI、XML、纯文本以及 `document` 语言。
 
 **文档被完整索引，包括旧版本。** Word：`.docx`、`.docm`、`.dotx` 与 `.doc`（Word 97 通过专用的 OLE 解析器，不用 LibreOffice）。Excel：`.xlsx`、`.xlsm`、`.xltx` 与 `.xls`（BIFF8）。PowerPoint：`.pptx`、`.pptm`、`.ppsx`、`.potx` 与 `.ppt`。此外还有 PDF、OpenDocument（`.odt`、`.ods`、`.odp`、`.odg`）、EPUB、RTF、`.eml` 与 `.msg` 邮件，以及 WPS Office 文件。没有解析器的格式（Pages、OneNote、CHM、DjVu、`.xlsb`）不会假装是空文档——它们会带着原因被报告。
+**文档的每个分块都有地址，而且地址可以反向解析。** 章节记作 `路径#标题/部分`，表格单元格块记作 `路径#工作表:Sheet1!A1:C20`，邮件引用记作 `路径#msg-id/部分`；`doc_get` 接收地址并返回正文，因此引用可以核对，而不必相信。分块预算为 1200 个记号（工作表和较长的流程文档为 950），超出预算的分块会让索引检查失败——该检查在修订完成与封存之间运行，因此错误的分块永远不会成为生效索引。该层由四个操作覆盖：`doc_search`、`doc_get`、`doc_status`、`doc_validate`。扫描件文字识别属于专业版能力（`doc_ocr`），默认关闭：需要本地安装语言包，而索引里的错误识别文本比诚实的拒绝更糟。
+
 
 索引哪些内容在面板里选择：**设置 → 「格式」选项卡**——84 种格式按类别分组（语言、文档、数据），可按名称、扩展名和解析方式筛选，有「全部」/「无」按钮和已启用条目计数。默认启用所有格式，`*` 表示「全部，包括以后新增的」。禁用一种格式会改变语料内容，并在下一次新鲜度检查时触发重新索引。
 
@@ -170,25 +187,38 @@ pwsh -File scripts/install.ps1 -WithTruststore
 
 ### 其他平台
 
-一条通用路径，适用于任何有 Python 3.13+ 的地方：
+2026-11-01 在干净的 Debian 12 上测量（无 sudo，系统 Python 3.11）；带数字的完整协议见 `docs/03_implementation/INSTALL-FROM-SCRATCH.md`。
 
 ```bash
-git clone https://github.com/paulmann/RAGRAF.git
-cd RAGRAF
-python -m venv .venv
-. .venv/bin/activate            # Windows: .venv\Scripts\Activate.ps1
-pip install -e .                # 或：pip install -r requirements.txt
+# 1. Python 3.13 if the system has an older one (no root needed):
+curl -sSL -o py.tar.gz https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.13.18+20261026-x86_64-unknown-linux-gnu-install_only.tar.gz
+mkdir -p python && tar xzf py.tar.gz -C python --strip-components=1
+
+# 2. Install and check:
+./python/bin/python3 -m venv .venv
+. .venv/bin/activate
+pip install ragraf-0.5.6-py3-none-any.whl    # or: pip install -e .   (from a checkout)
 ragraf --version
+
+# 3. First corpus without downloading the embedding model:
+ragraf init /path/to/project
+ragraf ensure --no-vectors /path/to/project
+ragraf -p ~/.ragraf/config/<name>.yaml query search "your query"
 ```
 
-不安装包产品也能工作——通过一个自己把 `src/` 加入路径的包装器：
+这条安装路径依赖三件事：
+
+- **状态存放在解释器之外**：`~/.ragraf/` 保存注册表、设置、密钥、许可证和语料配置（`RAGRAF_HOME` 可整体改掉该目录）。工作副本仍使用自己的 `catalog/` 和 `config/`，只有已安装的包使用主目录。因此升级虚拟环境不会丢索引。
+- **`ensure --no-vectors`** 构建词法索引，不下载模型。语义搜索需要模型；首次带向量运行会下载约 240 MB，并在开始前写进报告。
+- **安装三个命令**：`ragraf`、`ragraf-mcp`（stdio MCP 服务器）和 `ragraf-admin`（面板）。工作副本里的 `tools/*.py` 包装脚本照常可用。
+
+不安装包也能运行——通过一个自己把 `src/` 加进路径的包装脚本：
 
 ```bash
 python tools/ragraf.py --version
 ```
 
-> `scripts/install.ps1` 已在 Windows 上验证（PowerShell 7.6、Python 3.14.7）。Linux 和 macOS 上的 `pip` 路径**未验证**——产品的开发和实测都在 Windows 上进行。
-
+> `scripts/install.ps1` 已在 Windows 上验证（PowerShell 7.6、Python 3.14.7），现在也使用同一个主目录 `~/.ragraf`。Linux 上的 `pip` 路径自 2026-11-01 起已验证；macOS 未测量（实验室里没有 Mac）。
 ### 外部层：Java 与 Joern（可选）
 
 跨过程图（`slice` 操作）需要 JDK 21 和 Joern。没有它们产品照样工作：索引会构建，检索和结构可用，`slice` 会带着原因拒绝。
@@ -257,6 +287,16 @@ ragraf -p <config> usage              # 遥测：调用、事实、效果评估
 
 `--project` 是必需的。`--agent` 和 `--agent-kind` 只用于按智能体分别统计访问：没有它们，调用会以 `unknown` 记入日志。
 
+### Claude Code：用插件代替手工接线
+
+Claude Code 2.1.316 可以把整套集成——MCP 服务器、四个钩子、`ragraf-core` 技能和两个斜杠命令——作为
+一个插件安装。只需添加一次市场：`/plugin marketplace add paulmann/RAGRAF`，然后
+`/plugin install ragraf@ragraf`。该插件是 **Community** 版本：搜索、符号图、来自迁移的数据库模式、实时数
+据库层与审计无需许可文件即可使用。Pro 功能（`doc-ocr`、`doc-graph` 等）会说明所属版本并拒绝，其条款在插件
+内的 `EULA.md`。每个钩子做什么、在上下文中占多少（常驻约 120 个 token）以及边界在哪里，见
+`docs/03_implementation/CLAUDE_PLUGIN.md`。上面的手工 `.mcp.json` 仍然有效，见
+`docs/03_implementation/CLAUDE_CODE_INTEGRATION.md`。
+
 ### 设置面板
 
 ```bash
@@ -304,6 +344,7 @@ pip install truststore      # 或：install.ps1 -WithTruststore
 | `docs/03_implementation/INTEGRATION.md` | 接入智能体：MCP、工作规则、规程 |
 | `docs/03_implementation/AGENTS_SETUP_AND_CAPABILITIES.md` | 在 HARNESS 与 AutoClaw 中的安装，完整能力目录 |
 | `docs/03_implementation/HARNESS_INTEGRATION.md` | DeepSeek Harness：MCP、技能、规则、闸门 |
+| `docs/03_implementation/CLAUDE_PLUGIN.md` | Claude Code 插件：市场、钩子、Community 版本、目录提交 |
 | `docs/03_implementation/AUTOCLAW_INTEGRATION.md` | AutoClaw：MCP、技能、规则、回滚 |
 | `docs/03_implementation/CPG_INTEGRATION.md` | 代码属性图：Joern、JDK、降级模式 |
 | `docs/skills/ragraf-core/SKILL.md` | 使用索引的技能：选操作、恢复 |
@@ -359,11 +400,11 @@ python tools/ragraf.py ensure .
 
 ## 用数字看项目与实测基准
 
-公开发表的数字（2026-10-27 核对；索引规模取自活动修订记录）：外观上的 **54 个操作**、**61 个 MCP 工具**、**21** 个 CLI 子命令、**29** 种语法树语言与 **40** 种文本接入语言（包括 `document`）、登记表中 **84** 种数据格式（61 种语言、9 类文档家族、10 类数据、4 种无解析器）；RAGRAF 自身索引——875 个文件、5 313 个节点、70 556 条边（快照由 `Test-DocumentedNumbers` 与活动修订记录比对：属于过去修订的数字会给出带其 `rev_id` 与日期的警告，而在发布时这就是拒绝——`tools/release/gate_release.py`；活动数字来自 `python tools/ragraf.py -p config/ragraf.yaml status`）。
+公开发表的数字（2026-11-03 核对；索引规模取自活动修订记录）：外观上的 **67 个操作**、**74 个 MCP 工具**、**22** 个 CLI 子命令、**29** 种语法树语言与 **40** 种文本接入语言（包括 `document`）、登记表中 **84** 种数据格式（61 种语言、9 类文档家族、10 类数据、4 种无解析器）；RAGRAF 自身索引——1 037 个文件、6 524 个节点、90 852 条边（快照由 `Test-DocumentedNumbers` 与活动修订记录比对：属于过去修订的数字会给出带其 `rev_id` 与日期的警告，而在发布时这就是拒绝——`tools/release/gate_release.py`；活动数字来自 `python tools/ragraf.py -p config/ragraf.yaml status`）。
 
 **试验场，已去个人化**（去掉项目名、路径和域名）。本节的数字是 **2026-10-16 的快照**，不是当前状态：当时登记册里有 **28 个语料、25 个已索引**——10 个带 CPG 层，15 个处于 `degraded` 模式。其中 16 个的修订记录在同一天读过：**7 527 个文件、94 528 个符号、791 871 条边、86 790 个分块**。
 
-登记册的当前规模故意与快照分开：它每接入一个项目就会变，把它放进下表会把昨天的测量冒充成今天的。它单独占一行，并与 `catalog/catalog.json` 比对——**按 2026-10-28 的登记册：42 个语料、33 个已索引**。有一项检查盯着这个数字：它一旦与登记册不符，那就是一条发现，而不是一行过时的文字。
+登记册的当前规模故意与快照分开：它每接入一个项目就会变，把它放进下表会把昨天的测量冒充成今天的。它单独占一行，并与 `catalog/catalog.json` 比对——**按 2026-11-03 的登记册：45 个语料、37 个已索引**。有一项检查盯着这个数字：它一旦与登记册不符，那就是一条发现，而不是一行过时的文字。
 
 | 语料 | 类型 | 文件 | 符号 | 边 | 模式 |
 |---|---|---|---|---|---|

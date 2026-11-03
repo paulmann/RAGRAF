@@ -60,9 +60,15 @@ def main() -> int:
 
     conn = store.connect(cfg.graph_db, readonly=True)
     try:
+        # Берётся ЗАВЕРШЁННАЯ ревизия (`state='ready'`), а не просто
+        # последняя по номеру. Замер 28.10.2026 (задание И42): при
+        # параллельной переиндексации последней оказывалась ревизия в
+        # состоянии `building` с нулём узлов, и проверка краснела двумя
+        # провалами по чужой причине — предмет у неё «режим соответствует
+        # проиндексированному графу», а не состояние чужой сборки.
         row = conn.execute(
             "SELECT rev_id, capability, node_count, edge_count, joern_used"
-            " FROM rev ORDER BY rev_id DESC LIMIT 1"
+            " FROM rev WHERE state = 'ready' ORDER BY rev_id DESC LIMIT 1"
         ).fetchone()
         if row is None:
             check(False, "последняя ревизия найдена", "таблица rev пуста")

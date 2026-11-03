@@ -1,0 +1,197 @@
+# Набор живых вопросов к корпусу RAGRAF — мера ПОЛЬЗЫ, а не скорости.
+#
+# Зачем отдельный файл. Точность поиска мерилась на наборе `impact`/`callers`
+# (tools/measure_impact_precision.py), где цель — имя символа. Агент же
+# спрашивает словами: «где решается, что индекс устарел». Такой вопрос
+# проверяет другое: попадёт ли файл-цель в ответ с ПЕРВОГО запроса и сколько
+# кандидатов придётся просмотреть.
+#
+# Правило, без которого замер превращается в подгонку: набор фиксируется ДО
+# просмотра ответов индекса и остаётся контрольным. По нему нельзя настраивать
+# веса и пороги поиска — иначе измеряется не польза, а попадание в собственный
+# набор (сказано в `src/ragraf/lexvec.py`, `search_hybrid`).
+#
+# Поля:
+#   id      — идентификатор вопроса;
+#   kind    — вид материала цели: code | tool | doc | test;
+#   question— формулировка, как её задаёт агент: без имён функций и констант,
+#             иначе лексический канал получает подсказку, которой у агента нет;
+#   targets — файлы, которые ОТВЕЧАЮТ на вопрос (проверено чтением файла);
+#   anchor  — слова, которыми искали бы БЕЗ индекса (`rg`); по ним считается
+#             базовая линия «сколько файлов пришлось бы просмотреть»;
+#   note    — чем подтверждено, что цель отвечает.
+#
+# Составлен 01.11.2026 по устройству кода. Изменение набора — событие: оно
+# меняет контрольную линию, поэтому правка фиксируется в отчёте этапа.
+
+version: 1
+fixed_at: "2026-11-01"
+
+questions:
+  - id: q01
+    kind: code
+    question: "Чем сторож доказывает, что код не менялся с прошлой пересборки, не перечитывая файлы"
+    targets: ["src/ragraf/watch.py"]
+    anchor: ["fingerprint"]
+    note: "watch.quick_check и stat_fingerprint — отпечаток входа без чтения содержимого"
+
+  - id: q02
+    kind: code
+    question: "Где считается контрольная сумма корпуса и почему файлы перед этим сортируются"
+    targets: ["src/ragraf/corpus.py"]
+    anchor: ["corpus_hash"]
+    note: "corpus.scan/corpus_hash: сортировка по пути обязательна для детерминизма"
+
+  - id: q03
+    kind: code
+    question: "Почему при слиянии результатов поиска точные слова важнее смысловой близости"
+    targets: ["src/ragraf/lexvec.py"]
+    anchor: ["RRF"]
+    note: "search_hybrid: веса каналов 1.0/0.6 и штраф за чанки вида file"
+
+  - id: q04
+    kind: code
+    question: "Как в журнал обращений попадает, кто именно вызвал операцию и в рамках какой задачи"
+    targets: ["src/ragraf/telemetry.py"]
+    anchor: ["agent_kind"]
+    note: "CallRecord/Telemetry: поля agent, agent_kind, task"
+
+  - id: q05
+    kind: code
+    question: "Откуда берётся закрытый перечень допустимых значений настройки"
+    targets: ["src/ragraf/settings.py"]
+    anchor: ["ENUM_KEYS"]
+    note: "settings.ENUM_KEYS — опечатка отклоняется, а не создаёт новый режим"
+
+  - id: q06
+    kind: code
+    question: "По какому признаку каталог считается проектом, а корпус для него не создаётся"
+    targets: ["src/ragraf/ensure.py"]
+    anchor: ["looks_like_project"]
+    note: "ensure.looks_like_project: маркеры, домашний каталог, корень диска, служебные имена"
+
+  - id: q07
+    kind: tool
+    question: "Как из общего дерева вырезаются закрытые модули при сборке платной поставки"
+    targets: ["tools/release/manifest-enterprise.toml"]
+    anchor: ["pro_only"]
+    note: "манифест Enterprise: поле pro_only объявляет, чего нет в Community-сборке"
+
+  - id: q08
+    kind: doc
+    question: "Как устроено хранилище секретов и что попадает в аудит выдачи значения"
+    targets: ["docs/03_implementation/SECRETS-VAULT.md"]
+    anchor: ["хранилище секретов"]
+    note: "модель угроз и порядок выдачи значения с причиной"
+
+  - id: q09
+    kind: code
+    question: "Как строится граф свойств кода через внешний анализатор и что будет, если его нет"
+    targets: ["src/ragraf/cpg.py"]
+    anchor: ["Joern"]
+    note: "cpg.py: долгоживущий сервер, откат к отдельным процессам, degraded без Java"
+
+  - id: q10
+    kind: code
+    question: "Как сверяется схема миграций с живой базой и что считается расхождением"
+    targets: ["src/ragraf/drift.py"]
+    anchor: ["drift"]
+    note: "drift.py: журнал расхождений, append-only, сверка схемы"
+
+  - id: q11
+    kind: tool
+    question: "Откуда в описании проекта берутся числа файлов, узлов и рёбер индекса"
+    targets: ["tools/registry_line.py"]
+    anchor: ["rev_history"]
+    note: "registry_line: источник — запись ревизии, а не документ и не память"
+
+  - id: q12
+    kind: code
+    question: "Какой список каталогов исключается из индексации всегда и почему его нельзя расширять наугад"
+    targets: ["src/ragraf/config.py"]
+    anchor: ["DEFAULT_EXCLUDES"]
+    note: "config.DEFAULT_EXCLUDES: 28 шаблонов, регистрозависимое сопоставление"
+
+  - id: q13
+    kind: code
+    question: "Как документ получает роль: техническое задание, отчёт, правила агента"
+    targets: ["src/ragraf/docrole.py"]
+    anchor: ["роль документа"]
+    note: "docrole: роль по имени файла, для ТЗ — по первым строкам"
+
+  - id: q14
+    kind: code
+    question: "Где объявлены инструменты, которые сервер отдаёт агенту, и как они называются"
+    targets: ["src/ragraf/mcp_server.py"]
+    anchor: ["ragraf_search"]
+    note: "mcp_server: объявления инструментов с префиксом ragraf_"
+
+  - id: q15
+    kind: code
+    question: "Как схлопываются побайтово одинаковые копии документа и какая копия остаётся главной"
+    targets: ["src/ragraf/dedupe.py"]
+    anchor: ["cleanest"]
+    note: "dedupe: правило cleanest, ничья разрешается путём"
+
+  - id: q16
+    kind: doc
+    question: "Какой объём занимает хранилище индекса и что удаляется вместе с ревизией"
+    targets: ["docs/03_implementation/STORAGE.md"]
+    anchor: ["ротаци"]
+    note: "политика хранения: объём, ротация, восстановление"
+
+  - id: q17
+    kind: test
+    question: "Какая проверка следит за тем, чтобы числа в документах совпадали с кодом"
+    targets: ["tests/test_documented_numbers.py"]
+    anchor: ["документах"]
+    note: "test_documented_numbers: числа поверхности сверяются с кодом"
+
+  - id: q18
+    kind: test
+    question: "Где проверяется, что проверки не трогают живое состояние реестра разработок"
+    targets: ["tests/test_state_isolation.py"]
+    anchor: ["RAGRAF_CATALOG_DIR"]
+    note: "test_state_isolation: наборы работают в своей копии реестра"
+
+  - id: q19
+    kind: code
+    question: "Что отвечает проверка плана записи, если колонки в таблице нет"
+    targets: ["src/ragraf/facade.py"]
+    anchor: ["write_check"]
+    note: "op_write_check: отсутствующие колонки и ближайшие существующие имена"
+
+  - id: q20
+    kind: tool
+    question: "Из чего состоит публикация релиза: сборка, проверка и решающий гейт"
+    targets: ["tools/release/gate_release.py"]
+    anchor: ["gate_release"]
+    note: "gate_release: решающий гейт публикации"
+
+  - id: q21
+    kind: doc
+    question: "Какие правила чистоты BOM и переводов строк и почему командные файлы не трогаются"
+    targets: ["docs/03_implementation/TEXT-HYGIENE-AUDIT.md"]
+    anchor: ["BOM"]
+    note: "аудит чистоты текста: что защищено и почему"
+
+  - id: q22
+    kind: code
+    question: "Как устроен реестр разработок и как он защищён от двух одновременных пересборок"
+    targets: ["src/ragraf/catalog.py"]
+    anchor: ["acquire_lock"]
+    note: "catalog: блокировка реестра и запись прогона"
+
+  - id: q23
+    kind: code
+    question: "Как выбирается глубина пересборки: быстрая или с построением связей"
+    targets: ["src/ragraf/watch.py"]
+    anchor: ["choose_mode"]
+    note: "watch.choose_mode: пороги накопления правок и возраст индекса"
+
+  - id: q24
+    kind: code
+    question: "Как работает гейт, который требует пользоваться индексом перед правкой кода"
+    targets: ["src/ragraf/gate.py"]
+    anchor: ["PreToolUse"]
+    note: "gate.py: решение allow/ask/deny по трём фактам"

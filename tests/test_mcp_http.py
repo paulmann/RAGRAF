@@ -2,6 +2,12 @@
 """Живая проверка MCP по Streamable HTTP: протокол, доступ, журнал.
 
 Запуск: python tests/test_mcp_http.py
+
+Порт не фиксирован. Замерено 02.11.2026: порт 8795 держал в состоянии Bound
+сторонний процесс (`avp`, антивирус), и `bind` падал с `WinError 10013` — набор
+краснел по чужой причине, а не по дефекту продукта. Поэтому порт выбирается
+проверкой свободных из диапазона и печатается в отчёте: провал по занятому
+порту маскировал бы настоящий.
 """
 
 from __future__ import annotations
@@ -19,7 +25,26 @@ for _s in (sys.stdout, sys.stderr):
         _s.reconfigure(encoding="utf-8", errors="replace")
 
 REPO = Path(__file__).resolve().parents[1]
-PORT = 8795
+
+
+def pick_port(start: int = 8795, tries: int = 20) -> int:
+    """Первый свободный порт диапазона: фиксированный может быть занят чужим."""
+    import socket
+
+    for candidate in range(start, start + tries):
+        probe = socket.socket()
+        try:
+            probe.bind(("127.0.0.1", candidate))
+        except OSError:
+            continue
+        finally:
+            probe.close()
+        return candidate
+    raise SystemExit(f"нет свободного порта в диапазоне {start}..{start + tries - 1}: "
+                     "проверка невозможна, причина внешняя")
+
+
+PORT = pick_port()
 BASE = f"http://127.0.0.1:{PORT}"
 PASSED = 0
 FAILED = 0
@@ -67,6 +92,13 @@ def main() -> int:
     from ragraf import access as access_mod
 
     store = access_mod.TokenStore()
+    # Снимок живого хранилища: проверка обязана вернуть файл БАЙТ В БАЙТ.
+    # До этапа 11 она удаляла свои записи токенов, но не строки журнала,
+    # которые сервер дописывал в тот же файл, поэтому после каждого прогона
+    # `check_all` сообщал «ЖИВОЕ СОСТОЯНИЕ ИЗМЕНЕНО наборами: access_tokens.json»
+    # и завершался кодом 1. Тест, меняющий живое состояние, нельзя считать
+    # пройденным: он оставляет след, которого не было до него.
+    snapshot = store.path.read_bytes() if store.path.exists() else None
     # Убираем прошлые проверочные записи, чтобы прогон был повторяемым.
     for record in store.all():
         if record.label.startswith("ProbeHTTP"):
@@ -217,6 +249,20 @@ def main() -> int:
                 store.delete(record.token_id)
             except Exception:
                 pass
+        # Возврат снимка: содержимое файла обязано совпасть побайтово.
+        try:
+            if snapshot is None:
+                if store.path.exists():
+                    store.path.unlink()
+            else:
+                store.path.write_bytes(snapshot)
+                access_mod._restrict(store.path)  # noqa: SLF001 — права те же, что у хранилища
+            now = store.path.read_bytes() if store.path.exists() else None
+            restored = (now == snapshot)
+        except Exception as exc:  # noqa: BLE001 — сообщаем, а не глотаем
+            restored = False
+            print(f"  [FAIL] живое хранилище не восстановлено: {exc}")
+        check(restored, "живое хранилище токенов возвращено как было")
 
     print("\n" + "=" * 78)
     print(f"ИТОГ: пройдено {PASSED}, провалено {FAILED}")

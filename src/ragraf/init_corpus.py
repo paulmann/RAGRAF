@@ -34,7 +34,7 @@ import pathlib
 from dataclasses import dataclass, field
 from typing import Any
 
-from . import util
+from . import paths, util
 
 # Карта расширений → язык берётся ИЗ ОСНОВНОГО МОДУЛЯ, а не дублируется.
 # Это важно: раньше здесь была своя копия, и она разошлась
@@ -370,8 +370,7 @@ def create_config(
     """
     root = pathlib.Path(util.to_posix(str(root))).resolve()
     name = project or root.name
-    target = config_path or (pathlib.Path(__file__).resolve().parents[2]
-                             / "config" / f"{_slug(name)}.yaml")
+    target = config_path or (paths.config_dir() / f"{_slug(name)}.yaml")
 
     if target.exists() and not overwrite:
         raise FileExistsError(

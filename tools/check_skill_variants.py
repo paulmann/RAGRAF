@@ -41,9 +41,21 @@ MCP_SERVER = REPO / "src" / "ragraf" / "mcp_server.py"
 FACADE = REPO / "src" / "ragraf" / "facade.py"
 DOCTRINE = REPO / "tools" / "Invoke-ProjectDoctrine.ps1"
 
-# Числовые заявления, которые копия обязана разделять с кодом.
-NUMBER_CLAIM = re.compile(r"(\d+)\s*(операци|инструмент|проверк)")
-NUMBER_KIND = {"операци": "ops", "инструмент": "tools", "проверк": "checks"}
+# Числовые заявления, которые файл навыка обязан разделять с кодом.
+# Основа слова, а не точная форма: после числа 5 и больше по-русски пишут
+# «проверок», «операций», «инструментов», и точная форма «проверк» в слове
+# «проверок» не встречается вообще (п-р-о-в-е-р-о-к). Замер 01.11.2026: из-за
+# этого строка «45 проверок» считалась отсутствием числового заявления.
+NUMBER_CLAIM = re.compile(r"(\d+)\s*(операци|инструмент|провер)")
+
+
+def claim_kind(word: str) -> str:
+    """Вид числа по основе слова: ops, tools или checks."""
+    if word.startswith("операци"):
+        return "ops"
+    if word.startswith("инструмент"):
+        return "tools"
+    return "checks"
 
 FAILS: list[str] = []
 EXAMINED = 0
@@ -118,6 +130,24 @@ def apply_rule(rule: dict, text: str, label: str, counts: dict[str, object]) -> 
             note(label + ": все " + str(len(used)) + " полных имён инструментов "
                       "существуют в коде")
         return
+    if kind == "bold_numbers_match_code":
+        EXAMINED += 1
+        spans = re.findall(r"\*\*(.+?)\*\*", text, re.S)
+        claims = [match for span in spans for match in NUMBER_CLAIM.finditer(span)]
+        if not claims:
+            note(label + ": действующих чисел в выделении нет — правило проверять "
+                      "нечего (исторические числа здесь не считаются утверждением)")
+            return
+        for match in claims:
+            stated = int(match.group(1))
+            kind_key = claim_kind(match.group(2))
+            actual = len(counts["tools"]) if kind_key == "tools" else int(counts[kind_key])
+            if stated != actual:
+                fail(label + ": действующее число " + str(stated) + " ("
+                     + match.group(0) + "), в коде " + str(actual))
+            else:
+                note(label + ": действующее число " + str(stated) + " совпадает с кодом")
+        return
     if kind == "numbers_match_code":
         EXAMINED += 1
         claims = list(NUMBER_CLAIM.finditer(text))
@@ -127,7 +157,7 @@ def apply_rule(rule: dict, text: str, label: str, counts: dict[str, object]) -> 
             return
         for match in claims:
             stated = int(match.group(1))
-            kind_key = NUMBER_KIND[match.group(2)]
+            kind_key = claim_kind(match.group(2))
             actual = counts[kind_key]
             if kind_key == "tools":
                 actual = len(counts["tools"])
@@ -161,8 +191,32 @@ def copy_roots(entry: dict) -> list[pathlib.Path]:
     return [candidate]
 
 
+def retarget(root: pathlib.Path) -> None:
+    """Пересчитать пути от другого корня: без этого проверку нельзя испытать.
+
+    Живой корень остаётся значением по умолчанию. Песочница нужна свойству
+    `tests/test_skill_numbers.py`: подсадка испорченного числа обязана ронять
+    проверку, а испортить живой навык ради этого нельзя.
+    """
+    global REPO, DECLARATION, MCP_SERVER, FACADE, DOCTRINE
+    REPO = pathlib.Path(root).resolve()
+    DECLARATION = REPO / "docs" / "skills" / "ragraf-core" / "VARIANTS.json"
+    MCP_SERVER = REPO / "src" / "ragraf" / "mcp_server.py"
+    FACADE = REPO / "src" / "ragraf" / "facade.py"
+    DOCTRINE = REPO / "tools" / "Invoke-ProjectDoctrine.ps1"
+
+
 def main() -> int:
     global EXAMINED
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Копии навыка: совпадение либо объявленное различие — и числа")
+    parser.add_argument("--root", default="",
+                        help="корень проверки (по умолчанию — каталог проекта)")
+    args = parser.parse_args()
+    if args.root:
+        retarget(pathlib.Path(args.root))
     if not DECLARATION.exists():
         print("FAIL: NOT-IMPLEMENTED: нет " + str(DECLARATION.relative_to(REPO))
               + " — объявлять различие нечем, а без объявления копия обязана "
@@ -264,6 +318,24 @@ def main() -> int:
                 for rule in mode.get("rules") or []:
                     apply_rule(rule, target.read_text(encoding="utf-8"),
                                label + ": " + file_name, counts)
+
+    # Правила САМОГО источника. Прежде их не было: у файлов в режиме `identical`
+    # проверялось только побайтовое совпадение копий, поэтому «39 операций» жили
+    # в источнике и во всех копиях одинаково — и одинаково неверно.
+    source_rules = declaration.get("source_rules") or {}
+    for file_name, rules in source_rules.items():
+        target = source_dir / str(file_name)
+        EXAMINED += 1
+        if not target.is_file():
+            fail("source_rules называет файл, которого нет в навыке: " + str(file_name))
+            continue
+        if not isinstance(rules, list) or not rules:
+            fail("source_rules для " + str(file_name) + ": правил нет — объявление "
+                 "ничего не проверяет")
+            continue
+        for rule in rules:
+            apply_rule(rule, target.read_text(encoding="utf-8"),
+                       "источник: " + str(file_name), counts)
 
     print()
     print("осмотрено: " + str(EXAMINED) + ", находок: " + str(len(FAILS)))

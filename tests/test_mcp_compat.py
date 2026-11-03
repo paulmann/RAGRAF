@@ -78,6 +78,10 @@ SDK_INHERITED_ENV = (
     "USERNAME",
     "USERPROFILE",
     "PROGRAMFILES",
+    # Состояние RAGRAF. Набор SDK этих имён не наследует, а без них дочерний
+    # сервер писал бы в живой `catalog/` (замер 30.10.2026, этап 7).
+    "RAGRAF_CATALOG_DIR",
+    "RAGRAF_SETTINGS_PATH",
 )
 
 PASSED = 0

@@ -205,7 +205,17 @@ def main() -> int:
 
     proc = run_hook("stop", {"hook_event_name": "Stop", "session_id": "hook-test"})
     check(proc.returncode == 0, "stop не падает", (proc.stderr or "")[:200])
-    check("отчёт по задаче" in (proc.stdout or "") or not (proc.stdout or ""),
+    # Вывод хука — ASCII-безопасный JSON (ensure_ascii=True), поэтому русский текст
+    # приходит \u-последовательностями: проверяется РАЗОБРАННОЕ поле, а не подстрока
+    # в сыром stdout. Причина в коде: клиент запускает хук в cp1252, и раньше
+    # print русского текста падал UnicodeEncodeError, а гейт превращался в «разрешить».
+    stop_payload: dict = {}
+    try:
+        stop_payload = json.loads(proc.stdout or "{}")
+    except ValueError:
+        stop_payload = {}
+    stop_text = str((stop_payload.get("hookSpecificOutput") or {}).get("additionalContext") or "")
+    check("отчёт по задаче" in stop_text or not stop_text,
           "stop отдаёт строку отчёта", (proc.stdout or "")[:140])
 
     print()

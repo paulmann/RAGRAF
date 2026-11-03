@@ -88,6 +88,21 @@ CODE_EXTS = {
 #: Какие операции индекса считаются «обращением к индексу».
 INDEX_TOOLS = ("ragraf_", "mcp__ragraf__")
 
+#: Плагин Claude Code ставит тот же сервер под своим именем: клиент строит имя
+#: инструмента как `mcp__plugin_<плагин>_<сервер>__<инструмент>`
+#: (замер 03.11.2026 по строкам клиента 2.1.316: `mcp__plugin_claude-test_browser__…`).
+#: Поэтому вызовы через плагин не начинаются с `mcp__ragraf__`, хотя это тот же
+#: сервер: без этой ветви гейт считал бы их «иным», не засчитывал использование
+#: индекса и напоминал бы о нём ровно тогда, когда им пользуются.
+PLUGIN_INDEX_RE = re.compile(r"^mcp__plugin_[a-z0-9-]+_ragraf__ragraf_")
+
+
+def is_index_tool(name: str) -> bool:
+    """Обращение к индексу: прямое имя, короткое имя или имя через плагин."""
+    text = str(name or "")
+    return (text in INDEX_TOOLS or text.startswith(INDEX_TOOLS)
+            or bool(PLUGIN_INDEX_RE.match(text)))
+
 SEARCH_RE = re.compile("|".join(SEARCH_PATTERNS), re.IGNORECASE)
 
 
@@ -122,7 +137,7 @@ def classify_call(tool_name: str, tool_input: Any) -> dict:
     path = str(payload.get("file_path") or payload.get("path") or payload.get("file")
                or payload.get("notebook_path") or "")
 
-    if any(name.startswith(prefix) for prefix in INDEX_TOOLS) or name in INDEX_TOOLS:
+    if is_index_tool(name):
         return {"kind": "index", "command": command, "path": path, "is_code": False}
 
     # Инструмент поиска по содержимому — тот же файловый поиск, что `grep` в

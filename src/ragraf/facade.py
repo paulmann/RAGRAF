@@ -22,7 +22,9 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from . import analysis, db_marks, edition as edition_mod, store, util
+from . import analysis, db_marks, edition as edition_mod, evidence as evidence_mod
+from . import formats as formats_mod
+from . import store, util
 from .config import ProjectConfig
 from .embeddings import Embedder
 from .lexvec import LexVecStore
@@ -77,6 +79,11 @@ DEFINED_LIMITS = ["статический анализ; динамика (зна
 # по направлению и списку видов рёбер, а не по достоверности.
 MIN_EDGE_CONFIDENCE = 0.5
 
+#: Версия формата снимка `index_status`. Снимок другой версии не отдаётся: в нём нет
+#: полей, которые ответ обязан называть (этап 8 добавил `edge_kinds`). Замер 30.10.2026:
+#: без версии старый снимок выдавался как свежий и не содержал разбивки по видам рёбер.
+STATUS_SNAPSHOT_VERSION = 3
+
 # Срок жизни кэша ответа `catalog` (шаг 0.4 плана). Измерено 23.10.2026:
 # полный ответ стоил 242 255 мс, потому что пересчитывал контрольные суммы
 # 36 корпусов. За 60 с состав реестра практически не меняется, а любая
@@ -85,17 +92,57 @@ CATALOG_CACHE_TTL_SEC = 60.0
 
 
 
-def _edge_passes_floor(provenance: Any, confidence: Any) -> bool:
-    """Пропускать ли ребро в обход по достоверности (см. `MIN_EDGE_CONFIDENCE`).
+def edge_floor(value: Any = None) -> float:
+    """Порог достоверности связей: из параметра операции либо значение по умолчанию.
+
+    ЗАЧЕМ ПАРАМЕТР (этап 10). Порог 0,5 был зашит в `MIN_EDGE_CONFIDENCE`, и
+    агент, не увидевший знакомой связи, не мог отличить «связи нет» от «связь
+    отсечена правилом, о котором он не знает». Теперь порог задаётся вызовом
+    (`--min-confidence` в CLI, `min_confidence` у операции), а ответ называет
+    и значение, и правило: сколько связей отсечено и что доказанные (`stated`)
+    не отсекаются ни при каком пороге.
+
+    Значение по умолчанию НЕ МЕНЯЕТСЯ: 0,5 — измеренная граница, и менять её
+    можно только замером, а не удобством.
+    """
+    if value is None:
+        return MIN_EDGE_CONFIDENCE
+    try:
+        threshold = float(value)
+    except (TypeError, ValueError):
+        raise ValueError(
+            f"порог достоверности должен быть числом 0..1, получено {value!r}"
+        ) from None
+    if not 0.0 <= threshold <= 1.0:
+        raise ValueError(
+            f"порог достоверности вне диапазона 0..1: {threshold}"
+        )
+    return threshold
+
+
+def floor_note(threshold: float, skipped: int) -> str:
+    """Строка для ответа: какое правило отсекло сколько связей."""
+    source = ("по умолчанию" if threshold == MIN_EDGE_CONFIDENCE
+              else "задан параметром min_confidence")
+    return (f"порог достоверности {threshold:g} ({source}): отсечено связей "
+            f"{skipped}; доказанные связи (stated) не отсекаются ни при каком "
+            f"пороге")
+
+
+def _edge_passes_floor(provenance: Any, confidence: Any,
+                       threshold: float | None = None) -> bool:
+    """Пропускать ли ребро в обход по достоверности (см. `edge_floor`).
 
     Правило одно на весь модуль: оно применяется и в SQL обхода (`_bfs`), и на
     выходе операции (`_graph_walk`), чтобы порог не зависел от одной строки SQL
     и не разошёлся между операциями.
     """
+    if threshold is None:
+        threshold = MIN_EDGE_CONFIDENCE
     if str(provenance or "") == "stated":
         return True
     try:
-        return float(confidence or 0.0) >= MIN_EDGE_CONFIDENCE
+        return float(confidence or 0.0) >= threshold
     except (TypeError, ValueError):
         # Нечисловая достоверность — не повод выдать связь за проверенную.
         return False
@@ -154,6 +201,128 @@ def _payload_weight_list(entries: list[dict]) -> int:
     if not entries:
         return 0
     return len(_json.dumps(entries, ensure_ascii=False))
+
+
+def _span_or_none(path, start_line, end_line, fqn):
+    """Спан символа или None, если узла нет в корпусе.
+
+    Замер 28.10.2026: `code --fqn record_fingerprint` падал с
+    `TypeError: int() argument must be ... not 'NoneType'` — у имени два узла,
+    определение в корпусе и внешняя заглушка (`kind='external'`, `path` пуст,
+    границы NULL), а границы приводились к int без проверки. Тело при этом БЫЛО
+    доступно: ответ не выдавался вовсе, то есть отказ вместо деградации.
+
+    Поэтому адресуемость проверяется по значениям, а не `try/except`: исключение
+    здесь означало бы «данные неверны», а они верны — просто узел внешний.
+    """
+    if not path:
+        return None
+    if start_line is None or end_line is None:
+        return None
+    return (str(path), int(start_line), int(end_line), fqn)
+
+
+# Закрытые перечни значений параметров: ОДНА точка на весь фасад.
+#
+# Замер 28.10.2026: `code(style="нет-такого")` молча работал как «по умолчанию»,
+# `search(kinds=["code"])` давал тихий ноль при error=None. Клиент выбирает
+# поведение параметром, поэтому неизвестное значение — отказ с перечнем, а не
+# молчаливое умолчание: иначе опечатка неотличима от «ничего не найдено».
+# Перечни совпадают с `choices` CLI там, где они объявлены (`--style`, `--detail`).
+OP_CHOICES: dict[tuple[str, str], tuple[str, ...]] = {
+    ("code", "style"): ("compact", "signatures"),
+    ("code", "source"): ("auto", "index", "disk"),
+    ("search", "kinds"): ("symbol", "file", "doc", "db-structure", "db-sample"),
+    # Режимы поиска (этап 4). `auto` — прежнее поведение; `docs`/`themes` включают
+    # уровень «тема» (возможность doc-graph, издание pro); `code` фильтрует материал.
+    ("search", "mode"): ("auto", "code", "docs", "themes"),
+    # Dual-level поиск (этап 4): два уровня одним ответом. `local` — только чанки
+    # с адресами (работает под любым изданием), `global` — сущности и связи из
+    # документного графа, `both` — оба уровня со связями `via_chunk`/`via_entities`.
+    ("doc_search_levels", "mode"): ("local", "global", "both"),
+    ("impact", "mode"): ("full", "hard", "all"),
+    ("slice", "direction"): ("back", "forward"),
+    ("repo_map", "detail"): ("normal", "deep"),
+    ("table_usage", "mode"): ("all", "read", "write"),
+    ("class_usage", "mode"): ("all", "missing", "unused"),
+}
+
+
+def _column_list(columns) -> list[str]:
+    """Колонки из строки или списка — одна точка разбора.
+
+    Замер 28.10.2026: `write_check(table, "No,Status")` разбирал строку посимвольно
+    (`list("No,Status")`), и ответ называл 21 «неизвестную колонку» вида `N`, `o`, `,`
+    с подсказками «N → Comments». Через MCP это достижимо: `list(str)` даёт то же.
+    Строка режется по запятой (как в CLI), элементы списка — тоже: клиент вправе
+    передать «a,b».
+    """
+    if columns is None:
+        return []
+    raw = [columns] if isinstance(columns, str) else list(columns)
+    out: list[str] = []
+    for item in raw:
+        for part in str(item).split(","):
+            name = part.strip()
+            if name:
+                out.append(name)
+    return out
+
+
+def _require_choice(env, op: str, param: str, value, *, many: bool = False) -> bool:
+    """Проверить значение по закрытому перечню; False — ответ уже заполнен отказом.
+
+    Одна функция на все параметры: два расходящихся механизма проверки — это тот же
+    дефект, что отсутствие проверки, только позже.
+    """
+    allowed = OP_CHOICES.get((op, param))
+    if allowed is None:
+        return True
+    # Не задано — значит «все допустимые»: `None` и пустой список не опечатка, и
+    # отвергать их значило бы сломать вызов без параметра (замер: `kinds=None`
+    # получал отказ «неизвестное значение kinds: None»).
+    if value is None or (many and not value):
+        return True
+    values = list(value) if many and isinstance(value, (list, tuple, set)) else [value]
+    unknown = [str(v) for v in values if str(v) not in allowed]
+    if not unknown:
+        return True
+    env.found = False
+    env.error = (f"неизвестное значение {param}: {', '.join(unknown)}; "
+                 f"допустимо: {', '.join(allowed)}")
+    env.extra["allowed"] = list(allowed)
+    return False
+
+
+def _window_overlap(env, spans, start, end):
+    """Отобрать спаны, пересекающиеся с окном; пустой отбор — отказ, а не «найдено».
+
+    Окно — ФИЛЬТР ОТБОРА и применяется ДО `limit`: иначе окно, не попавшее в первые
+    спаны файла, давало found=True и пустой текст (замер 28.10.2026: `--start 2500
+    --end 2510` отдавал спаны 33-41 и 88-101 и ошибку «окно вне спана» в каждом).
+    Возвращает (спаны, отказ): при отказе env заполнен причиной и границами чисел.
+    """
+    if start is None and end is None:
+        return spans, False
+    lo = int(start) if start is not None else 1
+    hi = int(end) if end is not None else 10 ** 9
+    if lo > hi:
+        # Перевёрнутое окно — не «ничего не найдено», а неверный запрос:
+        # причина называется, чтобы клиент не искал дефект в индексе.
+        env.found = False
+        env.error = f"окно задано наоборот: начало {lo} больше конца {hi}"
+        return [], True
+    overlapping = [s for s in spans if s[1] <= hi and s[2] >= lo]
+    if spans and not overlapping:
+        nearest = min(spans, key=lambda s: abs(s[1] - lo))
+        env.found = False
+        env.error = (f"окно {lo}-{hi} не пересекает ни один спан файла: "
+                     f"ближайший {nearest[0]}:{nearest[1]}-{nearest[2]}, "
+                     f"всего спанов {len(spans)}")
+        env.extra["window"] = {"start": lo, "end": hi}
+        env.extra["spans_total"] = len(spans)
+        return [], True
+    return overlapping, False
 
 
 def _drop_nested(spans: list[tuple[str, int, int, str | None]]) -> list[tuple[str, int, int, str | None]]:
@@ -456,7 +625,11 @@ class Envelope:
             "edition": self.edition,
             "features": self.features,
             "drift": self.drift,
-            "provenance": self.provenance,
+            # Нет выданных данных — нет источника. Прежде отказ `code` объявлял
+            # live (источник конверта), хотя текста не было ни символа; отчёт
+            # расходился с фактом (замер 28.10.2026). Правило живёт здесь, а не
+            # в операциях, чтобы не появилось второй редакции.
+            "provenance": self.provenance if self.found else "none",
             "limits": self.limits,
             "result": self.result,
             "stale_warnings": self.stale_warnings,
@@ -543,6 +716,33 @@ def _column_has_default(rev: str, table: str, column: str) -> bool:
     # ложное «обязательная колонка ID не задана» — найдено прогоном).
     _DEFAULT_CACHE[key] = defaults | autoincrement
     return column.lower() in _DEFAULT_CACHE[key]
+
+
+def rev_pointer_guard(data: dict, active: dict | None) -> dict:
+    """Паспорт ревизии (`rev.json`) против ЗАПЕЧАТАННОЙ ревизии хранилища.
+
+    Вынесено в функцию, чтобы правило проверялось без сборки фасада: указатель —
+    ускорение и паспорт, а активную ревизию выбирает хранилище (этап 11).
+    Замер 31.10.2026: указатель называл `rev-1083`, удалённую ротацией, при
+    активной `rev-1087`; фасад отвечал «ревизия без данных: 0 файлов», и чекер
+    осматривал ноль рёбер, объявляя находкой пустоту.
+    """
+    if not active:
+        return data
+    rev_id = str(active.get("rev_id") or "")
+    if not rev_id or str((data or {}).get("rev_id") or "") == rev_id:
+        return data
+    merged = dict(data or {})
+    merged.update({
+        "rev_id": rev_id,
+        "capability": active.get("capability") or (data or {}).get("capability"),
+        "joern_used": bool(active.get("joern_used")),
+        "sealed_at": active.get("sealed_at") or (data or {}).get("sealed_at"),
+        "pointer_rev_id": str((data or {}).get("rev_id") or ""),
+        "pointer_note": ("паспорт rev.json называл другую ревизию; активная "
+                         "взята из хранилища"),
+    })
+    return merged
 
 
 class Facade:
@@ -1180,6 +1380,24 @@ class Facade:
         data = db_ops.relations(self.graph, rev, table)
         env.result = data
         env.found = bool(data.get("stated") or data.get("derived"))
+        # Этап 10: вопрос «чем подтверждён вызов» к связи таблиц НЕ применяется,
+        # и это говорится прямо. Иначе отсутствие вида доказательства читается
+        # как «связь не проверена», хотя разделение здесь другое и более
+        # сильное: объявленный внешний ключ — факт структуры, совпадение имён —
+        # вывод с достоверностью не выше 0,5.
+        env.extra["evidence"] = {
+            "applies_to_calls": False,
+            "stated": len(data.get("stated") or []),
+            "derived": len(data.get("derived") or []),
+            "note": ("вид доказательства вызова к связям таблиц не применяется: "
+                     "«stated» — объявленный внешний ключ (факт структуры), "
+                     "«derived» — вывод по имени колонки, достоверность не выше 0,5"),
+        }
+        env.limits.append(
+            "«derived» — это ВЫВОД по имени колонки, а не структура: в живых "
+            "базах внешние ключи часто не объявлены, поэтому вывод остаётся "
+            "единственным способом увидеть связь, но ссылаться на него как на "
+            "структуру нельзя")
         if not env.found:
             env.extra["note"] = ("связей не найдено: у таблицы нет объявленных "
                                  "внешних ключей и не нашлось совпадений по именам")
@@ -1198,9 +1416,44 @@ class Facade:
             env.found = False
             env.error = f"пример для таблицы не найден: {table}"
             return env.to_dict()
+        # Снимок — это ТЕКСТ в лексике по адресу `db://<база>/<таблица>#sample`.
+        # Замер 31.10.2026: ревизия rev-1074 снимков не содержит вовсе (последняя
+        # с ними — rev-0996, до настройки `db_samples_in_fast`), а ответ говорил
+        # `found=True` и советовал читать текст по адресу, которого нет. Агент шёл
+        # по адресу и получал пустоту, не понимая, что снимка не было.
+        has_text = self._sample_chunks(rev, data["path"])
+        if has_text == 0:
+            any_samples = self._sample_chunks(rev, None)
+            env.found = False
+            env.error = (
+                "снимок строк не собран в этой ревизии: быстрая переиндексация "
+                "(настройка db_samples_in_fast=false). Структура собрана — смотрите "
+                "db_table и db_schema; снимок соберёт полный пересбор"
+                if not any_samples else
+                f"снимка для таблицы {table} в этой ревизии нет: строки не попали "
+                "в снимок (пустая таблица или отбор); структура — в db_table"
+            )
+            return env.to_dict()
         env.result = data
         env.found = True
         return env.to_dict()
+
+    def _sample_chunks(self, rev_id: str, path: str | None) -> int:
+        """Сколько чанков-снимков БД в ревизии (и по конкретному адресу, если задан).
+
+        Отдельный счётчик нужен, чтобы «снимка нет у этой таблицы» и «снимков нет
+        во всей ревизии» не выглядели одинаково: причины разные и действия разные.
+        """
+        sql = "SELECT COUNT(*) FROM chunk_map WHERE rev_id = ? AND path LIKE 'db://%#sample'"
+        params: list[object] = [rev_id]
+        if path:
+            sql += " AND path = ?"
+            params.append(path)
+        try:
+            row = self.lexvec.conn.execute(sql, params).fetchone()
+        except Exception:  # noqa: BLE001 — слой лексики может быть недоступен
+            return 0
+        return int((row or [0])[0] or 0)
 
     def op_db_drift(self, previous_rev: str | None = None) -> dict:
         """27. Что изменилось: между ревизиями И между миграциями и базой (P1-4).
@@ -1229,6 +1482,17 @@ class Facade:
         if prev == rev:
             env.extra["note"] = ("предыдущая ревизия не найдена: сравнение пустое, "
                                  "это не значит «ничего не менялось»")
+        # Второе состояние может отсутствовать или быть собранным неполно, и тогда
+        # списки «добавлено/удалено» — не изменение структуры. Замер 28.10.2026:
+        # `previous_rev=rev-0010` (живой схемы нет) → `tables_added=200` при 315
+        # таблицах и `columns_added=300`, без единого слова о причине; `rev-0443`
+        # собрана по одной базе из трёх → 198 «удалённых» таблиц. Причина приходит
+        # из `db_ops.drift` (`compared`, `note`), а не выводится второй раз здесь.
+        drift_note = str(data.get("note") or "")
+        if drift_note:
+            env.limits.append(drift_note)
+            if data.get("compared") is False and not env.extra.get("note"):
+                env.extra["note"] = drift_note
         if not live["plausible"]:
             env.limits.append(live["note"])
         env.extra["migrations_only"] = len(live["only_in_migrations"])
@@ -1562,7 +1826,7 @@ class Facade:
 
     # ---------------- сторож и реестр ----------------
 
-    def op_freshness(self, force: bool = False) -> dict:
+    def op_freshness(self, force: bool = False, auto_reindex: bool = True) -> dict:
         """20. Свежесть индекса: совпадает ли контрольная сумма корпуса с кодом.
 
         Смысл операции — дать агенту явный ответ, можно ли доверять фактам
@@ -1573,7 +1837,7 @@ class Facade:
         try:
             from . import watch as watch_mod
 
-            fresh = watch_mod.check(self.cfg, auto_reindex=True, force=force)
+            fresh = watch_mod.check(self.cfg, auto_reindex=auto_reindex, force=force)
             self._freshness = fresh.to_dict()
             env.result = fresh.to_dict()
             # Свежесть подмешивается в сам ответ: операция обязана сообщать
@@ -1886,7 +2150,31 @@ class Facade:
             self._reopen_stores()
             self._rev_cache = util.read_json(path, default=None) or {}
             self._rev_stat = stamp
-        return self._rev_cache
+            self._rev_guard = self._guard_rev_pointer(self._rev_cache)
+        if getattr(self, "_rev_guard", None) is None:
+            self._rev_guard = self._guard_rev_pointer(self._rev_cache)
+        return self._rev_guard
+
+    def _guard_rev_pointer(self, data: dict) -> dict:
+        """Паспорт ревизии сверяется с ЗАПЕЧАТАННОЙ ревизией хранилища.
+
+        Измерено 31.10.2026: `.ragraf/index/rev.json` называл `rev-1083`, которую
+        ротация уже удалила (в `control.rev_history` у неё `state=rotated`), тогда
+        как активной была `rev-1087`. Фасад верил указателю, отвечал «ревизия без
+        данных: файлов 0, узлов 0, чанков 0», и проверки чекера
+        (`edge kinds and heuristic share are disclosed`, `edition layer …`)
+        осматривали НОЛЬ рёбер, объявляя находкой пустоту. Причина класса уже
+        описана в этом файле (14.10.2026): указатель — ускорение, а не источник
+        правды. Активную ревизию выбирает хранилище (`store.active_revision`),
+        и здесь этот выбор проверяется, а расхождение называется.
+        """
+        try:
+            from . import store as store_mod
+
+            active, _skipped = store_mod.active_revision(self.graph)
+        except Exception:  # noqa: BLE001 — непрочитанное хранилище не меняет ответ
+            return data
+        return rev_pointer_guard(data, active)
 
     def _reopen_stores(self) -> None:
         """Переоткрыть хранилища после смены ревизии другим процессом."""
@@ -2048,6 +2336,14 @@ class Facade:
             # выглядели как «пустой результат», а не как ошибка, и обнаруживались
             # только случайно. Здесь они видны сразу.
             "quality": self._quality(rev),
+            # Доказательность графа: виды рёбер, доля эвристики и её бюджет.
+            # Без этого поля агент видит «derived: 55 034» и не знает, что именно
+            # выведено — а 75,2 % рёбер проекта это вывод по имени.
+            "edge_kinds": self._edge_kinds(rev),
+            # Хранилище: объём, свободные страницы и хвосты ротации.
+            # Без этого блока 8-гигабайтный файл при трёх ревизиях данных
+            # выглядел как норма.
+            "storage": self._storage(rev),
         }
         env.extra["counts"] = {
             "files": int(row["file_count"]) if row else 0,
@@ -2086,15 +2382,33 @@ class Facade:
     # ---------------- снимок index_status (шаг 0.3) ----------------
 
     def _status_storages_stamp(self) -> dict:
-        """Время правки хранилищ: по нему снимок признаётся годным."""
+        """Отпечаток хранилищ: по нему снимок статуса признаётся годным.
+
+        В отпечаток входят ВСЕ ТРИ хранилища и их файлы `-wal`. Измеренный
+        дефект (31.10.2026, найден `tools/check_storage_disclosure.py`): в
+        отпечатке было только два хранилища (`graph`, `lexvec`), а третье —
+        `control.sqlite`, добавленное этапом 9, — отсутствовало. Кроме того,
+        SQLite пишет сначала в `-wal`, поэтому правка, ещё не перенесённая в
+        основной файл, не меняла ни mtime, ни размер. Следствие: ответ
+        `index_status` называл размер control **6 541 312** байт при
+        фактических **6 586 368** — расхождение 45 056 байт (11 страниц).
+
+        Снимок, отставший по объёму, — ровно тот «зелёный отчёт», от которого
+        этот снимок и защищает. Поэтому сравниваются mtime И размер, и по
+        каждому файлу отдельно: `-wal` может вырасти, не тронув основной.
+        """
         from pathlib import Path as _Path
 
         stamp: dict = {}
-        for path in (self.cfg.graph_db, self.cfg.lexvec_db):
-            try:
-                stamp[_Path(path).name] = int(_Path(path).stat().st_mtime_ns)
-            except OSError:
-                stamp[_Path(path).name] = 0
+        for path in (self.cfg.graph_db, self.cfg.lexvec_db, self.cfg.control_db):
+            base = _Path(path)
+            for suffix in ("", "-wal"):
+                item = _Path(str(base) + suffix)
+                try:
+                    info = item.stat()
+                    stamp[f"{base.name}{suffix}"] = [int(info.st_mtime_ns), int(info.st_size)]
+                except OSError:
+                    stamp[f"{base.name}{suffix}"] = 0
         return stamp
 
     def _status_snapshot_read(self, rev: str) -> dict | None:
@@ -2112,6 +2426,11 @@ class Facade:
             path = _Path(self.cfg.index_dir) / "index_status_snapshot.json"
             data = _util.read_json(path, default=None)
             if not isinstance(data, dict):
+                return None
+            if int(data.get("status_version") or 0) != STATUS_SNAPSHOT_VERSION:
+                # Снимок другой версии формата: в нём нет полей, которые ответ
+                # обязан называть (например `edge_kinds`). Выдать его значило бы
+                # отчитаться старым форматом за текущее состояние.
                 return None
             if str(data.get("rev") or "") != str(rev or ""):
                 return None
@@ -2138,6 +2457,7 @@ class Facade:
             clean.pop("freshness", None)
             path = _Path(self.cfg.index_dir) / "index_status_snapshot.json"
             _util.write_json(path, {
+                "status_version": STATUS_SNAPSHOT_VERSION,
                 "rev": rev,
                 "storages": self._status_storages_stamp(),
                 "written_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -2145,6 +2465,407 @@ class Facade:
             })
         except Exception:  # noqa: BLE001
             pass
+
+    # ---------------- хранилище: объём и хвосты ротации (этап 9) ----------------
+
+    def _storage(self, rev: str) -> dict:
+        """Размеры хранилищ, состояние страниц и хвосты ротации.
+
+        Замер, ради которого блок появился (30.10.2026): `lexvec.sqlite` занимал 8,12 ГБ, из них
+        3 835 216 строк `document_chunk` принадлежали 265 ревизиям, которых в истории уже нет.
+        Ротация чистила граф и лексику, но не документный слой, и ответ об этом молчал: в
+        `index_status` не было ни объёма, ни числа осиротевших строк.
+        """
+        from pathlib import Path as _Path
+
+        sizes: dict[str, dict] = {}
+        total = 0
+        for label, path_value in (("graph", self.cfg.graph_db), ("lexvec", self.cfg.lexvec_db)):
+            path = _Path(path_value)
+            if not path.is_file():
+                sizes[label] = {"path": str(path), "bytes": 0, "missing": True}
+                continue
+            size = path.stat().st_size
+            total += size
+            entry = {"path": path.name, "bytes": size,
+                     "mb": round(size / 1_048_576, 1)}
+            try:
+                import sqlite3 as _sqlite3
+
+                conn = _sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+                try:
+                    page = int(conn.execute("PRAGMA page_size").fetchone()[0])
+                    pages = int(conn.execute("PRAGMA page_count").fetchone()[0])
+                    free = int(conn.execute("PRAGMA freelist_count").fetchone()[0])
+                    entry["pages"] = pages
+                    entry["free_pages"] = free
+                    entry["free_mb"] = round(free * page / 1_048_576, 1)
+                    entry["free_share"] = round(free / pages, 4) if pages else 0.0
+                finally:
+                    conn.close()
+            except Exception as error:  # noqa: BLE001 — размер не имеет права ломать ответ
+                entry["pages_error"] = str(error)[:120]
+            sizes[label] = entry
+
+        # Хвосты ротации: данные есть, записи в истории нет.
+        history = [str(r["rev_id"]) for r in self.graph.execute(
+            "SELECT rev_id FROM rev ORDER BY rev_id").fetchall()]
+        document_rows: dict[str, int] = {}
+        orphans: dict[str, int] = {}
+        try:
+            from pathlib import Path as _Path2
+
+            lex_path = _Path2(self.cfg.lexvec_db)
+            if lex_path.is_file():
+                import sqlite3 as _sqlite3
+
+                conn = _sqlite3.connect(f"file:{lex_path}?mode=ro", uri=True)
+                try:
+                    for table in ("document_chunk", "document_node"):
+                        try:
+                            count = int(conn.execute(
+                                f"SELECT COUNT(*) FROM {table}").fetchone()[0])
+                        except _sqlite3.Error:
+                            continue
+                        document_rows[table] = count
+                    try:
+                        rows = conn.execute(
+                            "SELECT rev_id, COUNT(*) AS n FROM document_chunk"
+                            " GROUP BY rev_id").fetchall()
+                    except _sqlite3.Error:
+                        rows = []
+                    known = set(history)
+                    orphans = {str(row[0]): int(row[1]) for row in rows
+                               if str(row[0]) not in known}
+                finally:
+                    conn.close()
+        except Exception:  # noqa: BLE001
+            document_rows, orphans = {}, {}
+
+        budget_gb = 6
+        try:
+            budget_gb = int(float(self._settings_value("storage_warn_gb", 6)))
+        except Exception:  # noqa: BLE001
+            budget_gb = 6
+        total_gb = round(total / 1_073_741_824, 2)
+        note = ""
+        if total_gb > budget_gb:
+            note = (f"хранилище занимает {total_gb} ГБ при пороге {budget_gb} ГБ; "
+                    f"освобождается только `VACUUM` после ротации — см. "
+                    f"`tools/measure_storage_compaction.py --plan`")
+        if orphans:
+            note = (f"{sum(orphans.values())} строк документного слоя принадлежат ревизиям, "
+                    f"которых нет в истории ({len(orphans)} ревизий): ротация их не удаляла; "
+                    f"освободить — `tools/measure_storage_compaction.py --plan`"
+                    + (f"; {note}" if note else ""))
+        # --- объём, которого в ответе не было ---
+        # Замер 30.10.2026: `.ragraf` занимал 26 829 МБ, из них `cpg/` 17 831 МБ —
+        # вдвое больше обоих хранилищ индекса вместе. Ответ называл 8,6 ГБ, то есть
+        # на вопрос «сколько занимает RAGRAF» отвечал меньше половины правды.
+        # Поэтому рядом с размерами баз идут каталог `cpg` и временные каталоги,
+        # а в `stores` добавлено третье хранилище — `control.sqlite` (история,
+        # журналы, настройки доступа): оно не входит в `total_gb`, потому что
+        # бюджет `storage_warn_gb` задан для индекса, и подмена смысла сделала бы
+        # предупреждение ложным.
+        control_entry: dict = {"path": "control.sqlite", "bytes": 0, "mb": 0.0}
+        try:
+            from pathlib import Path as _Path3
+
+            control_path = _Path3(self.cfg.control_db)
+            if control_path.is_file():
+                control_entry["bytes"] = control_path.stat().st_size
+                control_entry["mb"] = round(int(control_entry["bytes"]) / 1_048_576, 1)
+        except Exception:  # noqa: BLE001 — размер не имеет права ломать ответ
+            pass
+        sizes["control"] = control_entry
+
+        cpg: dict = {}
+        tmp: dict = {}
+        try:
+            from pathlib import Path as _Path4
+
+            from . import storage as storage_mod
+
+            arts = storage_mod.cpg_artifacts(self.cfg)
+            known = set(history)
+            artifact_revs = set(arts["bins"]) | set(arts["workspaces"]) | set(arts["exports"])
+            retained = sorted(artifact_revs & known)
+            cpg = {
+                "bytes": int(arts["total_bytes"]),
+                "mb": round(int(arts["total_bytes"]) / 1_048_576, 1),
+                "bins": len(arts["bins"]),
+                "workspaces": len(arts["workspaces"]),
+                "exports": len(arts["exports"]),
+                "empty_workspaces": len(arts["empty_workspaces"]),
+                "temp_mb": round(sum(int(v["bytes"]) for v in arts["temp"]) / 1_048_576, 1),
+                "revisions_with_artifacts": len(artifact_revs),
+                "retained_revisions": retained,
+                "orphan_artifacts": len(artifact_revs - known),
+            }
+            tmp = {
+                "cpg_tmp_mb": round(int(arts["tmp_bytes"]) / 1_048_576, 1),
+                "cpg_tmp_files": int(arts["tmp_files"]),
+                "ragraf_tmp_mb": round(
+                    storage_mod.path_bytes(_Path4(self.cfg.ragraf_dir) / "tmp") / 1_048_576, 1),
+                "limit_mb": int(self._settings_value("storage_tmp_max_mb", 512) or 512),
+            }
+        except Exception as error:  # noqa: BLE001 — объём не имеет права ломать статус
+            cpg = {"error": f"{type(error).__name__}: {str(error)[:120]}"}
+
+        ragraf_total_mb = round(
+            (int(sizes["graph"]["bytes"]) + int(sizes["lexvec"]["bytes"])
+             + int(control_entry["bytes"]) + int(cpg.get("bytes") or 0)
+             + int(tmp.get("ragraf_tmp_mb") or 0) * 1_048_576) / 1_048_576, 1)
+        if cpg.get("orphan_artifacts"):
+            tail_note = (f"каталог cpg занимает {cpg['mb']} МБ, из них артефакты "
+                         f"{cpg['orphan_artifacts']} ревизий вне истории — убирает "
+                         f"`ragraf compact --apply`")
+            note = f"{tail_note}; {note}" if note else tail_note
+        elif cpg.get("mb"):
+            cpg_note = f"каталог cpg занимает {cpg['mb']} МБ (в total_gb не входит)"
+            note = f"{cpg_note}; {note}" if note else cpg_note
+        return {
+            "total_gb": total_gb,
+            "budget_gb": budget_gb,
+            "over_budget": total_gb > budget_gb,
+            "stores": sizes,
+            "revisions_in_history": len(history),
+            "revisions_with_data": len([r for r in history]),
+            "revisions_retained": self._revisions_retained(len(history)),
+            "document_rows": document_rows,
+            "orphan_revisions": len(orphans),
+            "orphan_document_rows": sum(orphans.values()),
+            "cpg": cpg,
+            "tmp": tmp,
+            "ragraf_total_mb": ragraf_total_mb,
+            "note": note,
+        }
+
+    def _revisions_retained(self, in_stores: int) -> int:
+        """Сколько ревизий политика обязуется хранить (для читателя чисел).
+
+        Отдельный метод, потому что читателей настройки в фасаде уже три, и
+        четвёртый способ прочитать тот же файл разошёлся бы с ними молча.
+        """
+        try:
+            return min(int(self._settings_value("retain_revs", 3) or 3), int(in_stores))
+        except Exception:  # noqa: BLE001
+            return min(3, int(in_stores))
+
+    def op_compact(self, apply: bool = False, vacuum: bool | None = None,
+                   retain: int | None = None) -> dict:
+        """Политика хранения: сколько занимает `.ragraf` и что можно убрать.
+
+        По умолчанию — только план: операция, меняющая диск, обязана сначала
+        назвать числа, а решение остаётся за вызывающим. `apply=True` удаляет
+        хвост ротации, артефакты CPG вне хранения и временные файлы, затем
+        выполняет `VACUUM` там, где это оправдано.
+
+        Замер, ради которого операция появилась (30.10.2026): `.ragraf` занимал
+        26 829 МБ при 8 808 МБ данных индекса; в `cpg/` лежали артефакты 473
+        ревизий, которых в хранилищах уже нет, а в лексике — 7 729 196 строк
+        документного слоя от 265 ревизий вне истории. Чистка хвоста и `VACUUM`
+        на копии вернули 7,1 ГБ при целой активной ревизии (945 / 5 740 / 77 240).
+
+        Границы: история ревизий (`control.sqlite`) не меняется никогда; активная
+        ревизия защищена проверкой; артефакты с неопознанными именами не
+        удаляются; удаление, задевшее живую ревизию, откатывает ответ ошибкой
+        `StoragePolicyError`, а не «дочищается».
+        """
+        from . import storage as storage_mod
+
+        env = self.make_env("compact", provenance="config")
+        try:
+            if apply:
+                data = storage_mod.apply(self.cfg, vacuum=vacuum, retain=retain)
+            else:
+                data = storage_mod.plan(self.cfg, retain=retain)
+        except storage_mod.StoragePolicyError as error:
+            env.found = False
+            env.error = str(error)
+            env.extra["suggest"] = ["index_status", "compact"]
+            return env.to_dict()
+        except Exception as error:  # noqa: BLE001 — причина отказа важнее типа
+            env.found = False
+            env.error = f"{type(error).__name__}: {error}"
+            env.extra["suggest"] = ["index_status", "compact"]
+            return env.to_dict()
+        env.result = data
+        env.found = True
+        if apply:
+            env.extra["next"] = ("очистка выполнена: числа до/после в result; "
+                                 "история ревизий не изменилась")
+        else:
+            env.extra["next"] = ("план ничего не менял: выполнение — "
+                                 "`ragraf compact --apply --yes` после бэкапа")
+        return env.to_dict()
+
+    # ---------------- доказательность графа (этап 8) ----------------
+
+    def _settings_value(self, key: str, default: object) -> object:
+        """Одно значение глобальной настройки; на ошибке — умолчание.
+
+        Отдельный метод, потому что читателей настройки в фасаде теперь два
+        (`_edge_kinds` и `op_impact`), и второй способ чтения того же файла
+        разошёлся бы с первым молча.
+        """
+        from . import settings as settings_mod
+
+        values = settings_mod.SettingsStore().load()
+        return values.get(key, default)
+
+    def _edge_kinds(self, rev: str) -> dict:
+        """Виды рёбер: сколько, какая доля, сколько эвристики, есть ли превышение бюджета.
+
+        Зачем отдельный метод. До 30.10.2026 ответ называл только происхождение
+        (`edges_stated` / `edges_derived`), а вид ребра — нет. Между тем 75,2 % рёбер
+        (57 406 из 76 329, замер на rev-0808) — это `calls_heuristic`, то есть ВЫВОД по
+        имени, а не подтверждённый вызов. Агент, читая `derived: 55 034`, не мог понять,
+        что именно выведено, и считал вывод фактом.
+
+        Числа берутся из графа одним запросом: считаются по РЕВИЗИИ, а не по снимку
+        метаданных, поэтому ротация и смена ревизии видны сразу.
+        """
+        rows = self.graph.execute(
+            "SELECT kind, provenance, COUNT(*) AS n FROM edge WHERE rev_id = ?"
+            " GROUP BY kind, provenance", (rev,)).fetchall()
+        kinds: dict[str, dict] = {}
+        total = 0
+        for row in rows:
+            slot = kinds.setdefault(str(row["kind"]), {"count": 0, "stated": 0, "derived": 0})
+            count = int(row["n"])
+            slot["count"] += count
+            slot[str(row["provenance"])] = slot.get(str(row["provenance"]), 0) + count
+            total += count
+        listed = [
+            {"kind": kind, "count": data["count"],
+             "share": round(data["count"] / total, 4) if total else 0.0,
+             "stated": data.get("stated", 0), "derived": data.get("derived", 0)}
+            for kind, data in sorted(kinds.items(), key=lambda kv: (-kv[1]["count"], kv[0]))
+        ]
+        heuristic = [item for item in listed if item["kind"].endswith("_heuristic")]
+        heuristic_count = sum(item["count"] for item in heuristic)
+        share = round(heuristic_count / total, 4) if total else 0.0
+
+        from . import settings as settings_mod
+
+        try:
+            budget = int(settings_mod.SettingsStore().load()
+                         .get("heuristic_edge_budget_percent", 80))
+        except Exception:  # noqa: BLE001 — бюджет не имеет права ломать статус
+            budget = 80
+        exceeded = bool(total) and share * 100.0 > budget
+        note = ""
+        if exceeded:
+            note = (f"эвристических связей {share * 100:.1f} % при бюджете {budget} %: "
+                    f"{heuristic_count} из {total} рёбер — это ВЫВОД по имени, а не "
+                    f"подтверждённый факт; для ответа-доказательства использовать "
+                    f"`impact --mode hard` либо назвать долю рядом с числом")
+        return {
+            "kinds": listed,
+            "total": total,
+            "heuristic_kinds": [item["kind"] for item in heuristic],
+            "heuristic_count": heuristic_count,
+            "heuristic_share": share,
+            "stated": sum(item.get("stated", 0) for item in listed),
+            "derived": sum(item.get("derived", 0) for item in listed),
+            "budget_percent": budget,
+            "budget_exceeded": exceeded,
+            "note": note,
+            # Этап 8: чем подтверждены рёбра — по ВИДАМ ДОКАЗАТЕЛЬСТВА, а не
+            # только по происхождению. `derived: 55 034` не говорило агенту,
+            # что именно выведено, поэтому вывод читался как факт.
+            "evidence": self._edge_evidence_counts(rev),
+        }
+
+    def _edge_evidence_counts(self, rev: str) -> dict:
+        """Сколько рёбер каждого вида доказательства и какая доля выведена.
+
+        Считается ОДНИМ групповым запросом по ревизии, с разбором по способу
+        привязки цели: иначе пришлось бы читать 78 тысяч строк и разбирать их в
+        Python ради шести чисел. Группировка идёт по полям, которых достаточно
+        классификатору (`kind`, `provenance`, `confidence`, `props`), поэтому
+        число совпадает с тем, что показывает `measure_edge_evidence.py`.
+
+        Старые рёбра (без записанного вида) восстанавливаются по полям самих
+        рёбер — это и есть обещанная обратная совместимость: переиндексация не
+        требуется, чтобы ответ перестал выдавать вывод за факт.
+        """
+        # Колонка есть не всегда: у хранилищ до этапа 8 её нет, и подстановка
+        # пустого значения — то, что делает ответ совместимым, а не падающим.
+        ev_col = ("COALESCE(evidence_kind, '')"
+                  if self._edge_evidence_column() else "''")
+        try:
+            rows = self.graph.execute(
+                f"""SELECT kind, provenance, {ev_col} AS ek,
+                          json_extract(props, '$.source') AS src,
+                          json_extract(props, '$.resolved_by') AS how,
+                          CASE WHEN confidence IS NULL THEN 1.0
+                               WHEN confidence < 0.5 THEN 0.4 ELSE 1.0 END AS band,
+                          CASE WHEN COALESCE(evidence_path, '') <> ''
+                                    AND COALESCE(evidence_line, 0) > 0
+                               THEN 1 ELSE 0 END AS has_coord,
+                          COUNT(*) AS n
+                     FROM edge WHERE rev_id = ?
+                     GROUP BY 1, 2, 3, 4, 5, 6, 7""",
+                (rev,),
+            ).fetchall()
+        except Exception:  # noqa: BLE001 — статус не имеет права падать из-за этого
+            return {}
+        counts: dict[str, int] = {}
+        call_counts: dict[str, int] = {}
+        for row in rows:
+            count = int(row["n"])
+            recorded = str(row["ek"] or "").strip()
+            kind = str(row["kind"])
+            if recorded:
+                kind_ev = recorded
+            else:
+                # Координата участвует в решении: у ребра без проверяемой
+                # строки видом будет `unknown`, а не «подтверждено».
+                kind_ev = evidence_mod.classify(
+                    kind, row["provenance"],
+                    {"source": row["src"], "resolved_by": row["how"]},
+                    row["band"],
+                    "evidence" if int(row["has_coord"]) else "",
+                    1 if int(row["has_coord"]) else 0,
+                )
+            counts[kind_ev] = counts.get(kind_ev, 0) + count
+            if evidence_mod.is_call_kind(kind):
+                call_counts[kind_ev] = call_counts.get(kind_ev, 0) + count
+        total = sum(counts.values())
+        call_total = sum(call_counts.values())
+        listed = [
+            {"evidence_kind": kind_ev, "label": evidence_mod.label(kind_ev),
+             "count": count, "share": round(count / total, 4) if total else 0.0}
+            for kind_ev, count in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+        ]
+        call_listed = [
+            {"evidence_kind": kind_ev, "label": evidence_mod.label(kind_ev),
+             "count": count, "share": round(count / call_total, 4) if call_total else 0.0}
+            for kind_ev, count in sorted(call_counts.items(), key=lambda kv: (-kv[1], kv[0]))
+        ]
+        derived = sum(count for kind_ev, count in call_counts.items()
+                      if evidence_mod.is_derived(kind_ev))
+        # Внешние вызовы считаются отдельно от выводов: у них другая природа
+        # (цели в корпусе нет), и складывать их с «выведено по имени» значит
+        # врать в обе стороны — занижать точность графа проекта и прятать долю
+        # внешних зависимостей.
+        external_calls = int(call_counts.get("external_call", 0))
+        return {
+            "kinds": listed,
+            "call_kinds": call_listed,
+            "total": total,
+            "call_edges": call_total,
+            "cpg_confirmed": call_counts.get("cpg_call", 0),
+            "derived_call_edges": derived,
+            "external_call_edges": external_calls,
+            "derived_share": round(derived / call_total, 4) if call_total else 0.0,
+            "note": ("рёбра вызова: подтверждено CPG "
+                     f"{call_counts.get('cpg_call', 0)}, выведено {derived} из "
+                     f"{call_total} — вывод не является доказательством; "
+                     f"внешних вызовов (цель вне корпуса) {external_calls}"),
+        }
 
     def _quality(self, rev: str, samples: int = 64) -> dict:
         """Показатели качества индекса — ФОРМА ответа `index_status`.
@@ -2352,7 +3073,8 @@ class Facade:
                     "или тело функции перед вызовом"
                 )
 
-    def op_references(self, fqn: str, limit: int = 100) -> dict:
+    def op_references(self, fqn: str, limit: int = 100,
+                      min_confidence: float | None = None) -> dict:
         """3. Все места использования символа.
 
         Список видов связи включает не только вызовы: ключ перевода
@@ -2360,6 +3082,18 @@ class Facade:
         таблице (`queries`) и маршрут (`routes`) — это тоже ИСПОЛЬЗОВАНИЯ, и
         без них вопрос «где ещё это встречается» не получал ответа для
         узлов, у которых нет вызовов (P1-3).
+
+        ЭТАП 10: вид доказательства называется у КАЖДОЙ связи. До правки ответ
+        отдавал `provenance` и `confidence`, а `provenance=stated` читается как
+        «доказано», хотя это могла быть привязка по имени. `stated` и вид
+        доказательства — разные вещи, и вторая без первой не отвечает на вопрос
+        «это факт или вывод».
+
+        ПОРОГ. Здесь порог по умолчанию НЕ применяется: `references` отвечает
+        на вопрос «где ещё встречается имя», и отсечь вывод значило бы скрыть
+        место, о котором спрашивают. Поэтому показано всё, а количество и вид
+        выведенных связей названы сводкой; `min_confidence`, если задан,
+        отсекает слабые связи и говорит, сколько отсечено.
         """
         env = self.make_env("references")
         rev = self.current_rev()
@@ -2372,16 +3106,38 @@ class Facade:
             env.extra["suggest"] = ["symbol", "search"]
             return env.to_dict()
         marks = ",".join("?" for _ in node_ids)
+        ev_col = ("COALESCE(evidence_kind, '') AS evidence_kind"
+                  if self._edge_evidence_column() else "'' AS evidence_kind")
         rows = self.graph.execute(
-            f"""SELECT src, kind, provenance, evidence_path, evidence_line, confidence, dst
+            f"""SELECT src, kind, provenance, evidence_path, evidence_line, confidence, dst,
+                       {ev_col}, props
                 FROM edge WHERE rev_id = ? AND dst IN ({marks})
                   AND kind IN ('calls','calls_heuristic','instantiates','extends','implements',
                                'references','overrides','uses_key','reads_var','queries','routes')
                 ORDER BY evidence_path, evidence_line LIMIT ?""",
             (rev, *node_ids, limit),
         ).fetchall()
+        # Порог применяется ТОЛЬКО когда его задали явно. Иначе фильтр по
+        # умолчанию (0,5) выбрасывал бы `calls_heuristic` (достоверность 0,4), и
+        # ответ «где ещё встречается имя» прятал бы места, о которых спрашивают, —
+        # ровно то, что докстрока обещает не делать. Дефект был живой: на
+        # `python:print` (10 260 рёбер) ответ отдавал ПУСТОЙ список, и это
+        # выглядело как «связей нет». Поймано вызовом после прогона проверок.
+        explicit_floor = min_confidence is not None
+        threshold = edge_floor(min_confidence)
         out = []
+        skipped = 0
         for r in rows:
+            kind_ev = str(r["evidence_kind"] or "").strip() or evidence_mod.classify(
+                r["kind"], r["provenance"], r["props"], r["confidence"],
+                r["evidence_path"], r["evidence_line"],
+            )
+            if explicit_floor and not _edge_passes_floor(
+                    r["provenance"], r["confidence"], threshold):
+                # Отсечено только по ЯВНО заданному порогу: значение по
+                # умолчанию здесь не фильтрует (см. докстроку).
+                skipped += 1
+                continue
             owner = self.graph.execute(
                 "SELECT node_id, kind, name, fqn, path, start_line, end_line FROM node"
                 " WHERE rev_id = ? AND node_id = ?",
@@ -2394,29 +3150,64 @@ class Facade:
                     "provenance": r["provenance"],
                     "evidence": f"{r['evidence_path']}:{r['evidence_line']}",
                     "confidence": r["confidence"],
+                    # Вид доказательства — в каждой строке, а не сводкой на всю
+                    # выдачу: иначе одна подтверждённая связь «окрашивает»
+                    # соседние выведенные.
+                    "evidence_kind": kind_ev,
+                    "evidence_label": evidence_mod.label(kind_ev),
+                    "evidence_how": evidence_mod.how_of(r["props"]),
                 }
             )
         if not out:
             env.found = False
             env.extra["suggest"] = ["search", "live_read"]
         env.result = out
+        # Сводка по видам — рядом с результатом, а не вместо него: контракт
+        # ответа (`result` — список связей) не меняется, поэтому старые клиенты
+        # продолжают работать, а новое поле читают те, кому оно нужно.
+        summary = evidence_mod.summarize(out)
+        env.extra["evidence"] = summary
+        if threshold != MIN_EDGE_CONFIDENCE:
+            env.limits.append(floor_note(threshold, skipped))
+        elif not summary["total"]:
+            env.limits.append(
+                "связей не найдено: это ответ на вопрос «где ещё встречается имя», "
+                "а не «связей нет» — порог достоверности здесь по умолчанию не "
+                "применяется"
+            )
+        if summary["derived"]:
+            env.limits.append(
+                f"вид доказательства связей: подтверждено CPG {summary['confirmed']}, "
+                f"выведено {summary['derived']} из {summary['total']} "
+                f"({summary['derived_share'] * 100:.1f} %) — выведенная связь не "
+                f"является доказательством"
+            )
         self.attach_stale(env, [str(r["evidence_path"]) for r in rows if r["evidence_path"]])
         return env.to_dict()
 
     def op_callers(self, fqn: str, depth: int = 1, hard_only: bool = False,
-                   limit: int = 200, answer: bool = False) -> dict:
-        """4. Кто вызывает."""
-        return self._graph_walk(fqn, depth, hard_only, "callers", limit,
-                                answer=answer)
+                   limit: int = 200, answer: bool = False,
+                   min_confidence: float | None = None) -> dict:
+        """4. Кто вызывает.
 
-    def op_callees(self, fqn: str, depth: int = 1, hard_only: bool = False, limit: int = 200) -> dict:
-        """5. Кого вызывает."""
-        return self._graph_walk(fqn, depth, hard_only, "callees", limit)
+        `min_confidence` — порог достоверности связей на этот вызов (этап 10).
+        Не задан — действует значение по умолчанию, и ответ его называет.
+        """
+        return self._graph_walk(fqn, depth, hard_only, "callers", limit,
+                                answer=answer, min_confidence=min_confidence)
+
+    def op_callees(self, fqn: str, depth: int = 1, hard_only: bool = False,
+                   limit: int = 200, min_confidence: float | None = None) -> dict:
+        """5. Кого вызывает (порог достоверности — параметром, этап 10)."""
+        return self._graph_walk(fqn, depth, hard_only, "callees", limit,
+                                min_confidence=min_confidence)
 
     def op_impact(self, target: str, mode: str = "full", depth: int = 3, limit: int = 500,
-                  answer: bool = False) -> dict:
+                  answer: bool = False, min_confidence: float | None = None) -> dict:
         """6. Что затронет изменение. Разделение доказанных и эвристических связей (ФТ-18)."""
         env = self.make_env("impact")
+        if not _require_choice(env, "impact", "mode", mode):
+            return env.to_dict()
         rev = self.current_rev()
         if not rev:
             return self._no_index(env)
@@ -2438,8 +3229,22 @@ class Facade:
                 self._answer_mode(env, f"Символ «{target}» не найден", [])
             return env.to_dict()
 
+        # Цель-заглушка: узел в индексе есть, но он вне корпуса. Пустой срез и
+        # пустое влияние — следствие этого, а не «связей нет»; это называется.
+        if all(not str(r["path"] or "").strip() for r in rows):
+            env.extra["target_external"] = [str(r["fqn"]) for r in rows]
+            env.limits.append(
+                "цель вне корпуса (внешняя ссылка): узла в индексе нет, "
+                "результат пуст по определению, а не «связей нет»")
         roots = [r["node_id"] for r in rows]
-        affected = self._bfs(rev, roots, depth, reverse=True, limit=limit)
+        # Режим `all`: порог 0, но каждая связь несёт provenance/confidence.
+        # Этап 10: явный `min_confidence` сильнее значения по умолчанию, но
+        # НЕ сильнее режима `all` — иначе `--mode all --min-confidence 0.9`
+        # противоречил бы сам себе.
+        threshold = (0.0 if mode == "all"
+                     else edge_floor(min_confidence))
+        affected = self._bfs(rev, roots, depth, reverse=True, limit=limit,
+                             threshold=threshold)
 
         hard: list[dict] = []
         soft: list[dict] = []
@@ -2454,6 +3259,29 @@ class Facade:
                 slot = files.setdefault(p, {"path": p, "stated": 0, "derived": 0})
                 slot[item["provenance"]] += 1
 
+        # Вид связи, по которому объект попал в ответ: факт или вывод по имени.
+        kinds: dict[str, int] = {}
+        for item in affected:
+            kinds[str(item.get("edge_kind") or "unknown")] = \
+                kinds.get(str(item.get("edge_kind") or "unknown"), 0) + 1
+        heuristic_hits = sum(count for kind, count in kinds.items() if kind.endswith("_heuristic"))
+        affected_total = len(affected)
+        share = round(heuristic_hits / affected_total, 4) if affected_total else 0.0
+        try:
+            budget = int(self._settings_value("heuristic_edge_budget_percent", 80))
+        except Exception:  # noqa: BLE001 — бюджет не имеет права ломать ответ
+            budget = 80
+        hidden = int((getattr(self, "_bfs_stats", {}) or {}).get("skipped_low_confidence", 0))
+        if hidden:
+            env.limits.append(floor_note(threshold, hidden)
+                              + "; режим `--mode all` покажет отсечённые связи "
+                                "с пометкой происхождения")
+        if affected_total and share * 100.0 > budget:
+            env.limits.append(
+                f"связи в ответе на {share * 100:.1f} % эвристические при бюджете {budget} % "
+                f"({heuristic_hits} из {affected_total}): это вывод по имени, а не "
+                f"подтверждённый факт; для ответа-доказательства — `--mode hard`")
+
         env.result = {
             "target": rows[0]["fqn"],
             "mode": mode,
@@ -2461,6 +3289,19 @@ class Facade:
             "stated": hard,
             "derived": soft,
             "affected_count": {"stated": len(hard), "derived": len(soft)},
+            # Этап 8: чем именно затронуто и какая доля этого — вывод.
+            "edge_kinds": [{"kind": kind, "count": count}
+                           for kind, count in sorted(kinds.items(), key=lambda kv: (-kv[1], kv[0]))],
+            "heuristic_share": share,
+            "heuristic_budget_percent": budget,
+            # Этап 8: сколько связей осталось за порогом достоверности. Число, а не
+            # молчание: иначе `affected_count: 0` читается как «связей нет».
+            "confidence_threshold": threshold,
+            "hidden_by_confidence": int((getattr(self, "_bfs_stats", {}) or {})
+                                        .get("skipped_low_confidence", 0)),
+            # Этап 8: чем подтверждено каждое затронутое звено. Отдельно от
+            # `edge_kinds` (вид ребра) — здесь именно ДОКАЗАТЕЛЬСТВО.
+            "evidence": evidence_mod.summarize(affected),
         }
         if mode == "hard":
             env.result["derived"] = []
@@ -2480,9 +3321,12 @@ class Facade:
             )
         return env.to_dict()
 
-    def op_slice(self, fqn: str, direction: str = "back", limit: int = 200) -> dict:
+    def op_slice(self, fqn: str, direction: str = "back", limit: int = 200,
+                 min_confidence: float | None = None) -> dict:
         """7. Структурный срез: узлы+рёбра+строки, БЕЗ тел функций (ФТ-19)."""
         env = self.make_env("slice")
+        if not _require_choice(env, "slice", "direction", direction):
+            return env.to_dict()
         rev = self.current_rev()
         if not rev:
             return self._no_index(env)
@@ -2491,6 +3335,13 @@ class Facade:
             env.found = False
             env.error = f"символ не найден: {fqn}"
             return env.to_dict()
+        # Цель-заглушка: узел в индексе есть, но он вне корпуса. Пустой срез и
+        # пустое влияние — следствие этого, а не «связей нет»; это называется.
+        if all(not str(r["path"] or "").strip() for r in rows):
+            env.extra["target_external"] = [str(r["fqn"]) for r in rows]
+            env.limits.append(
+                "цель вне корпуса (внешняя ссылка): узла в индексе нет, "
+                "результат пуст по определению, а не «связей нет»")
         if self.capability() != "full":
             # Сообщение называет ФАКТИЧЕСКИЙ режим, а не «degraded» по умолчанию.
             # Прежде текст был зашит, и ревизия в режиме `partial` (свойства кода
@@ -2513,16 +3364,190 @@ class Facade:
 
         roots = [r["node_id"] for r in rows]
         reverse = direction == "back"
-        steps = self._bfs(rev, roots, 4, reverse=reverse, limit=limit)
+        # Порог передаётся в обход, иначе параметр `min_confidence` у `slice`
+        # ничего не менял бы — а параметр, который не действует, хуже
+        # отсутствующего: он выглядит как настройка.
+        threshold = edge_floor(min_confidence)
+        steps = self._bfs(rev, roots, 4, reverse=reverse, limit=limit,
+                          threshold=threshold)
+        env.limits.append(floor_note(
+            threshold, int((getattr(self, "_bfs_stats", {}) or {}).get(
+                "skipped_low_confidence", 0) or 0)))
         env.result = {
             "target": rows[0]["fqn"],
             "direction": direction,
             "nodes": steps,
             "node_count": len(steps),
+            # Этап 8: срез — это тоже связи, и у каждой есть вид доказательства.
+            "evidence": evidence_mod.summarize(steps),
             "note": "тела символов не включены: используйте операцию code",
         }
         self.attach_stale(env, [s["path"] for s in steps if s.get("path")])
         return env.to_dict()
+
+    #: Виды рёбер, которые `edge_evidence` показывает по умолчанию. Структурные
+    #: (`contains`, `defines`, `uses_var`) исключены: доказательство вызова к ним
+    #: не применимо, и они бы вытеснили вызовы по лимиту. `--kind all` снимает
+    #: ограничение.
+    EDGE_EVIDENCE_KINDS = (
+        "calls", "calls_heuristic", "calls_builtin", "instantiates", "overrides",
+        "implements", "extends", "queries",
+    )
+
+    def op_edge_evidence(self, fqn: str, kind: str | None = None,
+                         limit: int = 200) -> dict:
+        """Рёбра функции с доказательствами: вид, способ привязки, координата.
+
+        Зачем отдельная операция. `callers` и `callees` отвечают «кто/кого», но
+        доказательство в них — одно поле среди многих, а вопрос «почему индекс
+        считает, что эта связь есть» требует источника. Здесь у каждого ребра
+        назван вид доказательства (`cpg_call` / `signature_match` /
+        `name_inference`), способ привязки цели (`evidence_how`: fullname,
+        name_file, own_class, name_only, fqn-name…) и координата вызова
+        (`path:line`), СВЕРЕННАЯ с файлом ревизии: поле `evidence_ok` говорит,
+        существует ли названная строка. Без сверки «координата есть» и
+        «координата верна» — разные утверждения.
+
+        Направление отдаётся ОБОИМ: `out` — кого вызывает функция, `in` — кто
+        вызывает её. Иначе на один вопрос нужны два вызова, и второй забывают.
+
+        `kind` ограничивает виды рёбер; значение `all` показывает и структурные.
+        """
+        env = self.make_env("edge_evidence")
+        rev = self.current_rev()
+        if not rev:
+            return self._no_index(env)
+        rows = self._symbol_rows(rev, fqn, None, 3)
+        if not rows:
+            env.found = False
+            env.error = f"символ не найден: {fqn}"
+            env.extra["suggest"] = ["symbol", "search"]
+            return env.to_dict()
+        node_id = str(rows[0]["node_id"])
+
+        wanted = str(kind or "").strip()
+        if wanted == "all":
+            kind_clause = ""
+            kind_params: tuple = ()
+        else:
+            allowed = (wanted,) if wanted else self.EDGE_EVIDENCE_KINDS
+            marks = ",".join("?" for _ in allowed)
+            kind_clause = f"AND e.kind IN ({marks})"
+            kind_params = tuple(allowed)
+
+        file_lines: dict[str, int] = {}
+        for fr in self.graph.execute(
+                "SELECT path, lines FROM file WHERE rev_id = ?", (rev,)):
+            file_lines[str(fr["path"])] = int(fr["lines"] or 0)
+
+        ev_col = ("COALESCE(e.evidence_kind, '') AS evidence_kind"
+                  if self._edge_evidence_column() else "'' AS evidence_kind")
+        sql = f"""SELECT e.edge_uid, e.src, e.dst, e.kind, e.provenance,
+                         e.evidence_path, e.evidence_line, e.confidence, e.props,
+                         {ev_col},
+                         n.fqn AS other_fqn, n.path AS other_path,
+                         n.start_line AS other_line, n.kind AS other_kind
+                    FROM edge e
+                    LEFT JOIN node n ON n.rev_id = e.rev_id
+                         AND n.node_id = CASE WHEN e.src = ? THEN e.dst ELSE e.src END
+                   WHERE e.rev_id = ? AND (e.src = ? OR e.dst = ?)
+                     {kind_clause}
+                   ORDER BY e.kind, e.evidence_path, e.evidence_line
+                   LIMIT ?"""
+        params = (node_id, rev, node_id, node_id, *kind_params, int(limit))
+        try:
+            found = self.graph.execute(sql, params).fetchall()
+        except Exception as exc:  # noqa: BLE001 — ответ обязан назвать причину
+            env.error = f"чтение рёбер не выполнено: {type(exc).__name__}: {exc}"
+            return env.to_dict()
+
+        out_items: list[dict] = []
+        in_items: list[dict] = []
+        for r in found:
+            direction = "out" if str(r["src"]) == node_id else "in"
+            ev_path = str(r["evidence_path"] or "")
+            ev_line = int(r["evidence_line"] or 0)
+            kind_ev = str(r["evidence_kind"] or "").strip() or evidence_mod.classify(
+                r["kind"], r["provenance"], r["props"], r["confidence"],
+                ev_path, ev_line,
+            )
+            limit_lines = file_lines.get(ev_path)
+            item = {
+                "direction": direction,
+                "edge_kind": r["kind"],
+                "evidence_kind": kind_ev,
+                "evidence_label": evidence_mod.label(kind_ev),
+                "evidence_how": evidence_mod.how_of(r["props"]),
+                "provenance": r["provenance"],
+                "confidence": r["confidence"],
+                "path": ev_path,
+                "line": ev_line,
+                # Сверка координаты с файлом ревизии: путь есть в ревизии и
+                # строка не выходит за конец файла.
+                "evidence_ok": bool(ev_path) and ev_line > 0
+                                and limit_lines is not None
+                                and (limit_lines == 0 or ev_line <= limit_lines),
+                "other": str(r["other_fqn"] or (r["dst"] if direction == "out" else r["src"])),
+                "other_kind": str(r["other_kind"] or "external"),
+                # Цели-заглушки бывают двух сортов: узел `external` в ревизии есть
+                # (это честная внешняя ссылка) и узла нет вовсе. Второй сорт —
+                # ребро «в никуда»: замер 30.10.2026 нашёл таких 249 из 79 132
+                # (0,3 %). Молчать об этом нельзя, иначе связь читается как факт.
+                "other_missing": r["other_kind"] is None,
+                "other_path": r["other_path"],
+                "other_line": r["other_line"],
+            }
+            (out_items if direction == "out" else in_items).append(item)
+
+        all_items = out_items + in_items
+        summary = evidence_mod.summarize(all_items)
+        env.result = {
+            "target": rows[0]["fqn"],
+            "path": rows[0]["path"],
+            "start_line": rows[0]["start_line"],
+            "out": out_items,
+            "in": in_items,
+            "count": {"out": len(out_items), "in": len(in_items), "edges": len(all_items)},
+            "evidence": summary,
+            "kind_filter": wanted or "default",
+            "kinds_allowed": list(self.EDGE_EVIDENCE_KINDS) if not wanted else (
+                "all" if wanted == "all" else [wanted]),
+            "note": (
+                "вид доказательства назван у каждого ребра; `cpg_call` — "
+                "единственный вид, который является подтверждением, "
+                "`signature_match` и `name_inference` — вывод; "
+                "`external_call` — цель вне корпуса (не связь с кодом проекта)"
+            ),
+        }
+        env.found = bool(all_items)
+        if not all_items:
+            env.extra["suggest"] = ["callers", "callees", "search"]
+            env.limits.append(
+                "рёбер выбранных видов нет: возможно, они структурные "
+                "(`--kind all` покажет все) или связь не попала в индекс"
+            )
+        missing = [it for it in all_items if it.get("other_missing")]
+        if missing:
+            env.limits.append(
+                f"у {len(missing)} рёбер цель — заглушка, которой нет среди узлов "
+                f"ревизии: связь ведёт в никуда и доказательством не считается"
+            )
+        broken = [it for it in all_items if not it["evidence_ok"]]
+        if broken:
+            env.limits.append(
+                f"у {len(broken)} рёбер координата не сверена с файлом ревизии "
+                f"(файла нет или строка за концом): такие связи нельзя "
+                f"проверить глазами, и они не считаются подтверждёнными"
+            )
+        if summary["derived"]:
+            env.limits.append(
+                f"выведено {summary['derived']} из {summary['total']} рёбер "
+                f"({summary['derived_share'] * 100:.1f} %): это вывод по имени, "
+                f"а не подтверждение"
+            )
+        self.attach_stale(env, [it["path"] for it in all_items if it["path"]])
+        return env.to_dict()
+
 
     def op_code(self, fqn: str | None = None, path: str | None = None,
                 style: str = "compact", limit: int = 5,
@@ -2557,13 +3582,25 @@ class Facade:
           чанков), а не с диска: тогда чтение не зависит от того, менялся ли
           файл после индексации. Если текста в индексе нет, берётся диск, и это
           видно в поле `text_source` каждого спана: `index` либо `disk`.
+
+        * Окно — ФИЛЬТР ОТБОРА, а не только нарезка. Замер 28.10.2026:
+          `--start 2500 --end 2510` отдавал первые `limit` спанов файла и
+          применял окно к ним: found=True при пустом тексте. Теперь спаны
+          отбираются по пересечению с окном, `spans_with_text` называет,
+          сколько из них реально дали текст, а found=True без единого символа
+          текста невозможен: ответ отказывает и называет границы числами.
         """
         env = self.make_env("code", provenance="live")
+        if not _require_choice(env, "code", "style", style):
+            return env.to_dict()
+        if not _require_choice(env, "code", "source", source):
+            return env.to_dict()
         rev = self.current_rev()
         if not rev:
             return self._no_index(env)
         spans: list[tuple[str, int, int, str | None]] = []
         unresolved: list[str] = []
+        skipped: list[str] = []
         via_node = 0
         via_chunk = 0
 
@@ -2574,7 +3611,20 @@ class Facade:
             spans, unresolved, via_node, via_chunk = self._resolve_entry_ids(rev, raws)
         elif fqn:
             for r in self._symbol_rows(rev, fqn, None, limit):
-                spans.append((str(r["path"]), int(r["start_line"]), int(r["end_line"]), r["fqn"]))
+                span = _span_or_none(r["path"], r["start_line"],
+                                     r["end_line"], r["fqn"])
+                if span is None:
+                    # Внешняя ссылка: имени нет в корпусе, тела нет. Это не
+                    # ошибка запроса, но и не молчаливый пропуск.
+                    skipped.append(str(r["fqn"]))
+                    continue
+                spans.append(span)
+            if skipped:
+                env.extra["without_body"] = skipped
+                env.limits.append(
+                    f"внешних ссылок без тела: {len(skipped)} "
+                    f"({', '.join(skipped[:3])}{'…' if len(skipped) > 3 else ''}) — "
+                    "узел вне корпуса, кода в индексе нет")
         elif path:
             rows = self.graph.execute(
                 """SELECT path, start_line, end_line, fqn FROM node
@@ -2582,10 +3632,17 @@ class Facade:
                    ORDER BY start_line, end_line""",
                 (rev, util.to_posix(path)),
             ).fetchall()
-            all_spans = [
-                (str(r["path"]), int(r["start_line"]), int(r["end_line"]), r["fqn"])
-                for r in rows
-            ]
+            all_spans = []
+            for r in rows:
+                span = _span_or_none(r["path"], r["start_line"],
+                                     r["end_line"], r["fqn"])
+                if span is None:
+                    skipped.append(str(r["fqn"]))
+                    continue
+                all_spans.append(span)
+            all_spans, refused = _window_overlap(env, all_spans, start, end)
+            if refused:
+                return env.to_dict()
             spans = _drop_nested(all_spans) if not include_containers else all_spans
             dropped_nested = len(all_spans) - len(spans)
             env.extra["spans_total"] = len(all_spans)
@@ -2621,6 +3678,17 @@ class Facade:
             env.error = "нужен параметр fqn, path или entry_ids"
             return env.to_dict()
 
+        # Окно для ветвей fqn/entry_ids: тот же отбор одной функцией.
+        spans, refused = _window_overlap(env, spans, start, end)
+        if refused:
+            return env.to_dict()
+        if not spans and skipped:
+            env.found = False
+            env.error = ("тело недоступно: символ есть только как внешняя ссылка "
+                         f"({', '.join(skipped[:3])}) — узла в корпусе нет")
+            env.extra["without_body"] = skipped
+            env.suggest = ["symbol", "search"]
+            return env.to_dict()
         if entry_ids and not spans:
             env.found = False
             env.error = "идентификаторы не разрешились в спаны"
@@ -2722,13 +3790,29 @@ class Facade:
                 env.extra["gaps"] = int(env.extra["gaps"]) + 1
             out.append(item)
         env.result = out
+        # found отвечает «цель найдена», но клиент читает его как «тело есть».
+        # Поэтому пустой текст в каждом спане — это отказ с причиной, а не
+        # найденный результат: расхождение измерено 28.10.2026.
+        with_text = [o for o in out if str(o.get("text") or "").strip()]
+        env.extra["spans_with_text"] = len(with_text)
+        if not with_text:
+            env.found = False
+            env.extra["spans_total"] = len(spans)
+            if out:
+                env.error = (
+                    f"ни одного символа текста: из {len(out)} спанов ни один не дал "
+                    "содержимое (окно вне спанов либо файла нет в рабочем дереве)")
+            else:
+                env.error = "спанов не найдено: нечего выдавать"
         # Провенанс — по фактическому источнику текста, а не по способу вызова.
         # Раньше `code` безусловно объявлял `live`, даже когда читал файл,
         # а не индекс; теперь значение соответствует тому, откуда взято
         # содержимое: index (из индекса), live (всё с диска), mixed (и то и другое).
         real = [o for o in out if o.get("text_source")]
         if not real:
-            env.provenance = "live"
+            # Нет выданного содержимого — нет и источника: `live` означало бы
+            # «данные получены чтением файла», а их не выдали (замер 28.10.2026).
+            env.provenance = "index" if with_text else "none"
         elif all(o["text_source"] == "index" for o in real) and not any(
             o.get("changed_since_index") for o in real
         ):
@@ -2748,6 +3832,8 @@ class Facade:
                     detail: str = "normal") -> dict:
         """9. Карта репозитория: модули → файлы → ключевые символы, в бюджете токенов."""
         env = self.make_env("repo_map")
+        if not _require_choice(env, "repo_map", "detail", detail):
+            return env.to_dict()
         rev = self.current_rev()
         if not rev:
             return self._no_index(env)
@@ -2842,7 +3928,7 @@ class Facade:
 
     def op_search(self, query: str, limit: int = 20, kinds: list[str] | None = None,
                   with_text: bool = False, text_width: int = 160,
-                  answer: bool = False) -> dict:
+                  answer: bool = False, mode: str = "auto") -> dict:
         """1. Гибридный поиск: лексика + вектор (RRF), каждый хит с провенансом.
 
         `with_text=True` добавляет к каждому хиту поле `snippet` — начало сырого
@@ -2856,6 +3942,14 @@ class Facade:
         текста видно, а не замаскировано пустой строкой.
         """
         env = self.make_env("search")
+        if not _require_choice(env, "search", "kinds", kinds, many=True):
+            return env.to_dict()
+        # Режим объявлен закрытым перечнем: значения `docs`/`themes` включают
+        # уровень «тема», `code` фильтрует материал, `auto` оставляет прежнее
+        # поведение. Опечатка в режиме — отказ вызова, а не тихая подмена `auto`.
+        if not _require_choice(env, "search", "mode", (mode or "auto")):
+            return env.to_dict()
+        mode = str(mode or "auto")
         rev = self.current_rev()
         if not rev:
             return self._no_index(env)
@@ -2876,6 +3970,7 @@ class Facade:
             hits = [h for h in hits if h.source_kind in wanted][:max(1, int(limit))]
         out = []
         stale = self.stale_paths()
+        mix: dict[str, int] = {}
         for h in hits:
             item = {
                 "chunk_id": h.chunk_id,
@@ -2887,6 +3982,16 @@ class Facade:
                 "score": h.score,
                 "why": h.why,
             }
+            # Материал хиты называется там, где он известен. `source_kind` —
+            # про ЧАНК (символ, файловое окно, документ), а материал — про сам
+            # ФАЙЛ (код, документ, данные). Без этой разницы ответ из пяти
+            # документов выглядел как ответ по коду: замер 01.11.2026 на этом
+            # корпусе — 12 ответов из 24 не содержали ни одного файла кода, и
+            # видно это было только открыв пути вручную.
+            material = formats_mod.group_of_material(str(h.path))
+            if material:
+                item["material"] = material
+                mix[material] = mix.get(material, 0) + 1
             # Роль документа отдаётся только там, где она есть. Поле не
             # добавляется пустым: агент должен видеть признак, а не догадываться,
             # что пустая строка означает «не документ».
@@ -2898,6 +4003,17 @@ class Facade:
             if h.path in stale:
                 item["stale"] = True
             out.append(item)
+        if mode == "code":
+            # Материал хитов уже посчитан выше; фильтр стоит ДО обрезки ответом,
+            # иначе `limit` съедался бы документами, а код не попадал вовсе.
+            kept = [item for item in out if item.get("material") == "code"]
+            dropped = len(out) - len(kept)
+            out = kept
+            if dropped:
+                env.limits.append(
+                    f"режим code: скрыто хитов другого материала — {dropped}")
+        if mode in ("docs", "themes"):
+            self._apply_levels(env, rev, query, out, mode=mode, limit=int(limit))
         env.result = out
         env.found = bool(out)
         if with_text and out:
@@ -2920,9 +4036,397 @@ class Facade:
             env.extra["suggest"] = ["repo_map", "symbol", "live_read"]
         env.extra["vector_used"] = bool(vector)
         env.extra["vector_available"] = self.lexvec.vec_ok
+        # Состав ответа по материалу: агент видит, что выдача целиком из
+        # документов, и может сразу сузить запрос, а не платить вторым вызовом.
+        if mix:
+            env.extra["material_mix"] = dict(sorted(mix.items()))
+        # Если код в выдаче не появился, а кодовые совпадения есть, лучший из них
+        # называется отдельным полем. Это НЕ изменение ранжирования (порядок
+        # остаётся прежним) и НЕ дополнительный хит: замер 01.11.2026 показал,
+        # что в 12 ответах из 24 не было ни одного файла кода при кодовых
+        # совпадениях в корпусе, и агент платил за это вторым запросом.
+        if out and not mix.get("code"):
+            try:
+                wider = self.lexvec.search_hybrid(rev, query, vector,
+                                                  limit=max(int(limit) * 4, 40))
+                for candidate in wider:
+                    if formats_mod.group_of_material(str(candidate.path)) == "code":
+                        env.extra["code_candidate"] = {
+                            "path": candidate.path,
+                            "start_line": candidate.start_line,
+                            "end_line": candidate.end_line,
+                            "score": candidate.score,
+                            "note": "лучшее кодовое совпадение вне выдачи: в ней нет "
+                                    "ни одного файла кода",
+                        }
+                        break
+            except Exception:  # noqa: BLE001 — подсказка не имеет права ронять поиск
+                pass
         self.attach_stale(env, [h.path for h in hits])
         if answer:
             self._answer_mode(env, f"Найдено по запросу «{query}»", out)
+        return env.to_dict()
+
+    # ------------------------------------------------------------------
+    # Dual-level поиск (этап 4)
+    # ------------------------------------------------------------------
+
+    def _apply_levels(self, env, rev: str, query: str, out: list[dict], *,
+                      mode: str, limit: int) -> None:
+        """Добавить уровень «тема» к лексической выдаче и назвать деградацию.
+
+        Порядок проверок — от причины к следствию: издание, настройка модели, слой.
+        Каждая проверка называет СВОЮ причину, потому что действия читателя разные:
+        лицензия, настройка `llm_*`, проход извлечения.
+
+        Чего метод не делает: не меняет порядок и оценки лексических хитов. Он
+        добавляет недостающие хиты с пометкой `match_kind=entity` и дописывает
+        `matched_entities` тем, что уже были найдены лексикой. Иначе `search`
+        перестал бы быть сравним с прежними замерами.
+        """
+        from . import docgraph_ops, duallevel, edition as edition_mod
+
+        for item in out:
+            item.setdefault("match_kind", "lexical" if "лексика" in str(item.get("why")) else "vector")
+            item.setdefault("match_channels", ["лексика"] if "лексика" in str(item.get("why")) else ["вектор"])
+
+        def degrade(code: str, reason: str) -> None:
+            text = duallevel.describe_degraded(code, reason)
+            env.extra["degraded"] = {"code": code, "reason": reason, "text": text}
+            env.limits.append(text)
+
+        # 1. Издание: уровень «тема» объявлен возможностью `doc-graph` (pro).
+        denial = edition_mod.feature_denial("doc-graph")
+        if denial:
+            degrade(duallevel.DEGRADE_EDITION, denial)
+            return
+
+        # 2. Темы: читаются из слоя, модель для них не нужна. Поэтому режим `themes`
+        # решается ДО проверки модели: иначе он упирался бы в настройку, которая ему
+        # не требуется, и называл бы не тот ресурс (замер: `--mode themes` отвечал
+        # «LLM не настроен» при живом слое).
+        if mode == "themes":
+            themes_conn = duallevel.open_layer(self.cfg)
+            try:
+                ready, reason = duallevel.layer_ready(themes_conn, rev)
+                if not ready:
+                    degrade(duallevel.DEGRADE_LAYER, reason)
+                    return
+                themes = duallevel.themes_of(themes_conn, rev, limit=limit)
+                env.extra["themes"] = themes
+                if not themes:
+                    degrade("themes_not_built",
+                            "слой тем не собран: темы и сводки появляются этапом 5 "
+                            "плана «Агентские интеграции и документный граф»")
+                return
+            finally:
+                if themes_conn is not None:
+                    themes_conn.close()
+
+        # 3. Настройка модели: без неё ключи запроса не извлечь.
+        from . import llm as llm_mod
+        from . import settings as settings_mod
+
+        try:
+            values = dict(settings_mod.SettingsStore().load())
+        except Exception:  # noqa: BLE001 — настройки не имеют права ронять поиск
+            values = dict(settings_mod.DEFAULTS)
+        client = llm_mod.LLMClient(self.cfg, config=llm_mod.config_from_settings(values))
+        state = client.status()
+        if not state.get("configured"):
+            degrade(duallevel.DEGRADE_NO_LLM,
+                    str(state.get("reason") or state.get("code") or "LLM не настроен"))
+            return
+
+        # 3. Слой: уровень «тема» читает сущности и их упоминания.
+        conn = duallevel.open_layer(self.cfg)
+        try:
+            ready, reason = duallevel.layer_ready(conn, rev)
+            if not ready:
+                degrade(duallevel.DEGRADE_LAYER, reason)
+                return
+
+            keys = duallevel.extract_keys(client, query)
+            env.extra["levels"] = {
+                "mode": mode,
+                "high_level": keys.get("high_level") or [],
+                "low_level": keys.get("low_level") or [],
+                "keys_cached": bool(keys.get("cached")),
+                "llm_calls": int(keys.get("calls") or 0),
+                "entities": [],
+                "entity_hits": 0,
+            }
+            if keys.get("code"):
+                degrade(str(keys["code"]), str(keys.get("reason") or ""))
+                return
+            all_keys = list(keys.get("high_level") or []) + list(keys.get("low_level") or [])
+            matched = duallevel.match_entities(conn, rev, all_keys, limit=max(10, limit))
+            env.extra["levels"]["entities"] = matched
+            if not matched:
+                env.limits.append(
+                    "уровень «тема»: сущностей по ключам не найдено — выдача только "
+                    "лексическая (ключи названы в levels)")
+                return
+
+            chunks = duallevel.entity_chunks(
+                conn, rev, [m["entity_id"] for m in matched],
+                per_entity=docgraph_ops.MAX_CITATIONS)
+            by_chunk: dict[str, list[dict]] = {}
+            for chunk in chunks:
+                by_chunk.setdefault(chunk["chunk_id"], []).append(chunk)
+
+            by_name = {m["entity_id"]: m for m in matched}
+            # Хиты лексики, у которых есть упоминание сущности, получают её молча:
+            # это тот же факт, и второй раз он в выдачу не добавляется.
+            positions = {str(item.get("chunk_id")): item for item in out}
+            added = 0
+            for chunk_id, items in by_chunk.items():
+                present = positions.get(chunk_id)
+                entity_marks = [{
+                    "entity_id": chunk["entity_id"],
+                    "name": by_name.get(chunk["entity_id"], {}).get("name", ""),
+                    "matched_on": by_name.get(chunk["entity_id"], {}).get("matched_on", ""),
+                    "matched_key": by_name.get(chunk["entity_id"], {}).get("matched_key", ""),
+                    "locator": chunk["locator"],
+                } for chunk in items]
+                if present is not None:
+                    present.setdefault("matched_entities", []).extend(entity_marks)
+                    continue
+                if added >= limit:
+                    continue
+                first = items[0]
+                hit = {
+                    "chunk_id": chunk_id,
+                    "path": first["path"],
+                    "node_id": None,
+                    "start_line": first["start_line"],
+                    "end_line": first["end_line"],
+                    "source_kind": "doc",
+                    "score": round(0.3 + 0.02 * len(entity_marks), 4),
+                    "why": "совпало по: тема (" + ", ".join(
+                        mark["name"] for mark in entity_marks if mark["name"]) + ")",
+                    "match_kind": "entity",
+                    "match_channels": ["тема"],
+                    "matched_entities": entity_marks,
+                    "locator": first["locator"],
+                }
+                out.append(hit)
+                added += 1
+            env.extra["levels"]["entity_hits"] = added
+            if added:
+                env.limits.append(
+                    f"уровень «тема» добавил хитов: {added} (match_kind=entity); "
+                    "порядок лексической выдачи не менялся")
+        finally:
+            if conn is not None:
+                conn.close()
+
+    def op_doc_search_levels(self, query: str, limit: int = 20,
+                             mode: str = "both") -> dict:
+        """Dual-level поиск: локальные факты и глобальный уровень одним ответом.
+
+        Зачем отдельная операция, а не ещё один `mode` у `search`. У `search` уже
+        есть свой контракт: плоский список хитов, режим «одним ответом», материал
+        и роль документа, пометки устаревания. Двухуровневый ответ имеет ДРУГУЮ
+        форму — два названных уровня и связи между ними, — и вторая форма внутри
+        первого контракта сломала бы сравнение с прежними замерами: клиент,
+        ждущий список, получил бы словарь. Поэтому `search` остаётся прежним, а
+        уровни живут отдельной операцией, с тем же движком (`search_hybrid`) и с
+        тем же источником адресов (`entity_mention`), что и `search --mode docs`.
+
+        Что чем закрыто. Локальный уровень — обычный поиск: он не платный и
+        работает под любым изданием. Глобальный читает документный граф, то есть
+        возможность `doc-graph`: под изданием без неё режим `global` отказывает с
+        причиной, а режим `both` выдаёт локальные факты и называет неполноту в
+        `limits` (правило 2 документа изданий: базовый поиск бесплатен).
+
+        Чего операция не делает: не пишет текст за агента и не выдумывает связь.
+        Сущность без адреса упоминания в ответ не попадает, её число называется
+        в `rejected_no_citation`. Пустой слой не выдаётся за «связей нет»: у
+        пустоты есть свой код и своя причина.
+        """
+        env = self.make_env("doc_search_levels")
+        if not _require_choice(env, "doc_search_levels", "mode", mode or "both"):
+            return env.to_dict()
+        mode = str(mode or "both")
+        rev = self.current_rev()
+        if not rev:
+            return self._no_index(env)
+        from . import docgraph_ops, duallevel, edition as edition_mod
+
+        # Гейт спрашивается ДО работы: режим `global` целиком про граф, и
+        # отказывать надо до поиска, а не после него.
+        denial = ""
+        if mode in (duallevel.LEVEL_GLOBAL, duallevel.LEVEL_BOTH):
+            denial = edition_mod.feature_denial("doc-graph")
+        if denial and mode == duallevel.LEVEL_GLOBAL:
+            env.found = False
+            env.error = f"EditionRefusal: {denial}"
+            env.extra["refused"] = {
+                "reason": denial,
+                "operation": "doc_search_levels",
+                "feature": "doc-graph",
+                "requires_edition": self.edition_state().feature_edition("doc-graph"),
+                "edition": self.edition_state().effective,
+                "suggest": ("что работает без графа: mode=local; какое издание "
+                            "действует: python tools/ragraf.py edition"),
+            }
+            self._record_edition_denied("doc_search_levels", denial)
+            return env.to_dict()
+
+        vector = None
+        if self.embedder.available():
+            try:
+                vector = self.embedder.embed_one(query)
+            except Exception:  # noqa: BLE001 — без вектора работает лексика
+                vector = None
+        hits = self.lexvec.search_hybrid(rev, query, vector,
+                                         limit=max(1, int(limit)))
+        stale = self.stale_paths()
+        local: list[dict] = []
+        for hit in hits:
+            lexical = "лексика" in str(hit.why)
+            item = {
+                "chunk_id": hit.chunk_id,
+                "path": hit.path,
+                "node_id": hit.node_id,
+                "start_line": hit.start_line,
+                "end_line": hit.end_line,
+                "source_kind": hit.source_kind,
+                # Адрес локального факта — та же форма, что у остальных
+                # операций: её принимает `code`, `doc_get`, `live_read`.
+                "locator": docgraph_ops.locator(hit.path, hit.start_line,
+                                                hit.end_line),
+                "score": hit.score,
+                "why": hit.why,
+                "match_kind": "lexical" if lexical else "vector",
+                "match_channels": ["лексика"] if lexical else ["вектор"],
+                # Пустой список не значит «сущностей нет»: он значит, что
+                # глобальный уровень не дал связи для этого факта (причина —
+                # в `global`). Так поле честнее отсутствия поля.
+                "via_entities": [],
+            }
+            if str(hit.path) in stale:
+                item["stale"] = True
+            local.append(item)
+
+        result: dict[str, Any] = {"query": query, "mode": mode}
+        if mode != duallevel.LEVEL_GLOBAL:
+            result["local"] = {
+                "level": duallevel.LEVEL_LOCAL,
+                "found": bool(local),
+                "count": len(local),
+                "hits": local,
+            }
+        if mode == duallevel.LEVEL_LOCAL:
+            env.result = result
+            env.found = bool(local)
+            if not local:
+                env.limits.append(
+                    "локальных фактов нет: запрос не совпал ни с одним чанком")
+                env.extra["suggest"] = ["search", "doc_search", "repo_map"]
+            self.attach_stale(env, [str(item["path"]) for item in local])
+            return env.to_dict()
+
+        block: dict[str, Any] = {
+            "level": duallevel.LEVEL_GLOBAL,
+            "found": False,
+            "count": 0,
+            "entities": [],
+            "relations": [],
+            "reason": "",
+            "code": "",
+            "links": {"hits": len(local), "hits_with_entities": 0,
+                      "entities": 0, "relations": 0, "relations_linked": 0},
+        }
+
+        def incomplete(code: str, reason: str) -> None:
+            """Назвать неполноту глобального уровня — полем и строкой в limits."""
+            block["code"] = code
+            block["reason"] = reason
+            text = duallevel.describe_global_level(code, reason)
+            env.extra["degraded"] = {"code": code, "reason": reason,
+                                     "text": text,
+                                     "level": duallevel.LEVEL_GLOBAL}
+            env.limits.append(text)
+
+        if denial:
+            incomplete(duallevel.DEGRADE_EDITION, denial)
+        elif not local:
+            incomplete(duallevel.DEGRADE_NO_LOCAL,
+                       f"запрос «{query}» не дал ни одного локального факта")
+        else:
+            conn = duallevel.open_layer(self.cfg)
+            try:
+                state = docgraph_ops.layer_state(conn, rev)
+                if not state.get("built"):
+                    incomplete(duallevel.DEGRADE_LAYER,
+                               str(state.get("reason") or "слой пуст"))
+                else:
+                    facts = duallevel.facts_of_chunks(
+                        conn, rev, [str(item["chunk_id"]) for item in local],
+                        limit=duallevel.MAX_LEVEL_FACTS)
+                    by_chunk: dict[str, list[dict]] = {}
+                    for entity in facts["entities"]:
+                        via = entity.get("via_chunk") or {}
+                        chunk_id = str(via.get("chunk_id") or "")
+                        if not chunk_id:
+                            continue
+                        by_chunk.setdefault(chunk_id, []).append({
+                            "entity_id": entity["entity_id"],
+                            "name": entity["name"],
+                            "kind": entity["kind"],
+                            "locator": str(via.get("locator") or ""),
+                        })
+                    for item in local:
+                        item["via_entities"] = by_chunk.get(
+                            str(item["chunk_id"])) or []
+                    block.update({
+                        "found": bool(facts["entities"] or facts["relations"]),
+                        "count": len(facts["entities"]) + len(facts["relations"]),
+                        "entities": facts["entities"],
+                        "relations": facts["relations"],
+                        "rejected_no_citation": int(
+                            facts.get("rejected_no_citation") or 0),
+                        "truncated": bool(facts.get("truncated")),
+                        "links": {
+                            "hits": len(local),
+                            "hits_with_entities": sum(
+                                1 for item in local if item.get("via_entities")),
+                            "entities": len(facts["entities"]),
+                            "relations": len(facts["relations"]),
+                            "relations_linked": sum(
+                                1 for rel in facts["relations"]
+                                if rel.get("via_chunk")),
+                        },
+                    })
+                    if facts.get("reason"):
+                        env.limits.append(str(facts["reason"]))
+                    if not block["found"]:
+                        # Слой собран, но в этих чанках упоминаний нет. Это
+                        # честное «связей нет», и оно НЕ то же самое, что
+                        # несобранный слой: коды разные, действия разные.
+                        block["code"] = "no_facts_in_chunks"
+                        block["reason"] = (
+                            "слой собран, но в чанках выдачи нет ни упоминаний "
+                            "сущностей, ни связей: это «связей нет», а не "
+                            "пустой слой")
+                        env.limits.append(block["reason"])
+            finally:
+                if conn is not None:
+                    conn.close()
+
+        result["global"] = block
+        if mode == duallevel.LEVEL_GLOBAL:
+            env.found = bool(block["found"])
+        else:
+            # В режиме `both` локальный уровень самодостаточен: отсутствие
+            # глобального не делает ответ пустым, но и молчать о нём нельзя.
+            env.found = bool(result["local"]["found"] or block["found"])
+        env.result = result
+        self.attach_stale(env, [str(item["path"]) for item in local])
+        if not env.found:
+            env.extra["suggest"] = ["search", "doc_search", "doc_status"]
         return env.to_dict()
 
     def _answer_mode(self, env, title: str, items: list[dict],
@@ -3187,6 +4691,93 @@ class Facade:
         env.extra["total"] = store_obj.count(task=task)
         if not records:
             env.extra["suggest"] = ["note"]
+        return env.to_dict()
+
+    def op_excludes(self, action: str = "show", dirs: str = "",
+                    force: bool = False) -> dict:
+        """P2-4. Профиль «шумных» каталогов: что исключается и чего это стоит.
+
+        Зачем операция, а не только настройка. Включение профиля меняет СОСТАВ
+        корпуса, поэтому «просто не считать temp» — обещание, которое надо
+        проверять. Замер 28.10.2026 по 40 корпусам (tools/measure_noisy_dirs.py):
+        в каталогах `tmp` лежит 1215 файлов КОДА, в `bin` — 56 из 56. Поэтому
+        действие `apply` сначала считает эффект и ОТКАЗЫВАЕТ, если выпадают
+        файлы кода, называя их; `force=true` — осознанное решение владельца, и
+        оно видно в ответе полем `forced`.
+
+        Границы: правится только секция `index` конфига корпуса (через
+        settings.write_project_settings — с резервной копией); базовый список
+        `DEFAULT_EXCLUDES` не меняется; `.ragraf` добавить нельзя.
+        """
+        from . import excludes as excludes_mod
+        from . import settings as settings_mod
+
+        env = self.make_env("excludes")
+        act = str(action or "show").lower()
+        current = excludes_mod.describe(self.cfg)
+        raw = str(dirs or "").strip() or ",".join(current["dirs"] or [])
+        try:
+            names = excludes_mod.normalize(raw)
+        except excludes_mod.ExcludeError as exc:
+            env.found = False
+            env.error = str(exc)
+            return env.to_dict()
+
+        if act in ("show", "impact", "check"):
+            data = excludes_mod.impact(self.cfg, names)
+            env.result = {"current": current, "impact": data}
+            env.found = True
+            env.extra["source"] = "settings"
+            env.extra["note"] = (
+                "эффект посчитан тем же сканером, что и индексация, при "
+                "выключенном профиле: это ответ «что выпадет», а не «что уже "
+                "выпало»"
+            )
+            return env.to_dict()
+
+        if act not in ("apply", "enable", "disable"):
+            env.found = False
+            env.error = (f"неизвестное действие {act!r}: допустимы "
+                         "show, impact, apply, disable")
+            return env.to_dict()
+
+        if act == "disable":
+            written = settings_mod.write_project_settings(
+                self.cfg.config_path, {"exclude_noisy_enabled": False})
+            env.result = {"written": written, "dirs": names}
+            env.found = True
+            env.extra["next"] = ("профиль выключен: состав корпуса вернулся к "
+                                 "прежнему, переиндексация не требуется")
+            return env.to_dict()
+
+        data = excludes_mod.impact(self.cfg, names)
+        if not data["safe"] and not force:
+            env.result = data
+            env.found = False
+            examples = []
+            for name, bucket in (data.get("by_name") or {}).items():
+                if bucket.get("code"):
+                    examples.append(f"{name}: {bucket['code']} файлов кода")
+            env.error = (
+                f"включать нельзя без решения: каталоги {', '.join(names)} "
+                f"содержат {data['code_dropped']} файлов КОДА "
+                f"({'; '.join(examples)}). Эти файлы выпадут из индекса. "
+                "Нужен force=true либо другой список имён."
+            )
+            return env.to_dict()
+
+        written = settings_mod.write_project_settings(
+            self.cfg.config_path,
+            {"exclude_noisy_enabled": True,
+             "exclude_noisy_dirs": ",".join(names)},
+        )
+        env.result = {"written": written, "impact": data,
+                      "forced": bool(force and not data["safe"])}
+        env.found = True
+        env.extra["next"] = (
+            "настройка записана; состав корпуса изменился, поэтому нужна "
+            "переиндексация: ragraf reindex (или check)"
+        )
         return env.to_dict()
 
     def op_gate(self, payload: dict | str | None = None, mode: str | None = None) -> dict:
@@ -3552,9 +5143,432 @@ class Facade:
         out.sort(key=lambda g: (0 if g["active"] and g["copies"] else 1, -sum(m["hits"] for m in g["members"]), g["family"]))
         return out, notes
 
-    def op_live_read(self, path: str, start: int | None = None, end: int | None = None,
-                     context: int = 5) -> dict:
-        """16. Чтение актуального файла с выделением отличий от индекса (ФТ-31)."""
+    # ------------------------------------------------------------------
+    # Документный слой (этап «документы», фаза A)
+    #
+    # Четыре операции названы `doc_*` намеренно: у чанка документа адрес
+    # устроен НЕ строкой файла (`path:sheet=Данные!A1:C20`, `path#/items/0`),
+    # поэтому «нашлось в search» и «адрес открывается» — разные утверждения, и
+    # проверить второе можно только отдельной операцией.
+    # ------------------------------------------------------------------
+
+    def _doc_conn(self):
+        """Соединение документных таблиц или None, если слой не построен."""
+        try:
+            row = self.lexvec.conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='document'"
+            ).fetchone()
+        except Exception:  # noqa: BLE001 — отсутствие слоя не должно ронять операцию
+            return None
+        return self.lexvec.conn if row else None
+
+    def _doc_not_built(self, env: "Envelope") -> dict:
+        env.found = False
+        env.error = (
+            "документный слой не построен в активной ревизии: таблицы `document` "
+            "нет. Причина названа, а не скрыта: ревизия собрана сборкой без "
+            "документного слоя либо старше его. Выполните reindex."
+        )
+        return env.to_dict()
+
+    def _docgraph_layer(self, env: "Envelope"):
+        """Соединение слоя документного графа либо готовый конверт отказа.
+
+        Три состояния названы раздельно: индекса нет, таблиц слоя нет, таблицы
+        есть и пусты. Это не педантизм: «слой не собран» требует прохода, «слой
+        пуст» — проверки настройки LLM, и один текст на оба случая увёл бы не
+        туда.
+        """
+        rev = self.current_rev()
+        if not rev:
+            return None, self._no_index(env)
+        if self._doc_conn() is None:
+            env.found = False
+            env.error = ("слой документного графа не построен в этой ревизии: таблиц "
+                         "`entity`/`entity_mention` нет. Выполните `docgraph build` "
+                         "или `index --doc-graph`")
+            return None, env.to_dict()
+        from . import docgraph_ops
+
+        state = docgraph_ops.layer_state(self.lexvec.conn, rev)
+        if not state.get("built"):
+            env.found = False
+            env.error = str(state.get("reason") or "слой документного графа пуст")
+            env.extra["layer"] = state
+            return None, env.to_dict()
+        env.extra["layer"] = state
+        return self.lexvec.conn, None
+
+    def op_entity_neighbors(self, entity: str, depth: int = 1, kind: str = "entity",
+                            limit: int = 50) -> dict:
+        """Соседи сущности по документному графу: каждый с адресом цитаты.
+
+        Возможность объявлена изданием Pro (`doc-graph`), поэтому на Community
+        вызов получает отказ слоя изданий с названием нужного издания — ДО
+        чтения слоя. Проверку делает общая обёртка фасада: она одна на все
+        операции, и забыть её в новой операции невозможно.
+        """
+        env = self.make_env("entity_neighbors")
+        conn, refusal = self._docgraph_layer(env)
+        if refusal is not None:
+            return refusal
+        from . import docgraph_ops
+
+        rev = str(self.current_rev())
+        data = docgraph_ops.entity_neighbors(conn, rev, entity, depth=depth,
+                                            kind=kind, limit=limit)
+        env.result = data
+        env.found = bool(data.get("neighbors"))
+        if not env.found:
+            env.limits.append(str(data.get("reason") or "соседей не найдено"))
+        env.extra["limits_declared"] = {
+            "depth": [1, docgraph_ops.MAX_DEPTH],
+            "limit": [1, docgraph_ops.MAX_LIMIT],
+            "citations_per_fact": docgraph_ops.MAX_CITATIONS,
+        }
+        return env.to_dict()
+
+    def op_doc_relations(self, doc: str | None = None, entity: str | None = None,
+                         limit: int = 50) -> dict:
+        """Связи документов через общие сущности: адреса с обеих сторон.
+
+        Нужен ровно один вход (`doc` или `entity`). Оба сразу — ошибка вызова, а
+        не «взяли первый»: у двух входов разный смысл ответа.
+        """
+        env = self.make_env("doc_relations")
+        conn, refusal = self._docgraph_layer(env)
+        if refusal is not None:
+            return refusal
+        from . import docgraph_ops
+
+        rev = str(self.current_rev())
+        data = docgraph_ops.doc_relations(conn, rev, doc=doc, entity=entity,
+                                         limit=limit)
+        env.result = data
+        env.found = bool(data.get("pairs"))
+        if not env.found:
+            env.limits.append(str(data.get("reason") or "связей не найдено"))
+        env.extra["limits_declared"] = {
+            "limit": [1, docgraph_ops.MAX_LIMIT],
+            "citations_per_fact": docgraph_ops.MAX_CITATIONS,
+        }
+        return env.to_dict()
+
+    def op_themes(self, scope: str | None = None, limit: int = 20) -> dict:
+        """Темы документного графа: участники, адреса и сводка, если она есть.
+
+        Тема — группа сущностей, встречающихся вместе чаще случайного
+        (`themes.build`). Кластеры детерминированы: тот же слой даёт те же
+        `theme_id` на любой машине, поэтому темы сравнимы между ревизиями.
+
+        Сводка — единственная платная часть: без модели её нет, и это названо
+        полем `summary=null` и причиной в `degraded`, а не пустой строкой.
+        Тему без адресов не выдаём: у каждого участника есть `citations`.
+        """
+        env = self.make_env("themes")
+        conn, refusal = self._docgraph_layer(env)
+        if refusal is not None:
+            return refusal
+        from . import themes as themes_mod
+
+        rev = str(self.current_rev())
+        data = themes_mod.read(conn, rev, scope=scope, limit=limit)
+        env.result = data
+        env.found = bool(data.get("themes"))
+        if not env.found:
+            code = (themes_mod.DEGRADE_NO_THEMES if not data.get("themes_total")
+                    else themes_mod.DEGRADE_NO_COOCCURRENCE)
+            reason = str(data.get("reason") or "тем нет")
+            text = themes_mod.describe_degraded(code, reason)
+            env.extra["degraded"] = {"code": code, "reason": reason, "text": text}
+            env.limits.append(text)
+        env.extra["limits_declared"] = {
+            "limit": [1, themes_mod.MAX_THEMES],
+            "citations_per_fact": themes_mod.MAX_CITATIONS,
+            "min_weight": themes_mod.MIN_WEIGHT_DEFAULT,
+            "max_size": themes_mod.MAX_SIZE,
+        }
+        return env.to_dict()
+
+    def op_global_overview(self, limit: int = 20) -> dict:
+        """Карта документного графа: сколько чего и какие темы главные.
+
+        Отвечает не «что найдено», а «что вообще есть»: документы, сущности,
+        связи, темы, сводки и топ-темы с адресами. Каждая тема приходит с
+        цитатами, поэтому карту можно проверить, а не принять на веру.
+        """
+        env = self.make_env("global_overview")
+        conn, refusal = self._docgraph_layer(env)
+        if refusal is not None:
+            return refusal
+        from . import themes as themes_mod
+
+        rev = str(self.current_rev())
+        data = themes_mod.overview(conn, rev, limit=limit)
+        env.result = data
+        env.found = bool((data.get("counts") or {}).get("entities"))
+        code = str(data.get("degraded") or "")
+        if code:
+            reason = str(data.get("reason") or "")
+            text = themes_mod.describe_degraded(code, reason)
+            env.extra["degraded"] = {"code": code, "reason": reason, "text": text}
+            env.limits.append(text)
+        env.extra["limits_declared"] = {"limit": [1, themes_mod.MAX_THEMES],
+                                        "citations_per_theme": themes_mod.MAX_CITATIONS}
+        return env.to_dict()
+
+    def op_doc_ocr(self, path: str = "") -> dict:
+        """Состояние возможности OCR и решение по конкретному файлу.
+
+        Возможность объявлена изданием Pro (`doc-ocr`), поэтому на Community вызов
+        получает отказ слоя изданий с причиной — ДО того, как проверится движок.
+        Так «не положено» и «движка нет» остаются разными ответами.
+
+        Почему операция одна, а не две (`doc_ocr` + `doc_ocr_status`): правилу
+        честности слоя изданий достаточно одной операции, а второй вызов не даёт
+        нового факта — состояние возможности и есть её статус.
+        """
+        env = self.make_env("doc_ocr")
+        from .docread import ocr as ocr_reader
+
+        state = ocr_reader.state()
+        env.found = True
+        env.result = {
+            "enabled": state["enabled"],
+            "state": state["status"],
+            "reason": state["reason"],
+            "engine": state["engine"] or None,
+            "edition": self.edition_state().effective,
+        }
+        if path:
+            env.result["path"] = path
+            env.result["image"] = ocr_reader.supported(path)
+            env.result["decision"] = (
+                state["reason"] if state["status"] != "ready"
+                else "изображение будет распознано локальным движком"
+            )
+        if state["status"] != "ready":
+            env.limits.append(state["reason"])
+        return env.to_dict()
+
+    def op_doc_search(self, query: str, limit: int = 20, kind: str | None = None,
+                      doc: str | None = None, with_text: bool = True,
+                      text_width: int = 240) -> dict:
+        """Поиск по документным чанкам: факт, адрес, провенанс.
+
+        Почему не просто `search --kind doc`: тот ищет по всем чанкам, а адрес
+        документа живёт в `document_chunk`. Здесь один пакетный запрос даёт
+        адрес, структуру и статус извлечения — то, по чему проверяется доверие.
+        """
+        env = self.make_env("doc_search")
+        rev = self.current_rev()
+        if not rev:
+            return self._no_index(env)
+        conn = self._doc_conn()
+        if conn is None:
+            return self._doc_not_built(env)
+        from . import docindex
+
+        vector = None
+        if self.embedder.available():
+            try:
+                vector = self.embedder.embed_one(query)
+            except Exception:  # noqa: BLE001 — без вектора работает лексика
+                vector = None
+        fetch = max(int(limit) * 20, 200)
+        hits = [hit for hit in self.lexvec.search_hybrid(
+            rev, query, vector, limit=fetch) if hit.source_kind == "doc"]
+        rows = docindex.rows_by_chunk_ids(conn, rev, [hit.chunk_id for hit in hits])
+        stale = self.stale_paths()
+        out: list[dict] = []
+        for hit in hits:
+            row = rows.get(hit.chunk_id)
+            if not row:
+                continue
+            if kind and str(row.get("kind") or "") != str(kind):
+                continue
+            if doc:
+                doc_id = str(row.get("doc_id") or "")
+                path = str(row.get("path") or "")
+                if doc not in (doc_id, path) and not path.startswith(str(doc)):
+                    continue
+            item = {
+                "locator": row.get("locator"),
+                "path": row.get("path"),
+                "doc_id": row.get("doc_id"),
+                "kind": row.get("kind"),
+                "tokens": row.get("tokens"),
+                "extraction_status": row.get("extraction_status"),
+                "structure": row.get("structure") or {},
+                "provenance": row.get("provenance") or {},
+                "score": round(float(hit.score), 4),
+                "why": hit.why,
+            }
+            if with_text:
+                text = str(row.get("text") or "")
+                item["snippet"] = text[:int(text_width)]
+                if len(text) > int(text_width):
+                    item["snippet_truncated"] = True
+            if str(row.get("path") or "") in stale:
+                item["stale"] = True
+            out.append(item)
+            if len(out) >= max(1, int(limit)):
+                break
+        env.found = bool(out)
+        env.result = {
+            "query": query,
+            "hits": out,
+            "count": len(out),
+            "doc_hits_before_filter": len(hits),
+        }
+        if not out:
+            env.limits.append(
+                "совпадений в документах нет; чанки документов появляются только "
+                "для форматов, разобранных документным слоем (doc_status)"
+            )
+        # Этап 10: у документной выдачи своя природа доказательства — ТЕКСТ и
+        # его происхождение, а не ребро графа. Это называется прямо, иначе
+        # отсутствие `evidence_kind` читается как «связь не проверена».
+        env.extra["evidence"] = {
+            "applies_to_calls": False,
+            "note": ("вопрос «чем подтверждён вызов» к документному слою не "
+                     "применяется: это текст и его происхождение (`provenance`), "
+                     "а не связь графа"),
+        }
+        return env.to_dict()
+
+    def op_doc_get(self, locator: str, with_provenance: bool = True) -> dict:
+        """Текст по адресу документа и провенанс: из индекса или с диска.
+
+        Порядок важен. Сначала индекс: он отвечает быстро и относится к той же
+        ревизии, что и остальные факты. Если адреса в ревизии нет — документ
+        разбирается заново тем же читателем, и источник называется `disk`. Так
+        «адрес устарел» не выдаётся за «адреса нет».
+        """
+        env = self.make_env("doc_get")
+        rev = self.current_rev()
+        if not rev:
+            return self._no_index(env)
+        from . import docindex, docnode, docread
+
+        conn = self._doc_conn()
+        if conn is not None:
+            rows = docindex.chunks(conn, rev, locator=locator)
+            if rows:
+                first = rows[0]
+                env.found = True
+                env.result = {
+                    "locator": locator,
+                    "path": first.get("path"),
+                    "doc_id": first.get("doc_id"),
+                    "kind": first.get("kind"),
+                    "parts": len(rows),
+                    "text": "\n\n".join(str(row.get("text") or "") for row in rows),
+                    "extraction_status": first.get("extraction_status"),
+                    "vector_chars": first.get("vector_chars"),
+                    "source": "index",
+                }
+                if with_provenance:
+                    env.result["provenance"] = first.get("provenance") or {}
+                    env.result["structure"] = first.get("structure") or {}
+                env.extra["evidence"] = {
+                    "applies_to_calls": False,
+                    "note": ("вид доказательства связи к тексту документа не "
+                             "применяется; доказательство здесь — адрес чанка и "
+                             "`provenance` разбора, источник назван в `source`"),
+                }
+                return env.to_dict()
+        path = docnode.path_of(locator)
+        if not path:
+            env.found = False
+            env.error = f"локатор не разобран ни одной формой: {locator!r}"
+            return env.to_dict()
+        from pathlib import Path as _Path
+
+        abs_path = _Path(self.cfg.root) / path
+        try:
+            data = abs_path.read_bytes()
+        except OSError as exc:
+            env.found = False
+            env.error = (f"адреса нет в ревизии, а файл недоступен: "
+                         f"{type(exc).__name__}: {exc}")
+            return env.to_dict()
+        text, info = docread.resolve(path, data, locator)
+        env.extra["resolved"] = info
+        if info.get("error"):
+            env.found = False
+            env.error = str(info["error"])
+            return env.to_dict()
+        env.found = True
+        env.result = {
+            "locator": locator,
+            "path": path,
+            "text": text,
+            "source": "disk",
+        }
+        if with_provenance:
+            env.result["resolved"] = info
+        env.limits.append(
+            "адреса нет в активной ревизии — текст разрешён по диску тем же "
+            "читателем, поэтому номера строк могли сдвинуться"
+        )
+        return env.to_dict()
+
+    def op_doc_status(self, doc_id: str | None = None) -> dict:
+        """Состояние документного слоя: статусы, причины, бюджеты."""
+        env = self.make_env("doc_status")
+        rev = self.current_rev()
+        if not rev:
+            return self._no_index(env)
+        conn = self._doc_conn()
+        if conn is None:
+            return self._doc_not_built(env)
+        from . import docindex
+
+        data = docindex.status(conn, rev, doc_id)
+        env.result = data
+        env.found = bool(data.get("documents"))
+        if not env.found:
+            env.error = (
+                f"документ не найден в ревизии: {doc_id}" if doc_id
+                else "в ревизии нет документов, разобранных документным слоем"
+            )
+        return env.to_dict()
+
+    def op_doc_validate(self, doc_id: str | None = None) -> dict:
+        """Проверить целостность чанкинга: вердикт, а не впечатление.
+
+        Возвращает `ok` и список нарушений с номером проверки. Провал — это не
+        исключение: операция обязана назвать, какое правило и на каком адресе
+        нарушено, иначе «индекс плохой» нечего исправлять.
+        """
+        env = self.make_env("doc_validate")
+        rev = self.current_rev()
+        if not rev:
+            return self._no_index(env)
+        conn = self._doc_conn()
+        if conn is None:
+            return self._doc_not_built(env)
+        from . import docindex
+
+        data = docindex.validate(conn, rev, doc_id)
+        env.result = data
+        env.found = bool(data.get("documents"))
+        if data.get("problems"):
+            env.extra["problems"] = len(data["problems"])
+        return env.to_dict()
+
+    def op_live_read(self, path: str, start: int | None = None,
+                     end: int | None = None) -> dict:
+        """16. Чтение актуального файла с выделением отличий от индекса (ФТ-31).
+
+        Построчного сравнения с индексом здесь нет и быть не может: в индексе
+        хранятся чанки, а не текст файла целиком, поэтому отличие выражается
+        признаком `changed_since_index` по sha256. Параметр `context` (контекст
+        вокруг отличающихся строк) раньше принимался и НИ НА ЧТО не влиял —
+        замер 28.10.2026 нашёл его единственной пустышкой среди 54 операций;
+        удалён, чтобы объявление не обещало несделанного.
+        """
         env = self.make_env("live_read", provenance="live")
         rev = self.current_rev()
         # Пустой путь раньше превращался в корень корпуса: `root / ""` — это
@@ -3621,6 +5635,24 @@ class Facade:
             start = 1
         if end is None:
             end = min(len(lines), start + 400)
+        # Окно за границами файла — отказ с числами, а не пустой текст при
+        # found=True (замер 28.10.2026: start=9000 при 6117 строках отдавал
+        # text="", found=True и total_lines=6117, без объяснения).
+        if int(start) > int(end):
+            env.found = False
+            env.error = f"окно задано наоборот: начало {start} больше конца {end}"
+            return env.to_dict()
+        if not lines:
+            env.found = False
+            env.error = "файл не содержит текста: извлекать нечего"
+            env.extra["extract_kind"] = extract_kind or None
+            return env.to_dict()
+        if int(start) > len(lines):
+            env.found = False
+            env.error = (f"окно {start}-{end} за пределами файла: "
+                         f"строк всего {len(lines)}")
+            env.extra["total_lines"] = len(lines)
+            return env.to_dict()
         seg = lines[max(0, start - 1) : end]
         env.result = {
             "path": util.to_posix(path),
@@ -3713,6 +5745,40 @@ class Facade:
         sql += " LIMIT ?"
         params.append(limit)
         rows = self.graph.execute(sql, tuple(params)).fetchall()
+        # Пустой миграционный источник — не «таблицы нет», а «схемы из миграций нет».
+        # Замер 28.10.2026 (rev-0489): `db_table` 0 строк при собранной живой схеме
+        # (`db_live_table` 315), и `schema(users)` отвечал found=false, error=None:
+        # клиент читал это как «такой таблицы нет». Теперь причина названа числами и
+        # указан источник, который действительно отвечает.
+        if not rows:
+            live_tables = live_names = live_databases = 0
+            if store.table_exists(self.graph, "db_live_table"):
+                row = self.graph.execute(
+                    "SELECT COUNT(*) AS rows_, COUNT(DISTINCT table_name) AS names_,"
+                    " COUNT(DISTINCT database_name) AS dbs_"
+                    " FROM db_live_table WHERE rev_id = ?",
+                    (rev,),
+                ).fetchone()
+                if row:
+                    live_tables = int(row["rows_"] or 0)
+                    live_names = int(row["names_"] or 0)
+                    live_databases = int(row["dbs_"] or 0)
+            env.found = False
+            # Три числа, а не одно: строк 315 в трёх базах при 212 уникальных именах —
+            # «таблиц 212» без границы читается как «в базе 212 таблиц».
+            env.error = (
+                "схема из миграций пуста: таблиц разобрано 0"
+                + (f"; живая схема собрана — баз {live_databases}, таблиц {live_tables}"
+                   f" (уникальных имён {live_names}), см. `db_schema` и `db_table`"
+                   if live_tables else "; живая схема тоже не собрана")
+            )
+            env.extra["migrations_tables"] = 0
+            env.extra["live_tables"] = live_tables
+            env.extra["live_table_names"] = live_names
+            env.extra["live_databases"] = live_databases
+            env.extra["schema_source"] = "migrations"
+            env.extra["suggest"] = ["db_schema", "db_table"] if live_tables else ["index_status"]
+            return env.to_dict()
         cols_available = self._db_column_marks_available()
         out = []
         for r in rows:
@@ -3789,13 +5855,20 @@ class Facade:
         rev = self.current_rev()
         if not rev:
             return self._no_index(env)
-        if mode not in ("all", "read", "write"):
-            env.found = False
-            env.error = "неизвестный режим: ожидается all, read или write"
+        if not _require_choice(env, "table_usage", "mode", mode):
             return env.to_dict()
 
         # Схема из миграций: по ней решается, подтверждена таблица или нет.
         known = self._known_tables(rev)
+        # Отсутствие миграций и отсутствие таблицы в миграциях — разные факты.
+        # Замер 28.10.2026: при `db_table` 0 строк операция писала «таблицы нет в схеме
+        # из миграций — проверьте имя и написание», то есть обвиняла имя клиента.
+        migrations_empty = not known
+        if migrations_empty:
+            env.extra["schema_source"] = "none"
+            env.limits.append(
+                "схема из миграций пуста (таблиц 0): подтвердить имя таблицы по ней "
+                "нельзя; сверяйтесь с живой схемой (`db_schema`, `db_table`)")
 
         dst = f"@table:{table.lower()}"
         rows = self.graph.execute(
@@ -3851,7 +5924,12 @@ class Facade:
         unresolved = [] if table.lower() in known else [
             {
                 "name": table,
-                "reason": "обращения в коде есть, но в схеме из миграций таблица не найдена",
+                "reason": (
+                    "обращения в коде есть, но схема из миграций пуста — подтвердить "
+                    "имя нечем; это не признак опечатки"
+                    if migrations_empty
+                    else "обращения в коде есть, но в схеме из миграций таблица не найдена"
+                ),
                 "hint": "возможная опечатка в SQL, обращение к системной таблице или неполнота разбора миграций",
             }
         ]
@@ -3867,11 +5945,14 @@ class Facade:
         env.found = bool(out)
         if not env.found:
             env.extra["suggest"] = ["schema", "write_check", "search"]
-            env.extra["note"] = (
-                "обращений к таблице в коде не найдено; проверьте имя через schema"
-                if table.lower() in known
-                else "таблицы нет в схеме из миграций — проверьте имя и написание"
-            )
+            if table.lower() in known:
+                env.extra["note"] = "обращений к таблице в коде не найдено; проверьте имя через schema"
+            elif migrations_empty:
+                env.extra["note"] = (
+                    "обращений к таблице в коде не найдено; схема из миграций пуста, "
+                    "поэтому имя не подтверждено и не опровергнуто")
+            else:
+                env.extra["note"] = "таблицы нет в схеме из миграций — проверьте имя и написание"
         self.attach_stale(env, [str(x["path"]) for x in out if x["path"]])
         return env.to_dict()
 
@@ -3890,7 +5971,8 @@ class Facade:
             return set()
 
     def op_policy_trace(self, symbol: str, action: str | None = None,
-                        depth: int = 3, limit: int = 300) -> dict:
+                        depth: int = 3, limit: int = 300,
+                        min_confidence: float | None = None) -> dict:
         """22. Трассировка решений о правах (U6).
 
         Зачем операция. Самый дорогой дефект на полигоне (№9 в отчёте по
@@ -3992,10 +6074,15 @@ class Facade:
             env.limits.append(f"тело символа прочитать не удалось: {type(exc).__name__}")
 
         # Кто вызывает проверку: это точки применения решения.
+        # Вид доказательства у вызывающих (этап 10). Операция отдавала `callers`
+        # без него, хотя это ТЕ ЖЕ рёбра графа, что у `callers`/`impact`: без
+        # вида `provenance=stated` читалось как «вызов доказан», а это могла
+        # быть привязка по имени.
+        threshold = edge_floor(min_confidence)
         callers: list[dict] = []
         try:
             steps = self._bfs(rev, [str(target.get("node_id"))], depth, reverse=True,
-                              limit=limit)
+                              limit=limit, threshold=threshold)
             for s in steps:
                 # Ключ шага — edge_kind, а не relation. Ошибка в имени ключа
                 # привела к тому, что вызывающие не находились, хотя рёбра
@@ -4007,6 +6094,11 @@ class Facade:
                         "symbol": s.get("name") or s.get("fqn"),
                         "provenance": s.get("provenance"),
                         "edge_kind": s.get("edge_kind"),
+                        "confidence": s.get("confidence"),
+                        "evidence": s.get("evidence"),
+                        "evidence_kind": s.get("evidence_kind"),
+                        "evidence_label": s.get("evidence_label"),
+                        "evidence_how": s.get("evidence_how"),
                     })
         except Exception as exc:
             env.limits.append(f"обход вызовов не выполнен: {type(exc).__name__}")
@@ -4044,6 +6136,32 @@ class Facade:
                 "suggest": "проверить ветви глазами",
             })
         env.extra["fail_closed"] = default_behavior == "deny"
+        # Две природы доказательства названы РАЗДЕЛЬНО, потому что они разные:
+        # `allows`/`denies` прочитаны из ТЕКСТА символа (ветви `if`/`case`), а
+        # `callers` — рёбра графа с видом доказательства. Смешать их значило бы
+        # выдать текст за связь.
+        env.extra["evidence"] = {
+            "applies_to_calls": True,
+            "branches": {
+                "source": "тело символа (ветви if/case/return), не рёбра графа",
+                "allows": len(allows),
+                "denies": len(denies),
+            },
+            "callers": evidence_mod.summarize(callers),
+            "note": ("`allows` и `denies` — текст ветвей, а не связи: попадание "
+                     "в объект проверяется координатой `path:line`. `callers` — "
+                     "рёбра графа, у каждого назван вид доказательства"),
+        }
+        env.limits.append(floor_note(
+            threshold, int((getattr(self, "_bfs_stats", {}) or {}).get(
+                "skipped_low_confidence", 0) or 0)))
+        summary = env.extra["evidence"]["callers"]
+        if summary["derived"]:
+            env.limits.append(
+                f"вид доказательства у вызывающих: подтверждено CPG "
+                f"{summary['confirmed']}, выведено {summary['derived']} из "
+                f"{summary['total']} ({summary['derived_share'] * 100:.1f} %) — "
+                f"выведенная связь не доказывает, что решение применяется")
         if not env.found:
             env.extra["suggest"] = ["code", "search"]
             env.extra["note"] = "в теле символа не найдено решений о правах"
@@ -4074,9 +6192,7 @@ class Facade:
         rev = self.current_rev()
         if not rev:
             return self._no_index(env)
-        if mode not in ("all", "missing", "unused"):
-            env.found = False
-            env.error = "неизвестный режим: ожидается all, missing или unused"
+        if not _require_choice(env, "class_usage", "mode", mode):
             return env.to_dict()
 
         clean_name = (name or "").lstrip(".")
@@ -4337,7 +6453,7 @@ class Facade:
                 )
 
         existing = {c["name"].lower(): c["name"] for c in cols}
-        given = [str(c) for c in (columns or [])]
+        given = _column_list(columns)
 
         # --- живая схема БД: генерируемые колонки, ключи и колонки вне миграций ---
         # Зачем. Миграции генерируемых колонок не описывают, а СУБД запрещает в них
@@ -4633,6 +6749,17 @@ class Facade:
                     "verdict": _activity_verdict(kn, norm),
                 }
         env.result = result
+        # Этап 10: у достижимости свой вид доказательства — РЕБРО графа, а не
+        # текст. Он и называется: `referenced_by_code` — рёбра, `referenced_by_text`
+        # — литеральное упоминание. Смешивать их нельзя: «упомянут в тексте» не
+        # значит «вызывается».
+        env.extra["evidence"] = {
+            "applies_to_calls": False,
+            "note": ("достижимость считается по рёбрам графа (calls/imports/"
+                     "contains), порог достоверности к ней не применяется; "
+                     "`referenced_by_code` — связи графа, `referenced_by_text` — "
+                     "литеральные упоминания пути: это разные виды доказательства"),
+        }
         env.found = bool(items) or bool(result.get("target", {}).get("in_files"))
         if not env.found:
             env.extra["suggest"] = ["repo_map", "duplicates", "dead_code"]
@@ -4695,6 +6822,16 @@ class Facade:
         env.found = bool(data["files"]) or bool(data["symbols"])
         env.extra["candidates"] = data["files_candidates"]
         env.extra["checked"] = data["files_checked"]
+        # Этап 10: вердикт «мёртвый код» строится на ДВУХ независимых проверках,
+        # и вид доказательства у них разный. Без этого поля ответ читается как
+        # «связей нет» без указания, что именно проверялось.
+        env.extra["evidence"] = {
+            "applies_to_calls": False,
+            "checks": ["входящие рёбра графа", "литеральное упоминание пути в тексте"],
+            "note": ("вердикт выносится только при совпадении двух проверок; "
+                     "вид доказательства вызова (CPG/имя) к нему не применяется — "
+                     "здесь проверяется наличие ЛЮБОЙ входящей связи и упоминания"),
+        }
         if data["files_not_checked"]:
             env.limits.append(
                 f"проверено {data['files_checked']} из {data['files_candidates']} кандидатов: "
@@ -4920,7 +7057,7 @@ class Facade:
         return out
 
     def _graph_walk(self, fqn: str, depth: int, hard_only: bool, op: str, limit: int,
-                    answer: bool = False) -> dict:
+                    answer: bool = False, min_confidence: float | None = None) -> dict:
         env = self.make_env(op)
         rev = self.current_rev()
         if not rev:
@@ -4932,7 +7069,9 @@ class Facade:
             env.extra["suggest"] = ["symbol", "search"]
             return env.to_dict()
         reverse = op == "callers"
-        steps = self._bfs(rev, [rows[0]["node_id"]], max(1, depth), reverse=reverse, limit=limit)
+        threshold = edge_floor(min_confidence)
+        steps = self._bfs(rev, [rows[0]["node_id"]], max(1, depth), reverse=reverse,
+                          limit=limit, threshold=threshold)
         # первый уровень — сама цель, исключаем её из результата
         steps = [s for s in steps if s["node_id"] != rows[0]["node_id"]]
         # Порог достоверности применяется ВТОРОЙ раз — на выходе операции, а не
@@ -4941,11 +7080,15 @@ class Facade:
         # места (_edge_passes_floor), поэтому расхождения быть не может.
         steps = [
             s for s in steps
-            if _edge_passes_floor(s.get("provenance"), s.get("confidence"))
+            if _edge_passes_floor(s.get("provenance"), s.get("confidence"), threshold)
         ]
         if hard_only:
             steps = [s for s in steps if s["provenance"] == "stated"]
-        below_floor = self._count_below_floor(rev, rows[0]["node_id"], reverse)
+        below_floor = self._count_below_floor(rev, rows[0]["node_id"], reverse, threshold)
+        # Правило отсечения называется ВСЕГДА (этап 10). Раньше строка появлялась
+        # только при пустом ответе, и при непустом агент не знал, что часть
+        # связей отсечена: «связей 3» читалось как «связей всего 3».
+        env.limits.append(floor_note(threshold, below_floor))
         # Вызовы по имени, не привязанные к определению: только для `callers`
         # (вопрос «кто меня зовёт» — единственный, где это меняет ответ).
         name_links = (
@@ -4962,7 +7105,11 @@ class Facade:
             "derived": sum(1 for s in steps if s["provenance"] == "derived"),
             # Порог назван в ответе: агент, не увидевший знакомого ребра, обязан
             # иметь возможность отличить «связи нет» от «связь отсечена порогом».
-            "confidence_floor": MIN_EDGE_CONFIDENCE,
+            "confidence_floor": threshold,
+            # Источник значения: «по умолчанию» и «задано вызовом» — разные
+            # состояния, и ответ обязан их различать (этап 10).
+            "confidence_floor_source": ("default" if threshold == MIN_EDGE_CONFIDENCE
+                                        else "min_confidence"),
             # Сколько связей отсечено ПОРОГОМ: без этого числа «связей 0»
             # читается как «никто не вызывает», хотя связь в графе есть, но
             # помечена как вывод (например `calls_heuristic` 0.4). Измерено
@@ -4973,8 +7120,32 @@ class Facade:
             # (межфайловое разрешение по имени намеренно не делается).
             "name_links": name_links,
             "name_links_count": len(name_links),
+            # Этап 8: «связей 40» без этой сводки читается как «40 доказанных
+            # связей». Замер 30.10.2026: выведённых по имени среди рёбер вызова
+            # 77,8 %, поэтому доля называется в каждом ответе.
+            "evidence": evidence_mod.summarize(steps),
         }
         env.found = bool(steps)
+        ev = env.result["evidence"]
+        if ev["derived"]:
+            env.limits.append(
+                f"вид доказательства связей: подтверждено CPG {ev['confirmed']}, "
+                f"выведено {ev['derived']} из {ev['total']} "
+                f"({ev['derived_share'] * 100:.1f} %) — выведенная связь не "
+                f"является доказательством, её нельзя называть подтверждённой"
+            )
+        # Этап 11: внешние вызовы называются отдельно. Замер rev-0986: 55 632
+        # ребра с видом «выведено по имени» вели в узлы `external` (`print`,
+        # `get`, `len`), то есть доля «выводов» описывала вызовы библиотек, а не
+        # догадки про код проекта. Смешать их — соврать в обе стороны: и про
+        # точность графа, и про долю внешних зависимостей.
+        external_hits = sum(int(c["count"]) for c in ev["counts"]
+                            if c["evidence_kind"] == "external_call")
+        if external_hits:
+            env.limits.append(
+                f"связей с внешними символами: {external_hits} — цели в корпусе "
+                f"нет (встроенная функция или библиотека); это не вывод по имени "
+                f"о коде проекта")
         if name_links:
             env.limits.append(
                 f"вызовов по имени без доказанной привязки к этому определению: "
@@ -4985,20 +7156,24 @@ class Facade:
         if not env.found:
             env.extra["suggest"] = ["search", "live_read"]
             env.limits.append("связи не найдены: возможен динамический вызов вне статического анализа")
-            if below_floor:
-                env.limits.append(
-                    f"ниже порога достоверности {MIN_EDGE_CONFIDENCE} отсечено связей: "
-                    f"{below_floor} — они в графе есть, но помечены как вывод, а не факт"
-                )
+
         self.attach_stale(env, [s["path"] for s in steps if s.get("path")])
         if answer:
             verb = "Вызывают" if reverse else "Вызывает"
+            # Этап 8: в ответе-словами называется ВИД ДОКАЗАТЕЛЬСТВА, а не
+            # происхождение: `stated` читалось как «доказано», хотя это могла
+            # быть привязка по имени.
             items = [
                 {"path": s.get("path"), "line": s.get("start_line"),
-                 "name": f"{s.get('name')} ({s.get('provenance')})"}
+                 "name": f"{s.get('name')} ({s.get('evidence_kind')})"}
                 for s in steps
             ]
-            notes = [f"порог достоверности связей: {MIN_EDGE_CONFIDENCE}"]
+            notes = [floor_note(threshold, below_floor)]
+            if ev["total"]:
+                notes.append(
+                    f"подтверждено CPG {ev['confirmed']}, выведено {ev['derived']} "
+                    f"из {ev['total']} — вывод не является доказательством"
+                )
             if name_links:
                 for link in name_links[:3]:
                     items.append({"path": link["path"], "line": link["line"],
@@ -5065,12 +7240,17 @@ class Facade:
                 "evidence": f"{r['evidence_path']}:{r['evidence_line']}",
                 "provenance": "derived",
                 "confidence": 0.4,
+                # Этап 8: такие вызовы по определению вывод — имени без места
+                # в привязке недостаточно.
+                "evidence_kind": "name_inference",
+                "evidence_label": evidence_mod.label("name_inference"),
                 "why": ("вызов назвал это имя, но привязка к определению не "
                         "доказана: разрешение идёт по имени И файлу"),
             })
         return out
 
-    def _count_below_floor(self, rev: str, node_id: str, reverse: bool) -> int:
+    def _count_below_floor(self, rev: str, node_id: str, reverse: bool,
+                           threshold: float | None = None) -> int:
         """Сколько связей узла отсечено ПОРОГОМ достоверности.
 
         Зачем отдельный запрос: обход (`_bfs`) отсекает слабые рёбра внутри SQL,
@@ -5087,22 +7267,53 @@ class Facade:
                 f"SELECT COUNT(DISTINCT {neighbor}) AS n FROM edge"
                 f" WHERE rev_id = ? AND {column} = ?"
                 f" AND NOT (provenance = 'stated' OR COALESCE(confidence, 0) >= ?)",
-                (rev, node_id, MIN_EDGE_CONFIDENCE),
+                (rev, node_id, edge_floor(threshold)),
             ).fetchone()
             return int(row["n"] or 0) if row else 0
         except Exception:
             return 0
 
-    def _bfs(self, rev: str, roots: list[str], depth: int, reverse: bool, limit: int) -> list[dict]:
+    def _edge_evidence_column(self) -> bool:
+        """Есть ли в схеме графа колонка вида доказательства (этап 8).
+
+        Зачем проверка. Хранилище, построенное до этапа 8, и самодельная схема
+        в проверках колонки `evidence_kind` не имеют. Если читать её напрямую,
+        ответ падает с `no such column` — ровно это поймал `tests/test_mcp.py`
+        на фикстурном корпусе. Тогда читатели подставляют пустое значение, а вид
+        восстанавливается по полям ребра: та же обратная совместимость, что и в
+        `store._migrate_graph`, только без записи в чужую базу.
+
+        Результат запоминается: `PRAGMA` на каждый обход графа — лишний запрос в
+        горячем пути.
+        """
+        cached = getattr(self, "_edge_evidence_col", None)
+        if cached is not None:
+            return bool(cached)
+        has = False
+        try:
+            rows = self.graph.execute("PRAGMA table_info(edge)").fetchall()
+            has = any(str(r[1]) == "evidence_kind" for r in rows)
+        except Exception:  # noqa: BLE001 — схема не имеет права ломать ответ
+            has = False
+        self._edge_evidence_col = has
+        return has
+
+    def _bfs(self, rev: str, roots: list[str], depth: int, reverse: bool, limit: int,
+             threshold: float | None = None) -> list[dict]:
         """Обход графа в ширину. Каждый шаг несёт доказательство и достоверность.
 
         Рёбра слабее `MIN_EDGE_CONFIDENCE` в обход не берутся (доказанные — берутся
         всегда). Обход один на callers, callees, impact, slice, references и
         policy_trace, поэтому порог действует одинаково во всех этих операциях.
         """
+        threshold = edge_floor(threshold)
         seen: dict[str, dict] = {}
         frontier = list(roots)
         root_set = set(roots)
+        # Сколько рёбер отсечено порогом достоверности. Без этого числа ответ
+        # «связей нет» неотличим от «связи есть, но слабее порога» — замер
+        # 30.10.2026: так выглядели 53 226 эвристических вызовов с confidence 0.4.
+        self._bfs_stats = {"threshold": threshold, "skipped_low_confidence": 0}
         # Направление обхода:
         #   reverse=True  — ищем ВХОДЯЩИЕ связи (кто вызывает / откуда приходят данные);
         #                   фильтр по dst, сосед = src.
@@ -5123,14 +7334,29 @@ class Facade:
                 # попадать в `seen`, иначе оно вытеснит более достоверного соседа
                 # по лимиту `limit` и останется в ответе как «связь не найдена».
                 # Доказанные рёбра не отсекаются — см. MIN_EDGE_CONFIDENCE.
-                sql = f"""SELECT src, dst, kind, provenance, evidence_path, evidence_line, confidence
+                # Этап 8: вместе с ребром читается вид доказательства и
+                # свойства (из них он восстанавливается у старых рёбер).
+                ev_col = ("COALESCE(evidence_kind, '') AS evidence_kind"
+                          if self._edge_evidence_column() else "'' AS evidence_kind")
+                sql = f"""SELECT src, dst, kind, provenance, evidence_path, evidence_line, confidence,
+                                  {ev_col}, props
                           FROM edge WHERE rev_id = ? AND {rel} IN ({marks})
                           AND kind IN ('calls','calls_heuristic','instantiates','extends',
                                        'implements','overrides','queries','imports',
                                        'imports_heuristic','handles','renders','tested_by',
                                        'documented_by')
                           AND (provenance = 'stated' OR confidence >= ?)"""
-                rows = self.graph.execute(sql, (rev, *part, MIN_EDGE_CONFIDENCE)).fetchall()
+                rows = self.graph.execute(sql, (rev, *part, threshold)).fetchall()
+                # Считается при любом действующем пороге: если порог задан
+                # НИЖЕ значения по умолчанию, прежнее условие не считало
+                # ничего, и ответ «отсечено 0» был неправдой — отсекались
+                # связи ниже 0,3, но в число не попадали.
+                if threshold > 0.0:
+                    dropped = self.graph.execute(
+                        f"""SELECT COUNT(*) FROM edge WHERE rev_id = ? AND {rel} IN ({marks})
+                            AND provenance <> 'stated' AND confidence < ?""",
+                        (rev, *part, threshold)).fetchone()
+                    self._bfs_stats["skipped_low_confidence"] += int(dropped[0] if dropped else 0)
                 for r in rows:
                     other = str(r[join])
                     if other in root_set or other in seen:
@@ -5140,6 +7366,20 @@ class Facade:
                            FROM node WHERE rev_id = ? AND node_id = ?""",
                         (rev, other),
                     ).fetchone()
+                    node_external = bool(node) and str(node["kind"]) == "external"
+                    kind_ev = str(r["evidence_kind"] or "").strip() or evidence_mod.classify(
+                        r["kind"], r["provenance"], r["props"], r["confidence"],
+                        r["evidence_path"], r["evidence_line"],
+                        target_external=node_external,
+                    )
+                    # Ревизии, записанные ДО этапа 11, несут у вызовов внешнего
+                    # символа вид `name_inference` — он записан в хранилище и
+                    # потому приоритетнее вывода. Уточняем по узлу: узел
+                    # `external` определения не имеет, значит это внешний вызов.
+                    # Без этого «выведено 77 %» осталось бы у старых ревизий.
+                    if node_external and kind_ev == "name_inference" \
+                            and evidence_mod.is_call_kind(r["kind"]):
+                        kind_ev = "external_call"
                     item = {
                         "node_id": other,
                         "level": level + 1,
@@ -5147,6 +7387,11 @@ class Facade:
                         "provenance": r["provenance"],
                         "confidence": r["confidence"],
                         "evidence": f"{r['evidence_path']}:{r['evidence_line']}",
+                        # Чем именно подтверждена связь. Поле отдаётся ВСЕГДА:
+                        # его отсутствие читалось бы как «связь проверена».
+                        "evidence_kind": kind_ev,
+                        "evidence_label": evidence_mod.label(kind_ev),
+                        "evidence_how": evidence_mod.how_of(r["props"]),
                         "via": str(r["dst"]) if reverse else str(r["src"]),
                         # B5: связь не доказана, если происхождение не `stated`,
                         # и не доказана тем более, если цель — заглушка внешней
@@ -5190,24 +7435,34 @@ class Facade:
 
     def _impact_table(self, env: Envelope, rev: str, table: str, mode: str) -> dict:
         dst = f"@table:{table}"
+        ev_col = ("COALESCE(evidence_kind, '') AS evidence_kind"
+                  if self._edge_evidence_column() else "'' AS evidence_kind")
         rows = self.graph.execute(
-            """SELECT src, kind, provenance, evidence_path, evidence_line FROM edge
-               WHERE rev_id = ? AND dst = ?""",
+            f"""SELECT src, kind, provenance, evidence_path, evidence_line,
+                       {ev_col}, props, confidence
+                  FROM edge WHERE rev_id = ? AND dst = ?""",
             (rev, dst),
         ).fetchall()
         roots = [str(r["src"]) for r in rows]
         steps = self._bfs(rev, roots, 2, reverse=True, limit=300) if roots else []
         stated = [s for s in steps if s["provenance"] == "stated"]
         derived = [s for s in steps if s["provenance"] == "derived"]
-        direct = [
-            {
-                "symbol": str(r["src"]),
-                "kind": r["kind"],
-                "provenance": r["provenance"],
-                "evidence": f"{r['evidence_path']}:{r['evidence_line']}",
-            }
-            for r in rows
-        ]
+        direct = []
+        for r in rows:
+            kind_ev = str(r["evidence_kind"] or "").strip() or evidence_mod.classify(
+                r["kind"], r["provenance"], r["props"], r["confidence"],
+                r["evidence_path"], r["evidence_line"],
+            )
+            direct.append(
+                {
+                    "symbol": str(r["src"]),
+                    "kind": r["kind"],
+                    "provenance": r["provenance"],
+                    "evidence": f"{r['evidence_path']}:{r['evidence_line']}",
+                    "evidence_kind": kind_ev,
+                    "evidence_label": evidence_mod.label(kind_ev),
+                }
+            )
         env.result = {
             "target": f"table:{table}",
             "mode": mode,

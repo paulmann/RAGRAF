@@ -1,0 +1,65 @@
+{
+  "_readme": [
+    "Шаблон ~/.claude/settings.json для интеграции RAGRAF.",
+    "СОБИРАЕТСЯ УСТАНОВЩИКОМ: python tools/install_claude_code.py",
+    "Правка этого файла не меняет установку — источник значений в",
+    "tools/install_claude_code.py (STAGES, hooks_block, ALLOW_RULES).",
+    "Команды без кавычек: PowerShell не принимает строку, начинающуюся с",
+    "кавычки (ParserError, код 1 — измерено 02.11.2026).",
+    "Хуки вызывают tools/harness_gate.py — тот же скрипт, что у HARNESS:",
+    "протокол хуков у клиентов общий.",
+    "Режим гейта: RAGRAF_GATE_MODE=warn|ask|deny|off, по умолчанию warn."
+  ],
+  "permissions": {
+    "allow": [
+      "mcp__ragraf__*"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<python из .venv> <RAGRAF>/tools/harness_gate.py session-start",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<python из .venv> <RAGRAF>/tools/harness_gate.py prompt",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "pwsh|Bash|read|Read|grep|Grep|glob|Glob|mcp__ragraf__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<python из .venv> <RAGRAF>/tools/harness_gate.py pre-tool",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<python из .venv> <RAGRAF>/tools/harness_gate.py stop",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

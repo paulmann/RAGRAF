@@ -22,6 +22,48 @@
   },
   "features": [
     {
+      "name": "doc-ocr",
+      "title": "распознавание текста на изображениях и сканах (локальный движок)",
+      "edition": "pro",
+      "status": "shipped",
+      "operations": [
+        "doc_ocr"
+      ]
+    },
+    {
+      "name": "documents",
+      "title": "документный слой: структура документа, адрес чанка, валидатор чанкинга",
+      "edition": "community",
+      "status": "shipped",
+      "operations": [
+        "doc_search",
+        "doc_get",
+        "doc_status",
+        "doc_validate"
+      ]
+    },
+    {
+      "name": "doc-graph",
+      "title": "документный граф: извлечение сущностей и отношений из документов через LLM, соседи сущности и связи документов с адресами",
+      "edition": "pro",
+      "status": "shipped",
+      "operations": [
+        "entity_neighbors",
+        "doc_relations",
+        "themes",
+        "global_overview"
+      ]
+    },
+    {
+      "name": "exclude-management",
+      "title": "управление списком исключений: какие каталоги не считать в корпус",
+      "edition": "pro",
+      "status": "shipped",
+      "operations": [
+        "excludes"
+      ]
+    },
+    {
       "name": "search",
       "title": "поиск и чтение: векторный и лексический поиск, символы, тела функций, документы",
       "edition": "community",
@@ -35,12 +77,13 @@
         "live_read",
         "freshness",
         "route",
-        "neighbors"
+        "neighbors",
+        "doc_search_levels"
       ]
     },
     {
       "name": "graph",
-      "title": "граф кода: вызывающие, вызываемые, влияние правки, срез, карта репозитория",
+      "title": "граф кода: вызывающие, вызываемые, влияние правки, срез, карта репозитория, доказательство связей",
       "edition": "community",
       "status": "shipped",
       "operations": [
@@ -52,7 +95,8 @@
         "diff",
         "entrypoints",
         "dead_code",
-        "duplicates"
+        "duplicates",
+        "edge_evidence"
       ]
     },
     {
@@ -98,7 +142,8 @@
         "task_set",
         "task_stats",
         "gate",
-        "calibrate"
+        "calibrate",
+        "compact"
       ]
     },
     {

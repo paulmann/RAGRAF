@@ -24,6 +24,7 @@ REPO = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
 from ragraf.config import DEFAULT_EXCLUDES, load as load_config  # noqa: E402
+from ragraf import corpus  # noqa: E402
 
 CORPORA = [
     ("z-batteryservice.yaml", "z.batteryservice.ru"),
@@ -156,6 +157,36 @@ for config_name, title in CORPORA:
           f"{len(DEFAULT_EXCLUDES) - len(missing)} из {len(DEFAULT_EXCLUDES)}")
     check(not missing, f"{title}: все базовые правила действуют",
           f"нет: {missing[:3]}")
+
+print()
+print("=" * 78)
+print("5. ЖУРНАЛЫ ПРОГОНОВ НЕ ВХОДЯТ В КОРПУС")
+print("=" * 78)
+# Замер 31.10.2026: tests/test_mcp_http.py пишет журнал прогона в
+# tests/test_mcp_http_out.txt, а корпус индексирует `**/*.txt`. Каждый прогон
+# набора делал корпус устаревшим, и следующая операция платила переиндексацией
+# 47,3 с. Правило живёт в конфиге корпуса; здесь проверяется, что оно на месте
+# И что действует — «правило записано» и «правило работает» не одно и то же.
+ragraf_cfg = REPO / "config" / "ragraf.yaml"
+if ragraf_cfg.exists():
+    cfg = load_config(ragraf_cfg)
+    check("**/*_out.txt" in cfg.exclude,
+          "корпус RAGRAF: журналы прогонов исключены правилом",
+          f"правила нет среди {len(cfg.exclude)} правил")
+    scan = corpus.scan(cfg)
+    paths = [str(getattr(f, "path", f)) for f in scan.files]
+    stray = [p for p in paths if p.endswith("_out.txt")]
+    check(not stray, "корпус RAGRAF: ни один журнал прогона не проиндексирован",
+          f"попало: {stray[:3]}")
+    probes = [p for p in paths if "_ragraf_ensure_probe_" in p]
+    check(not probes, "корпус RAGRAF: конфигураций пробы в индексе нет",
+          f"попало: {probes[:3]}")
+    # Отрицательный контроль: без него проверка выше проходит и на пустом скане.
+    check(any(p.endswith(".py") for p in paths) and len(paths) > 100,
+          "корпус RAGRAF: скан не пуст — отрицательный контроль осмыслен",
+          f"файлов в скане: {len(paths)}")
+else:
+    print("  корпуса RAGRAF нет: проверка относится к этому проекту, пропущено")
 
 print()
 print("=" * 78)

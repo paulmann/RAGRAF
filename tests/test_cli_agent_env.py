@@ -43,8 +43,15 @@ LIVE = pathlib.Path(__file__).resolve().parents[1].parent / "revoap.com/.ragraf/
 STAGING = REPO / ".staging"
 STAGING.mkdir(exist_ok=True)
 PROBE_DB = STAGING / "cli_agent_probe.sqlite"
-if PROBE_DB.exists():
-    PROBE_DB.unlink()
+# Удаляются ВСЕ файлы копии, включая журналы SQLite. Измерено 29.10.2026: от
+# прерванного прогона остался `cli_agent_probe.sqlite-wal` на 4 МБ; основной файл
+# удалялся и копировался заново, а посторонний журнал оставался — и первое же
+# чтение падало с `database disk image is malformed`. Проверка тогда сообщала о
+# порче базы вместо того, чтобы проверять то, ради чего написана.
+for suffix in ("", "-wal", "-shm"):
+    stale = pathlib.Path(str(PROBE_DB) + suffix)
+    if stale.exists():
+        stale.unlink()
 shutil.copy2(LIVE, PROBE_DB)
 
 before = sqlite3.connect(f"file:{PROBE_DB}?mode=ro", uri=True).execute(
@@ -190,7 +197,14 @@ import time  # noqa: E402
 
 for attempt in range(3):
     try:
-        PROBE_DB.unlink(missing_ok=True)
+        # Удаляются ВСЕ файлы копии, а не только основной. Замер 31.10.2026:
+        # после прогонов в `.staging/` оставались `cli_agent_probe.sqlite-wal` и
+        # `-shm`, каталог `.staging` индексируется, и число файлов корпуса
+        # уезжало (961 → 967) — гейт публикации отказывал «числа README не
+        # совпадают с активной ревизией». Уборка одного файла из трёх
+        # оставляла мусор, который выглядел частью проекта.
+        for suffix in ("", "-wal", "-shm"):
+            pathlib.Path(str(PROBE_DB) + suffix).unlink(missing_ok=True)
         break
     except PermissionError:
         time.sleep(1)

@@ -54,6 +54,7 @@ M проиндексированы» в шести документах свер
 from __future__ import annotations
 
 import argparse
+import atexit
 import json
 import re
 import shutil
@@ -162,12 +163,16 @@ def check_numbers(source: Path) -> tuple[int, str]:
                    f"{active['rev_id']} ({actual})")
     # Различается только число рёбер — назвать замер, иначе отказ выглядит
     # ошибкой документа. Измерено 25.10.2026: 64 971 / 64 972 / 64 968 при
-    # неизменном дереве (число разрешённых вызовов из файла CPG).
+    # неизменном дереве (число разрешённых вызовов из файла CPG). Повторный замер
+    # 29.10.2026 расхождения НЕ дал (три прогона — 76 103, затем два — 76 166),
+    # поэтому сообщение называет дату замера, а не выдаёт прошлое за текущее;
+    # проверка — tools/check_edges_repeatable.py.
     edges_only = (files == int(active["files"]) and nodes == int(active["nodes"])
                   and edges != int(active["edges"]))
     note = (" (файлы и узлы совпадают с активной ревизией, различается только "
-            "число рёбер; оно не воспроизводится между пересборами — замер "
-            "25.10.2026: 64 971 / 64 972 / 64 968)" if edges_only else "")
+            "число рёбер; замер 25.10.2026 дал разброс 64 971 / 64 972 / 64 968, "
+            "повторный замер 29.10.2026 — одно число; проверить: "
+            "tools/check_edges_repeatable.py)" if edges_only else "")
     match = payload.get("match")
     if match:
         hint = (f"это состояние {match['rev_id']} ({match['created_at']}), то есть "
@@ -305,6 +310,10 @@ def main(argv: list[str] | None = None) -> int:
 
 
     root = Path(tempfile.mkdtemp(prefix="ragraf-gate-"))
+    # Уборка регистрируется СРАЗУ: до 29.10.2026 каталог убирался только на
+    # успешном пути, и каждый провал гейта (а также `--check-numbers`) оставлял
+    # песочницу на диске — мусор рос именно на неудачных прогонах.
+    atexit.register(shutil.rmtree, root, ignore_errors=True)
     tree = root / "tree"
     failures: list[str] = []
     caught = 0
@@ -455,13 +464,39 @@ def main(argv: list[str] | None = None) -> int:
         print("[приманка] trap.bak внутри сборки: НЕ ПОЙМАНА")
     trap.unlink()
 
+    # --- Запуск поставки: дерево не только собрано, но и работает ---------
+    # До этого шага гейт подтверждал СОСТАВ. Поставка ломается не составом, а
+    # отсутствием модуля в манифесте: файлы на месте, а CLI из дерева не поднимается,
+    # и узнаёт об этом читатель. Замер 29.10.2026: подсадка «нет src/ragraf/docread в
+    # манифесте» проходила состав незамеченной и валила только запуск — 10 свойств.
+    runs_tool = source / "tools" / "check_release_runs.py"
+    if not runs_tool.exists():
+        failures.append("нет tools/check_release_runs.py: запуск поставки не проверяется")
+        print("[6/6] запуск поставки: НЕ ПРОВЕРЕН — нет tools/check_release_runs.py")
+    else:
+        completed = subprocess.run(
+            [PY, str(runs_tool), "--tree", str(tree), "--manifest", str(manifest_path)],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
+        )
+        runs_output = (completed.stdout or "") + (completed.stderr or "")
+        runs_line = next((line.strip() for line in runs_output.splitlines()
+                          if "ИТОГ" in line), "")
+        if completed.returncode == 0:
+            print(f"[6/6] запуск поставки: дерево работает — {runs_line}")
+        else:
+            failures.append(f"дерево не запускается: {runs_line or runs_output.strip()[:160]}")
+            print(f"[6/6] запуск поставки: НЕ РАБОТАЕТ — {runs_line}")
+            for line in runs_output.splitlines():
+                if "[FAIL]" in line:
+                    print(f"    {line.strip()[:150]}")
+
     code, output = verify(tree, "all", manifest, source)
     if code != 0:
         failures.append("после снятия всех порч дерево не вернулось в годное состояние")
         print(output)
 
     print()
-    print(f"порч поймано: {caught} из 5")
+    print(f"порч поймано: {caught} из 5 | шагов гейта: 6 (5 порч + проверка запуска)")
     print(f"приманок отработано: 2 из 2")
     if failures:
         for problem in failures:
@@ -471,9 +506,10 @@ def main(argv: list[str] | None = None) -> int:
         print("FAIL: поймано не пять порч — гейт не доказан")
         return 1
     if args.keep:
+        # Явное решение оставить: снимаем регистрацию уборки, а не полагаемся на
+        # то, что она не сработает.
+        atexit.unregister(shutil.rmtree)
         print(f"песочница оставлена: {root}")
-    else:
-        shutil.rmtree(root, ignore_errors=True)
     print("гейт: пройден")
     return 0
 

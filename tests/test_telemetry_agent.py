@@ -15,8 +15,15 @@
 Проверка не имеет права менять то, что потом читает владелец.
 
 Временная база создаётся в .staging и удаляется в конце. Отдельно
-проверяется догоняющая миграция: на копии реального журнала (только
-чтение исходника) убеждаемся, что прежние записи не теряются.
+проверяется догоняющая миграция: прежние записи не теряются.
+
+ОТКУДА БЕРУТСЯ ОЖИДАНИЯ. Свои строки строятся в песочнице (agent IS NULL
+и agent = ''), и ожидание считается по числу СОЗДАННЫХ строк. Живой журнал
+корпуса z — только образец формы: прежняя редакция требовала, чтобы все его
+2 5xx вызовов были без агента, и 28.10.2026 покраснела, когда часть вызовов
+уже назвали себя (106 `DeepSeek Harness` + 62 `ragraf-cli`): свойство было
+цело, а ожидание устарело. Теперь ожидание по живому журналу считается по
+нему же, поэтому его изменения проверку не краснят.
 """
 
 from __future__ import annotations
@@ -207,9 +214,161 @@ check(combined["calls_total"] == 1,
 
 print()
 print("=" * 78)
-print("5. ДОГОНЯЮЩАЯ МИГРАЦИЯ: СТАРАЯ ИСТОРИЯ НЕ ТЕРЯЕТСЯ")
+print("5. ПРЕЖНИЕ ЗАПИСИ БЕЗ АГЕНТА: СВОИ СТРОКИ В ПЕСОЧНИЦЕ")
 print("=" * 78)
-# Проверяется на КОПИИ реального журнала: исходник не меняется.
+# Прежняя редакция брала ЖИВУЮ копию журнала корпуса z и требовала, чтобы ВСЕ
+# её вызовы выглядели как unknown. 28.10.2026 проверка покраснела по чужой
+# причине: часть её вызовов уже названа (172 записи: 106 `DeepSeek Harness`
+# и 62 `ragraf-cli`), и ожидание «все вызовы без агента» перестало быть верным,
+# хотя свойство миграции было цело. Поэтому строки строятся СВОИ, а ожидание
+# считается по числу созданных строк, а не по числу из живого журнала.
+LEGACY_DB = STAGING / "telemetry_legacy_probe.sqlite"
+if LEGACY_DB.exists():
+    LEGACY_DB.unlink()
+
+ctrl3 = ControlStore.__new__(ControlStore)
+ctrl3.cfg = cfg
+ctrl3.conn = sqlite3.connect(str(LEGACY_DB))
+ctrl3.conn.row_factory = sqlite3.Row
+tel3 = Telemetry(ctrl3, tool="cli", agent="AutoClaw", agent_kind="autoclaw")
+
+
+def add_calls(target: Telemetry, count: int, op: str = "search") -> None:
+    """Записать вызовы так, как это делает рабочий код."""
+    for _ in range(count):
+        target.record(CallRecord(op=op, rev_id="legacy", capability="full",
+                                 duration_ms=1.0, found=True, fact_count=1,
+                                 facts_with_span=1, result_chars=10,
+                                 error=None, tool="cli", arg_hash="",
+                                 arg_digest=""))
+
+
+# Строки без агента — две РАЗНЫЕ формы одного и того же состояния:
+# NULL (так выглядит запись после `ALTER TABLE ... ADD COLUMN`) и ''
+# (так пишут старые пути). Обе обязаны учитываться как unknown.
+NULL_ROWS = 3
+EMPTY_ROWS = 2
+add_calls(tel3, NULL_ROWS + EMPTY_ROWS)
+# Названные вызовы — приманки: их миграция не имеет права переименовать.
+NAMED = {"DeepSeek Harness": 2, "ragraf-cli": 1}
+for name, count in NAMED.items():
+    named_tel = Telemetry(ctrl3, tool="cli", agent=name, agent_kind="external")
+    add_calls(named_tel, count, op="symbol")
+
+with_null = [r["id"] for r in ctrl3.conn.execute(
+    "SELECT id FROM usage_call ORDER BY id")][:NULL_ROWS]
+with_empty = [r["id"] for r in ctrl3.conn.execute(
+    "SELECT id FROM usage_call ORDER BY id")][NULL_ROWS:NULL_ROWS + EMPTY_ROWS]
+for call_id in with_null:
+    ctrl3.conn.execute(
+        "UPDATE usage_call SET agent = NULL, agent_kind = NULL WHERE id = ?",
+        (call_id,))
+for call_id in with_empty:
+    ctrl3.conn.execute(
+        "UPDATE usage_call SET agent = '', agent_kind = '' WHERE id = ?",
+        (call_id,))
+ctrl3.conn.commit()
+
+EXPECTED_UNKNOWN = NULL_ROWS + EMPTY_ROWS
+EXPECTED_TOTAL = EXPECTED_UNKNOWN + sum(NAMED.values())
+print(f"  создано строк: с NULL {NULL_ROWS}, с пустым {EMPTY_ROWS}, "
+      f"названных {sum(NAMED.values())} — всего {EXPECTED_TOTAL}")
+print(f"  ожидание взято из созданных строк: unknown {EXPECTED_UNKNOWN}, "
+      f"названные {NAMED}")
+
+
+def audit_legacy(conn: sqlite3.Connection, expected_unknown: int,
+                 expected_named: dict[str, int]) -> list[str]:
+    """Свойства догоняющей миграции — одним списком находок.
+
+    Вынесено в функцию НАМЕРЕННО: её прогоняют и на испорченной копии базы
+    (раздел 6). Проверка, которую нельзя покраснеть подсаженным нарушением,
+    ничего не проверяет.
+
+    Про неизвестного агента. `unknown` — это ТРИ формы одной записи:
+    NULL (следствие `ALTER TABLE ... ADD COLUMN`), пустая строка и буквальная
+    строка `unknown` (её пишет `Telemetry`, когда имя не передали). Считать их
+    через `GROUP BY` с `COALESCE` нельзя: две из трёх форм дают две группы с
+    ОДНИМ именем и одна затирает другую (замер 28.10.2026 на живом журнале
+    корпуса z: 138 NULL и 191 буквальных `unknown`, сумма посчиталась как 191).
+    Поэтому формы складываются явно.
+    """
+    problems: list[str] = []
+    total = conn.execute(
+        "SELECT COUNT(*) AS n FROM usage_call").fetchone()["n"]
+    unknown = conn.execute(
+        "SELECT COUNT(*) AS n FROM usage_call WHERE agent IS NULL "
+        "OR agent = '' OR agent = 'unknown'").fetchone()["n"]
+    named = {
+        r["agent"]: r["n"] for r in conn.execute(
+            "SELECT agent, COUNT(*) AS n FROM usage_call "
+            "WHERE agent IS NOT NULL AND agent <> '' AND agent <> 'unknown' "
+            "GROUP BY agent").fetchall()
+    }
+    expected_total = expected_unknown + sum(expected_named.values())
+    if unknown != expected_unknown:
+        problems.append(
+            f"без агента: ожидалось {expected_unknown}, в базе {unknown}")
+    for name, count in expected_named.items():
+        if named.get(name, 0) != count:
+            problems.append(
+                f"{name}: ожидалось {count}, в базе {named.get(name, 0)}")
+    extra = sorted(set(named) - set(expected_named))
+    if extra:
+        problems.append(f"лишние агенты (миграция придумала имена): {extra}")
+    if total != expected_total:
+        problems.append(
+            f"всего вызовов: ожидалось {expected_total}, в базе {total}")
+    sessions = conn.execute("SELECT COUNT(*) AS n FROM usage_session").fetchone()["n"]
+    if sessions < 1:
+        problems.append("сессии не записаны")
+    return problems
+
+
+# Накатывается миграция: новая телеметрия на той же базе.
+ctrl3.cfg = cfg
+tel3b = Telemetry(ctrl3, tool="cli", agent="AutoClaw", agent_kind="autoclaw")
+problems = audit_legacy(ctrl3.conn, EXPECTED_UNKNOWN, NAMED)
+print(f"  после миграции: находки {problems or 'нет'}")
+check(not problems,
+      "прежние записи целы: unknown учтены, названные не переименованы",
+      str(problems))
+summary_legacy = tel3b.summary(agent="unknown")
+check(summary_legacy["calls_total"] == EXPECTED_UNKNOWN,
+      "фильтр unknown находит и NULL, и пустую строку",
+      f"найдено {summary_legacy['calls_total']}, ожидалось {EXPECTED_UNKNOWN}")
+ctrl3.conn.close()
+
+print()
+print("=" * 78)
+print("6. ПОТЕРЯ СТАРЫХ СТРОК: ПРОВЕРКА ОБЯЗАНА ЗАМЕТИТЬ")
+print("=" * 78)
+# Та же функция проверки прогоняется на испорченной копии: если бы потеря
+# записей осталась незамеченной, раздел 5 был бы зелёным всегда.
+SABOTAGE_DB = STAGING / "telemetry_sabotage_probe.sqlite"
+if SABOTAGE_DB.exists():
+    SABOTAGE_DB.unlink()
+shutil.copy2(LEGACY_DB, SABOTAGE_DB)
+conn = sqlite3.connect(str(SABOTAGE_DB))
+conn.row_factory = sqlite3.Row
+conn.execute("DELETE FROM usage_call WHERE agent IS NULL OR agent = ''")
+conn.commit()
+sabotaged = audit_legacy(conn, EXPECTED_UNKNOWN, NAMED)
+conn.close()
+print(f"  подсажено: удалены записи без агента; находки {sabotaged}")
+check(bool(sabotaged),
+      "потеря старых строк замечена (проверка умеет краснеть)",
+      "испорченная копия прошла проверку")
+SABOTAGE_DB.unlink(missing_ok=True)
+LEGACY_DB.unlink(missing_ok=True)
+
+print()
+print("=" * 78)
+print("7. ЖИВОЙ ЖУРНАЛ: ОБРАЗЕЦ ФОРМЫ, А НЕ ОЖИДАНИЕ")
+print("=" * 78)
+# Копия живого журнала по-прежнему проверяется, но ожидание считается
+# ПО НЕЙ САМОЙ: сколько в ней записей названо — столько и должно остаться.
+# Поэтому живые изменения (агенты назвали свои вызовы) проверку не краснят.
 LIVE = pathlib.Path(__file__).resolve().parents[1].parent / "z.batteryservice.ru/.ragraf/control.sqlite"
 MIGR = STAGING / "telemetry_migration_probe.sqlite"
 if LIVE.exists():
@@ -218,15 +377,30 @@ if LIVE.exists():
     shutil.copy2(LIVE, MIGR)
     conn = sqlite3.connect(str(MIGR))
     conn.row_factory = sqlite3.Row
+    live_cols = [r[1] for r in conn.execute("PRAGMA table_info(usage_call)")]
     before_s = conn.execute(
         "SELECT COUNT(*) AS n FROM usage_session"
     ).fetchone()["n"]
     before_c = conn.execute(
         "SELECT COUNT(*) AS n FROM usage_call"
     ).fetchone()["n"]
-    print(f"  копия живого журнала: сессий {before_s}, вызовов {before_c}")
+    named_counts: dict[str, int] = {}
+    if "agent" in live_cols:
+        # Три формы «агент не назван» разделяются явно: NULL, пустая строка и
+        # буквальное `unknown`. Каждая из них — старый вызов, а не новый агент.
+        named_counts = {
+            r["agent"]: r["n"] for r in conn.execute(
+                "SELECT agent, COUNT(*) AS n FROM usage_call "
+                "WHERE agent IS NOT NULL AND agent <> '' "
+                "AND agent <> 'unknown' GROUP BY agent").fetchall()
+        }
+    unknown_before = before_c - sum(named_counts.values())
+    print(f"  копия живого журнала: сессий {before_s}, вызовов {before_c}, "
+          f"из них названо {sum(named_counts.values())}")
+    print(f"  ожидание по самой копии: unknown {unknown_before}, "
+          f"названные {named_counts}")
 
-    # Накатывается миграция: старые записи не имеют колонок агента.
+    # Накатывается миграция: колонки агента могли отсутствовать.
     ctrl2 = ControlStore.__new__(ControlStore)
     ctrl2.cfg = cfg
     ctrl2.conn = conn
@@ -245,19 +419,16 @@ if LIVE.exists():
     check(after_c == before_c, "прежние вызовы не тронуты",
           f"было {before_c}, стало {after_c}")
 
-    # Старые записи видны в сводке как unknown — они не исчезают.
-    summary = tel2.summary()
-    unknown = [r for r in summary["by_agent"] if r["agent"] == "unknown"]
-    old_calls = sum(r["calls"] for r in unknown)
-    print(f"  старых вызовов в сводке: {old_calls}")
-    check(old_calls == before_c,
-          "все прежние вызовы видны как unknown (не потеряны)",
-          f"в сводке {old_calls}, в базе {before_c}")
+    live_problems = audit_legacy(conn, unknown_before, named_counts)
+    print(f"  находки по копии живого журнала: {live_problems or 'нет'}")
+    check(not live_problems,
+          "на копии живого журнала старые записи не потеряны",
+          str(live_problems))
     conn.close()
     MIGR.unlink(missing_ok=True)
 else:
-    print(f"  живого журнала нет ({LIVE}) — проверка миграции пропущена")
-    check(True, "миграция проверена на временной базе выше")
+    print(f"  пропущено, причина: живого журнала нет ({LIVE}); "
+          "свойства миграции проверены на своих строках в разделах 5-6")
 
 ctrl.conn.close()
 TMP_DB.unlink(missing_ok=True)

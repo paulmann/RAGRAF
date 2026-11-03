@@ -388,11 +388,11 @@ def discover(cfg: ProjectConfig, rev: str, *, mine: dict[str, int] | None = None
             if not profile:
                 # Ревизия в `rev.json` могла смениться между записью файла и
                 # чтением базы: берём последнюю из самой базы, а не выдумываем.
-                row = conn.execute(
-                    "SELECT rev_id FROM rev ORDER BY rev_id DESC LIMIT 1"
-                ).fetchone()
-                if row:
-                    peer_rev = str(row["rev_id"])
+                from . import store  # noqa: PLC0415 — модуль уже на пути
+
+                active, _skipped = store.active_revision(conn)
+                if active:
+                    peer_rev = str(active["rev_id"])
                     profile = lang_profile(conn, peer_rev)
         finally:
             conn.close()

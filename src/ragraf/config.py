@@ -328,6 +328,23 @@ LANG_BY_EXT = {
     # списке `languages` корпуса, такие файлы не индексируются — это
     # осознанно: разбор документов дороже и включается по решению владельца.
     ".pdf": "document",
+    # Архив и изображения — тоже язык `document`, и это НЕ «заодно»: сканер
+    # отбрасывает их как двоичные ДО того, как документный слой успевает
+    # сказать своё слово, поэтому без записи здесь zip и картинка не доходили
+    # бы до читателя вообще, и отказ с причиной был бы недостижим (замер:
+    # 0 файлов архива в индексе при включённой настройке).
+    #
+    # Корпус без языка `document` в списке `languages` не изменится: скан
+    # отсеет эти файлы по языку, как и раньше.
+    ".zip": "document",
+    ".png": "document",
+    ".jpg": "document",
+    ".jpeg": "document",
+    ".gif": "document",
+    ".bmp": "document",
+    ".webp": "document",
+    ".tif": "document",
+    ".tiff": "document",
     # Word: современный OOXML во всех вариантах (документ, макросы, шаблон)
     # и старый двоичный .doc (Word 6/95/97-2003) — разбор в officebinary.py.
     ".docx": "document",
@@ -644,6 +661,20 @@ class ChunkingConfig:
 @dataclass
 class IndexConfig:
     retain_revs: int = 3
+    # Пакетная ротация: данные живут до retain_revs + rotate_batch ревизий и
+    # убираются пачкой. Умолчание 1 — удалять на каждом прогоне, как было:
+    # замер 31.10.2026 показал, что пакет НЕ экономит. Одна ревизия стоит
+    # 4,5 с (29 запросов DELETE по 100 тыс. строк), пачка из трёх — 18,0 с,
+    # то есть дешевле не становится, зато появляется прогон на 38,5 с. Цена
+    # удержания названа объёмом: ≈0,6 ГБ на ревизию (lexvec 443 МБ +
+    # graph 170 МБ). Значение больше 1 имеет смысл там, где важна не
+    # длительность отдельного прогона, а их число.
+    rotate_batch: int = 1
+    # Порог закрытия оборванных ревизий: сколько секунд признак живости
+    # прогона может не обновляться, прежде чем запись `building` считается
+    # брошенной. Самая долгая стадия полной индексации здесь — CPG (десятки
+    # секунд), поэтому 900 с оставляют запас и не задевают живой прогон.
+    stale_revision_seconds: int = 900
     batch_size: int = 2000
     joern_enabled: bool = True
 
@@ -776,6 +807,14 @@ class IndexConfig:
     # самый безопасный режим, потому что копия документа не меняет поведения
     # кода. `all` — все файлы: копии кода тоже удваивают узел и его рёбра.
     dedupe_scope: str = "docs"
+    # --- профиль «шумных» каталогов (уровень pro) ---
+    # Список имён каталогов, которые не несут полезной нагрузки: temp, tmp,
+    # cache, logs и подобные. Вынесен в НАСТРОЙКУ, а не в базовый список,
+    # потому что базовый действует на все корпуса сразу, а имена неоднозначны
+    # (замер — tools/measure_noisy_dirs.py, обоснование — src/ragraf/excludes.py).
+    # Включение меняет состав корпуса, поэтому по умолчанию выключено.
+    exclude_noisy_enabled: bool = False
+    exclude_noisy_dirs: str = "temp,tmp,cache,logs"
     # Что делать с группой копий: `keep_one` — оставить одну (выбор по правилу
     # ниже), `skip_all` — не индексировать ни одну.
     dedupe_mode: str = "keep_one"
@@ -984,6 +1023,20 @@ def load(config_path: str | Path) -> ProjectConfig:
     languages = [str(x).lower() for x in _as_list(data.get("languages"), ["php"])]
     include = _as_list(data.get("include"), ["**/*.php"])
     exclude = list(DEFAULT_EXCLUDES) + _as_list(data.get("exclude"), [])
+    # --- профиль исключений из настроек (уровень pro) ---
+    # Читается ДО обхода каталогов и складывается с базовым списком и списком
+    # конфига: «исключения складываются» — инвариант проекта, и настройка не
+    # должна его нарушать, вытесняя базовые шаблоны.
+    _index_raw = data.get("index") if isinstance(data.get("index"), dict) else {}
+    if _index_raw.get("exclude_noisy_enabled"):
+        from . import excludes as excludes_mod
+        try:
+            _noisy_names = excludes_mod.normalize(
+                str(_index_raw.get("exclude_noisy_dirs") or "")
+            )
+        except excludes_mod.ExcludeError as exc:
+            raise ConfigError(f"index.exclude_noisy_dirs: {exc}") from exc
+        exclude = exclude + excludes_mod.patterns(_noisy_names)
     secrets = list(DEFAULT_SECRETS) + _as_list(data.get("secrets_exclude"), [])
 
     # --- форматы данных: что индексировать ---
@@ -1044,6 +1097,8 @@ def load(config_path: str | Path) -> ProjectConfig:
     ix_raw = data.get("index") or {}
     index = IndexConfig(
         retain_revs=int(ix_raw.get("retain_revs", 3)),
+        rotate_batch=max(1, int(ix_raw.get("rotate_batch", 1))),
+        stale_revision_seconds=max(30, int(ix_raw.get("stale_revision_seconds", 900))),
         batch_size=int(ix_raw.get("batch_size", 2000)),
         joern_enabled=bool(ix_raw.get("joern_enabled", True)),
         # Порог накопления правок: значения читаются из конфига корпуса, потому
@@ -1076,6 +1131,10 @@ def load(config_path: str | Path) -> ProjectConfig:
         dedupe_mode=str(ix_raw.get("dedupe_mode", "keep_one")).lower(),
         dedupe_keep=str(ix_raw.get("dedupe_keep", "cleanest")).lower(),
         dedupe_report=bool(ix_raw.get("dedupe_report", True)),
+        # Профиль «шумных» каталогов (уровень pro): значение и объяснение
+        # см. src/ragraf/excludes.py и tools/measure_noisy_dirs.py.
+        exclude_noisy_enabled=bool(ix_raw.get("exclude_noisy_enabled", False)),
+        exclude_noisy_dirs=str(ix_raw.get("exclude_noisy_dirs", "temp,tmp,cache,logs")),
         # Сервер Joern: долгоживущий процесс вместо запуска JVM на каждый вызов.
         joern_server=bool(ix_raw.get("joern_server", True)),
         joern_server_port=max(1024, int(ix_raw.get("joern_server_port", 9500))),

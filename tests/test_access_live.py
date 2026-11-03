@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import http.cookiejar
 import json
+import os
 import re
 import subprocess
 import sys
@@ -84,9 +85,14 @@ def main() -> int:
     # владельца. Прогон теста стирал его пароль и выданные токены, а после прогона
     # в файлах оставался пароль из теста. Тест не имеет права менять рабочую
     # защиту: он получает чистое состояние, но чужое не теряет.
+    # Каталог, в который пишет админ-панель, — тот же, что выбирает отвод
+    # (`RAGRAF_CATALOG_DIR`). Раньше тест знал только живой путь и потому
+    # ломался, как только `access.py` начал отвод слушать: панель писала в
+    # каталог набора, а файл искали в живом `catalog/`.
+    state_dir = Path(os.environ.get("RAGRAF_CATALOG_DIR") or (REPO / "catalog"))
     saved: list[tuple[Path, Path]] = []
     for name in ("admin_auth.json", "access_tokens.json"):
-        path = REPO / "catalog" / name
+        path = state_dir / name
         if path.exists():
             aside = path.with_suffix(path.suffix + ".tmp-test-aside")
             if aside.exists():
@@ -186,7 +192,7 @@ def main() -> int:
               "значение показано ровно один раз в ответе")
 
         # Значение не сохраняется: в файле только его хэш.
-        store = json.loads((REPO / "catalog" / "access_tokens.json").read_text(encoding="utf-8"))
+        store = json.loads((state_dir / "access_tokens.json").read_text(encoding="utf-8"))
         stored = json.dumps(store, ensure_ascii=False)
         check(value not in stored, "значение НЕ хранится в файле токенов")
         check("secret_sha256" in stored, "в файле лежит хэш значения")
@@ -245,7 +251,7 @@ def main() -> int:
         # Возврат состояния владельца: то, что осталось от теста, убирается,
         # отведённые ранее файлы возвращаются на место.
         for name in ("admin_auth.json", "access_tokens.json"):
-            leftover = REPO / "catalog" / name
+            leftover = state_dir / name
             if leftover.exists():
                 leftover.unlink()
         for original, aside in saved:

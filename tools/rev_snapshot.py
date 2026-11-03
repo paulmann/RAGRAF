@@ -73,6 +73,9 @@ SEALED_STATES = ("ready", "sealed")
 #: вторая не описывает ничего отданного.
 HISTORY_STATES = ("ready", "rotated")
 
+#: Незапечатанные ревизии новее активной: докладываются, а не скрываются.
+SKIPPED: list[dict] = []
+
 
 def _snapshot(cfg, rev: str) -> int:
     """Печатает числа активной (или указанной) ревизии из графа."""
@@ -91,8 +94,21 @@ def _snapshot(cfg, rev: str) -> int:
             row = conn.execute(
                 f"SELECT {columns} FROM rev WHERE rev_id = ?", (rev,)).fetchone()
         else:
-            row = conn.execute(
-                f"SELECT {columns} FROM rev ORDER BY rev_id DESC LIMIT 1").fetchone()
+            # Активная — последняя ЗАПЕЧАТАННАЯ: прогон, прерванный по бюджету,
+            # оставляет запись `building` с нулём файлов, и «последняя по номеру»
+            # назвала бы активной именно её (замер 29.10.2026: rev-0519 в rev
+            # со state=building и 0 файлов при готовой ревизии рядом).
+            from ragraf import store  # noqa: PLC0415 — путь уже поправлен выше
+
+            active, skipped = store.active_revision(conn)
+            row = None
+            if active:
+                keys = ["rev_id", "file_count", "node_count", "edge_count",
+                        "capability", "state", "created_at"]
+                row = tuple(active.get(key) for key in keys)
+                if skipped:
+                    SKIPPED.clear()
+                    SKIPPED.extend(skipped)
     finally:
         conn.close()
 
@@ -117,6 +133,12 @@ def _snapshot(cfg, rev: str) -> int:
     payload = {"rev_id": str(row[0]), "files": files,
                "nodes": int(row[2] or 0), "edges": int(row[3] or 0),
                "capability": str(row[4] or ""), "state": state}
+    if SKIPPED:
+        # Пропущенное называется: иначе «актуально» при незаконченной сборке
+        # выглядит как обычное состояние.
+        payload["skipped_unsealed"] = [
+            {"rev_id": str(item.get("rev_id")), "state": str(item.get("state"))}
+            for item in SKIPPED]
     print(json.dumps(payload, ensure_ascii=False))
     return 0
 

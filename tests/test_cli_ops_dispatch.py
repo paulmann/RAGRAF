@@ -165,7 +165,14 @@ check(cli.resolve_mode("class_usage", "unused") == "unused",
       "class_usage принимает unused")
 check(cli.resolve_mode("impact", "hard") == "hard",
       "impact принимает hard")
-check(cli.resolve_mode("search", None) == "full",
+# С этапа 4 у `search` свои режимы (dual-level), и умолчание — `auto`. Пример
+# «операции без режимов» поэтому взят у `symbol`: у неё режимов действительно нет.
+check(cli.resolve_mode("search", None) == "auto",
+      "поиск по умолчанию идёт в режиме auto (прежнее поведение)")
+check(cli.resolve_mode("search", "docs") == "docs", "поиск принимает docs")
+check(cli.resolve_mode("search", "themes") == "themes", "поиск принимает themes")
+check(cli.resolve_mode("search", "code") == "code", "поиск принимает code")
+check(cli.resolve_mode("symbol", None) == "full",
       "операция без режимов получает значение по умолчанию")
 
 for op, bad in (("table_usage", "hard"), ("class_usage", "hard"), ("search", "write")):

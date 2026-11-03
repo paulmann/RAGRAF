@@ -335,10 +335,44 @@ def part3_facade() -> None:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def part4_samples_in_fast() -> None:
+    """Снимки строк БД: в быстром прогоне только по настройке.
+
+    Замер 31.10.2026 на корпусе RAGRAF: стадия `databases` со снимками
+    10,24–11,90 с, без снимков 2,41 с; изолированно `collect(with_samples=True)`
+    8,43–8,65 с против 0,70–0,78 с (порядок вызовов менялся, чтобы холодный старт
+    не выдавался за стоимость снимков). Правило вынесено в `want_db_samples`,
+    поэтому проверяется без СУБД.
+    """
+    from ragraf.indexer import want_db_samples
+
+    print("\n=== Снимки строк в быстром прогоне ===")
+    check(want_db_samples("full", {}) is True,
+          "полный прогон собирает снимки без настроек")
+    check(want_db_samples("full", {"db_samples_in_fast": False}) is True,
+          "настройка не отменяет снимки в полном прогоне")
+    check(want_db_samples("fast", {}) is False,
+          "быстрый прогон по умолчанию снимки НЕ собирает")
+    check(want_db_samples("fast", {"db_samples_in_fast": True}) is True,
+          "быстрый прогон собирает снимки, если включено")
+    # Настройка обязана быть объявлена как переключатель: иначе панель покажет
+    # её как число, а `validate()` пропустит «да/нет» не туда.
+    from ragraf import settings as settings_mod
+
+    check("db_samples_in_fast" in settings_mod.DEFAULTS,
+          "настройка объявлена в умолчаниях")
+    check(settings_mod.DEFAULTS.get("db_samples_in_fast") is False,
+          "умолчание — не собирать в быстром прогоне",
+          str(settings_mod.DEFAULTS.get("db_samples_in_fast")))
+    check("db_samples_in_fast" in settings_mod.BOOLEAN_KEYS,
+          "настройка проверяется как да/нет")
+
+
 def main() -> int:
     part1_marks()
     part2_migrations()
     part3_facade()
+    part4_samples_in_fast()
     print()
     print("=" * 78)
     print(f"ИТОГ: пройдено {PASS}, провалено {FAIL}")

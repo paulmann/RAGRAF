@@ -2974,6 +2974,14 @@ function renderStorage() {
    значение при этом другое.
    -------------------------------------------------------------------------- */
 
+/*
+ * Что было нарисовано в полях настроек. Нужно, чтобы отправить на сервер
+ * ТОЛЬКО изменённое: значения берутся из слияния с умолчаниями, и без
+ * сравнения с исходным любое сохранение записывало весь набор.
+ */
+let settingsBase = {};
+let settingsProjectBase = {};
+
 /** Значение настройки: имя — ключ конфига, пояснение — текст сервера. */
 function settingControl(key, value, meta, opts) {
   const o = opts || {};
@@ -3002,6 +3010,23 @@ function settingControl(key, value, meta, opts) {
           + esc(candidate) + '</option>';
       }).join('')
       + '</select>';
+  } else if (typeof value === 'string') {
+    // Строковая настройка — текстовое поле. Раньше все не-логические и
+    // не-перечисления рисовались как type=number: в поле было ПУСТО, потому
+    // что браузер не показывает в числовом поле текст, а сохранение
+    // отправляло пустую строку вместо значения (замер 28.10.2026).
+    control = '<input type="text" id="' + esc(id) + '"' + data + ' value="' + esc(value) + '"'
+      + ' aria-describedby="' + esc(id) + '-hint">';
+  } else if (value !== null && typeof value === 'object') {
+    // Список панель показывать умеет, а редактировать — нет: отдельного
+    // управления списком пока не сделано. Поле только для чтения, и сборщик
+    // его пропускает — иначе сохранение отправляло бы пустоту вместо списка
+    // и проверка сервера отвечала бы отказом «принимает только целое число».
+    // Подсказка берётся из описания настройки: новая строка перевода здесь
+    // не нужна, а её отсутствие показывалось бы сырым ключом.
+    control = '<input type="text" id="' + esc(id) + '" readonly value="'
+      + esc(JSON.stringify(value)) + '"'
+      + ' aria-describedby="' + esc(id) + '-hint">';
   } else {
     control = '<input type="number" id="' + esc(id) + '"' + data + ' value="' + esc(value) + '"'
       + (bounds ? ' min="' + esc(bounds[0]) + '" max="' + esc(bounds[1]) + '"' : '')
@@ -3023,13 +3048,56 @@ function settingControl(key, value, meta, opts) {
     + '</div>';
 }
 
-/** Собрать значения глобальных полей. Имена `data-global` — контракт с сервером. */
+/**
+ * Значение поля в его собственном типе.
+ *
+ * Тип берётся из того, ЧЕМ поле нарисовано (settingsBase), а не угадывается
+ * по строке. Причина измерена 28.10.2026 (задание И42): прежний сборщик
+ * приводил любое небулево значение к числу, перечисление `all` давало
+ * Number('all') = NaN, в JSON это null, и сервер отвечал отказом
+ * «допустимо docs, all, получено None». То есть сохранение настроек не
+ * проходило вовсе, если на странице был хотя бы один список.
+ */
+function controlValue(key, el) {
+  const raw = el.value;
+  const base = settingsBase[key];
+  if (typeof base === 'boolean' || el.tagName === 'SELECT') {
+    if (raw === 'true') return true;
+    if (raw === 'false') return false;
+    return raw;                       // перечисление остаётся строкой
+  }
+  if (typeof base === 'number') {
+    const num = Number(raw);
+    return Number.isFinite(num) ? num : raw;
+  }
+  return raw;
+}
+
+/** Значение совпадает с нарисованным? Сравнение по типу и содержимому. */
+function unchangedValue(key, value, base) {
+  const seen = (base || settingsBase)[key];
+  return JSON.stringify(seen) === JSON.stringify(value);
+}
+
+/**
+ * Собрать значения глобальных полей. Имена `data-global` — контракт с сервером.
+ *
+ * Отправляется только изменённое. Причина измерена 28.10.2026: прежний
+ * сборщик отдавал весь набор, и одно сохранение записывало 56 ключей,
+ * 55 из которых были умолчаниями. После этого записанное умолчание
+ * начинало выглядеть заявлением владельца (`edition: community` понижало
+ * действующую лицензию pro).
+ */
 function collectGlobal() {
   const values = {};
   document.querySelectorAll('[data-global]').forEach(function (el) {
+    // Поле только для чтения не редактировали: отправлять его значение
+    // значило бы переписать список тем, что нарисовано.
+    if (el.readOnly) return;
     const key = el.getAttribute('data-global');
-    const raw = el.value;
-    values[key] = (raw === 'true' || raw === 'false') ? raw === 'true' : Number(raw);
+    const value = controlValue(key, el);
+    if (unchangedValue(key, value)) return;
+    values[key] = value;
   });
   // Форматы — отдельным списком: у них не число и не перечисление.
   // Полный набор уходит как «*» (см. saveFormats): иначе формат, добавленный
@@ -3038,17 +3106,34 @@ function collectGlobal() {
   if (boxes.length) {
     const on = boxes.filter(function (box) { return box.checked; })
       .map(function (box) { return box.getAttribute('data-format'); });
-    values.index_formats = on.length === boxes.length ? ['*'] : on;
+    const list = on.length === boxes.length ? ['*'] : on;
+    if (JSON.stringify(settingsBase.index_formats) !== JSON.stringify(list)) {
+      values.index_formats = list;
+    }
   }
   return values;
 }
 
+/** Настройки разработки — по тем же правилам: только изменённое и свой тип. */
 function collectProject(name) {
   const values = {};
+  const base = settingsProjectBase[name] || {};
   document.querySelectorAll('[data-project="' + name + '"]').forEach(function (el) {
+    if (el.readOnly) return;
     const key = el.getAttribute('data-key');
     const raw = el.value;
-    values[key] = (raw === 'true' || raw === 'false') ? raw === 'true' : Number(raw);
+    const was = base[key];
+    let value;
+    if (typeof was === 'boolean' || el.tagName === 'SELECT') {
+      value = raw === 'true' ? true : raw === 'false' ? false : raw;
+    } else if (typeof was === 'number') {
+      const num = Number(raw);
+      value = Number.isFinite(num) ? num : raw;
+    } else {
+      value = raw;
+    }
+    if (unchangedValue(key, value, base)) return;
+    values[key] = value;
   });
   return values;
 }
@@ -3312,6 +3397,10 @@ function renderSettings() {
   const meta = (currentState && currentState.settings) || {};
   const global = meta.global_settings || {};
   const perProject = meta.per_project || {};
+  // Исходные значения полей: с ними сравнивается введённое, чтобы на сервер
+  // уходило только изменённое, а не весь набор с умолчаниями.
+  settingsBase = Object.assign({}, global);
+  settingsProjectBase = perProject;
   const editable = (meta.editable || []).filter(function (key) {
     return Object.prototype.hasOwnProperty.call(global, key);
   });

@@ -41,6 +41,7 @@ DEFAULT_ROOT = Path(__file__).resolve().parents[1]
 SCOPE = (
     "AGENTS.md",
     "AGENTS-TRAPS.md",
+    "docs/00_plan/PLAN.md",
     "docs/AGENTS-context.md",
     "docs/02_architecture/ARCHITECTURE.md",
     "docs/02_architecture/TZ.md",
@@ -52,6 +53,7 @@ SCOPE = (
     "docs/03_implementation/SECRETS-VAULT.md",
     "docs/03_implementation/LICENSING.md",
     "docs/03_implementation/RELEASE-SOURCES.md",
+    "docs/03_implementation/AGENT-INTEGRATIONS.md",
     "docs/skills/ragraf-core/SKILL.md",
     "docs/skills/ragraf-core/reference/repair.md",
     "docs/skills/ragraf-core/reference/operations.md",
@@ -76,6 +78,16 @@ CONTINUATION = re.compile(r"`\s*:(\d+)(?:-(\d+))?`")
 # где встречается ожидаемый признак. Номер строки при этом может меняться —
 # меняется и адрес, но признак остаётся, и расхождение становится находкой.
 PAIRS = (
+    dict(doc="docs/AGENTS-context.md",
+         anchor="**Отсюда важное следствие, которое пришлось исправить (30.10.2026, этап 7).**",
+         path="src/ragraf/paths.py", marker="def settings_path"),
+    # Актуализация 2026-10-30: утверждения нового раздела плана и их объекты.
+    dict(doc="docs/00_plan/PLAN.md", anchor="| версия | **0.5.3**",
+         path="src/ragraf/__init__.py", marker="__version__"),
+    dict(doc="docs/00_plan/PLAN.md", anchor="**Активная ревизия.** Выбор был размазан",
+         path="src/ragraf/store.py", marker="def active_revision"),
+    dict(doc="docs/00_plan/PLAN.md", anchor="| **7** ✅ закрыт 30.10.2026 |",
+         path="src/ragraf/paths.py", marker="def settings_path"),
     # §4 инварианты AGENTS.md — «правило → место в коде».
     dict(doc="AGENTS.md", anchor="1. **Самоисключение", path="src/ragraf/config.py",
          marker="**/.ragraf/**"),
@@ -93,8 +105,14 @@ PAIRS = (
          marker="def choose_keeper"),
     dict(doc="AGENTS.md", anchor="6. **PRAGMA соединения", path="src/ragraf/store.py",
          marker="busy_timeout=10000"),
-    dict(doc="AGENTS.md", anchor="7. **Активная ревизия выбирается", path="src/ragraf/watch.py",
-         marker="rev_id DESC"),
+    dict(doc="AGENTS.md", anchor="7. **Активная ревизия — последняя ЗАВЕРШЁННАЯ",
+         path="src/ragraf/watch.py", marker="state = 'ready'"),
+    dict(doc="AGENTS.md", anchor="7. **Активная ревизия — последняя ЗАВЕРШЁННАЯ",
+         path="src/ragraf/store.py", marker="def active_revision"),
+    dict(doc="docs/AGENTS-context.md", anchor="**Решение.** Один выбор на всё ядро",
+         path="src/ragraf/store.py", marker="def active_revision"),
+    dict(doc="AGENTS.md", anchor="7. **Активная ревизия — последняя ЗАВЕРШЁННАЯ",
+         path="src/ragraf/watch.py", marker="def unfinished_revision"),
     dict(doc="AGENTS.md", anchor="8. **Журнал расхождений — append-only", path="src/ragraf/store.py",
          marker="CREATE TABLE IF NOT EXISTS drift_entry"),
     dict(doc="AGENTS.md", anchor="9. **Ротация ревизий историю не удаляет", path="src/ragraf/revisions.py",
@@ -259,11 +277,81 @@ PAIRS = (
     # §6: необязательный набор `secrets` — строка, где он объявлен.
     dict(doc="AGENTS.md", anchor="необязательным набором `secrets`", path="pyproject.toml",
          marker='secrets = ["PyNaCl'),
+    # §4.17 живая схема: два объекта правки `db_drift` и место причины, а также
+    # единственная точка, где ротация ревизий решает, что удалять.
+    dict(doc="docs/AGENTS-context.md", anchor="**Правка.** `db_ops.drift`",
+         path="src/ragraf/db_ops.py", marker="def drift("),
+    dict(doc="docs/AGENTS-context.md", anchor="`_drift_note`",
+         path="src/ragraf/db_ops.py", marker="def _drift_note"),
+    dict(doc="docs/AGENTS-context.md", anchor="`facade.op_db_drift`",
+         path="src/ragraf/facade.py", marker="def op_db_drift"),
+    dict(doc="docs/AGENTS-context.md", anchor="причину в `limits`",
+         path="src/ragraf/facade.py", marker="drift_note = str("),
+    dict(doc="docs/AGENTS-context.md", anchor="План чистки",
+         path="src/ragraf/revisions.py", marker="def _purge_rev_data"),
+    dict(doc="AGENTS-TRAPS.md", anchor="Почему история вообще накопилась",
+         path="src/ragraf/revisions.py", marker="def _purge_rev_data"),
 )
 
 # Иллюстративные адреса: пример доказательства из чужого проекта, а не адрес
 # этого. Объявлены с причиной, иначе проверка либо падала бы на них вечно,
 # либо (хуже) молча их пропускала.
+# Пары этапа И42: адреса правок сохранения настроек и выбора активной ревизии.
+# Проверяется ПОПАДАНИЕ, а не написание: ссылка в абзаце обязана вести на строку,
+# где ожидаемый признак действительно есть.
+PAIRS = PAIRS + (
+    dict(doc="docs/AGENTS-context.md", anchor="Задача на языке проекта: операция",
+         path="src/ragraf/admin_server.py", marker="SettingsStore().save(values)"),
+    dict(doc="docs/AGENTS-context.md", anchor="Задача на языке проекта: операция",
+         path="src/ragraf/watch.py", marker="def indexed_hashes"),
+    dict(doc="docs/AGENTS-context.md", anchor="1. Сохранение настроек.",
+         path="src/ragraf/settings.py", marker="def save(self"),
+    dict(doc="docs/AGENTS-context.md", anchor="2. Проверка на умолчания",
+         path="tests/test_server_settings.py", marker="не материализует умолчания"),
+    dict(doc="docs/AGENTS-context.md", anchor="2. Проверка на умолчания",
+         path="tools/Invoke-ProjectDoctrine.ps1", marker="function Test-SettingsDeclaration"),
+    dict(doc="docs/AGENTS-context.md", anchor="3. Сторож и незавершённая ревизия",
+         path="src/ragraf/watch.py", marker="state = 'ready'"),
+    dict(doc="docs/AGENTS-context.md", anchor="3. Сторож и незавершённая ревизия",
+         path="src/ragraf/watch.py", marker="def unfinished_revision"),
+    dict(doc="docs/AGENTS-context.md",
+         anchor="**Почему живого конфига в поставке нет.**",
+         path="tools/release/manifest.toml", marker="root: RAGRAF"),
+    dict(doc="docs/AGENTS-context.md",
+         anchor="**Что нашлось.**",
+         path="tests/test_doc_layer_archive.py", marker="atexit.register(_verify_live_untouched)"),
+    dict(doc="docs/AGENTS-context.md",
+         anchor="**Причина — в списке таблиц ротации.**",
+         path="src/ragraf/revisions.py", marker="def _purge_rev_data"),
+    # docs/03_implementation/AGENT-INTEGRATIONS.md — пары «утверждение → объект»:
+    # таблица «где что лежит» называет функцию и её признак, поэтому попадание
+    # проверяется, а не только адресуемость.
+    dict(doc="docs/03_implementation/AGENT-INTEGRATIONS.md",
+         anchor="правила объявления", path="tools/check_integrations.py",
+         marker="def check_index"),
+    dict(doc="docs/03_implementation/AGENT-INTEGRATIONS.md",
+         anchor="разбор шаблона своим разборщиком", path="tools/check_integrations.py",
+         marker="def parse_template"),
+    dict(doc="docs/03_implementation/AGENT-INTEGRATIONS.md",
+         anchor="поиск секретов в шаблоне", path="tools/check_integrations.py",
+         marker="def scan_secrets"),
+    dict(doc="docs/03_implementation/AGENT-INTEGRATIONS.md",
+         anchor="сверка таблицы уровней с документом", path="tools/check_integrations.py",
+         marker="def check_doc"),
+    dict(doc="docs/03_implementation/AGENT-INTEGRATIONS.md",
+         anchor="прогон проверок", path="tools/check_integrations.py",
+         marker="def run"),
+    dict(doc="docs/03_implementation/AGENT-INTEGRATIONS.md",
+         anchor="| проверка в чекере, функция", path="tools/Invoke-ProjectDoctrine.ps1",
+         marker="function Test-AgentIntegrations"),
+    dict(doc="docs/03_implementation/AGENT-INTEGRATIONS.md",
+         anchor="свойство", path="tests/test_agent_integrations.py",
+         marker="def main"),
+    dict(doc="docs/03_implementation/AGENT-INTEGRATIONS.md",
+         anchor="подсадки", path="stage-docgraph/mutations6.py",
+         marker="MUTATIONS = ["),
+)
+
 ILLUSTRATIVE = (
     dict(doc="docs/02_architecture/ARCHITECTURE.md", ref="src/Pipeline/PipelineEngine.php:120",
          reason="пример ребра stated из полигона PHP, а не адрес этого проекта"),
@@ -290,8 +378,16 @@ DECLARED: tuple[dict, ...] = tuple(
     dict(doc="AGENTS-TRAPS.md", ref="src/ragraf/cpg.py:683-689", key="D"),
     dict(doc="AGENTS-TRAPS.md", ref="src/ragraf/watch.py:151", key="B"),
     # docs/AGENTS-context.md
+    # Адреса прежнего состояния навыка (этап 3.1): числа по этим строкам исправлены,
+    # ссылка фиксирует дефект, а не текущее содержимое.
+    dict(doc="docs/AGENTS-context.md",
+         ref="docs/skills/ragraf-core/reference/operations.md:8-9", key="C"),
+    dict(doc="docs/AGENTS-context.md",
+         ref="docs/skills/ragraf-core/SKILL.md:102-103", key="C"),
+    dict(doc="docs/AGENTS-context.md",
+         ref="docs/skills/ragraf-core/reference/repair.md:201", key="C"),
     dict(doc="docs/AGENTS-context.md", ref="tools/ragraf.py:15-19", key="E"),
-    dict(doc="docs/AGENTS-context.md", ref="src/ragraf/cli.py:1128", key="D"),
+    dict(doc="docs/AGENTS-context.md", ref="src/ragraf/cli.py:1117", key="D"),
     dict(doc="docs/AGENTS-context.md", ref="src/ragraf/cpg.py:118-120", key="A"),
     dict(doc="docs/AGENTS-context.md", ref="src/ragraf/cpg.py:9-11", key="F"),
     dict(doc="docs/AGENTS-context.md", ref="src/ragraf/cpg.py:173", key="A"),
@@ -305,12 +401,12 @@ DECLARED: tuple[dict, ...] = tuple(
     dict(doc="docs/AGENTS-context.md", ref="src/ragraf/config.py:499-501", key="F"),
     dict(doc="docs/AGENTS-context.md", ref="src/ragraf/joern_server.py:53-55", key="F"),
     dict(doc="docs/AGENTS-context.md", ref="src/ragraf/joern_server.py:291-341", key="D"),
-    dict(doc="docs/AGENTS-context.md", ref="src/ragraf/indexer.py:1868-1872", key="F"),
-    dict(doc="docs/AGENTS-context.md", ref="src/ragraf/config.py:580-617", key="A"),
+    dict(doc="docs/AGENTS-context.md", ref="src/ragraf/indexer.py:1864-1868", key="F"),
+    dict(doc="docs/AGENTS-context.md", ref="src/ragraf/config.py:846-866", key="A"),
     dict(doc="docs/AGENTS-context.md", ref="src/ragraf/lexvec.py:187-196", key="F"),
     dict(doc="docs/AGENTS-context.md", ref="src/ragraf/revisions.py:17", key="F"),
     dict(doc="docs/AGENTS-context.md", ref="src/ragraf/mcp_server.py:575-670", key="D"),
-    dict(doc="docs/AGENTS-context.md", ref="src/ragraf/facade.py:852", key="F"),
+    dict(doc="docs/AGENTS-context.md", ref="src/ragraf/facade.py:902", key="F"),
     dict(doc="docs/AGENTS-context.md", ref="src/ragraf/mcp_server.py:908-937", key="F"),
     dict(doc="docs/AGENTS-context.md", ref="src/ragraf/mcp_server.py:2153", key="F"),
     dict(doc="docs/AGENTS-context.md", ref="src/ragraf/mcp_server.py:111", key="F"),
@@ -321,9 +417,9 @@ DECLARED: tuple[dict, ...] = tuple(
     dict(doc="docs/AGENTS-context.md", ref="src/ragraf/i18n.py:36-37", key="F"),
     dict(doc="docs/AGENTS-context.md", ref="src/ragraf/admin_server.py:615", key="F"),
     dict(doc="docs/AGENTS-context.md", ref="src/ragraf/i18n.py:49", key="F"),
-    dict(doc="docs/AGENTS-context.md", ref="src/ragraf/admin_server.py:157", key="F"),
-    dict(doc="docs/AGENTS-context.md", ref="src/ragraf/admin_server.py:209", key="F"),
-    dict(doc="docs/AGENTS-context.md", ref="src/ragraf/admin_server.py:629", key="F"),
+    dict(doc="docs/AGENTS-context.md", ref="src/ragraf/admin_server.py:376", key="F"),
+    dict(doc="docs/AGENTS-context.md", ref="src/ragraf/admin_server.py:269", key="F"),
+    dict(doc="docs/AGENTS-context.md", ref="src/ragraf/admin_server.py:1392", key="F"),
     dict(doc="docs/AGENTS-context.md", ref="src/ragraf/cli.py:988-989", key="F"),
     dict(doc="docs/AGENTS-context.md", ref="src/ragraf/cli.py:906", key="F"),
     # docs/03_implementation/HARNESS_INTEGRATION.md
@@ -357,7 +453,7 @@ DECLARED: tuple[dict, ...] = tuple(
     dict(doc="docs/skills/ragraf-core/reference/repair.md", ref="src/ragraf/cpg.py:9-11", key="F"),
     dict(doc="docs/skills/ragraf-core/reference/repair.md", ref="src/ragraf/cpg.py:118-120", key="A"),
     dict(doc="docs/skills/ragraf-core/reference/repair.md", ref="src/ragraf/cpg.py:173", key="A"),
-    dict(doc="docs/skills/ragraf-core/reference/repair.md", ref="src/ragraf/indexer.py:1868-1872", key="F"),
+    dict(doc="docs/skills/ragraf-core/reference/repair.md", ref="src/ragraf/indexer.py:1864-1868", key="F"),
     dict(doc="docs/skills/ragraf-core/reference/repair.md", ref="src/ragraf/util.py:162-175", key="F"),
     dict(doc="docs/skills/ragraf-core/reference/repair.md", ref="src/ragraf/config.py:541", key="F"),
     dict(doc="docs/skills/ragraf-core/reference/repair.md", ref="src/ragraf/indexer.py:781-789", key="F"),
@@ -375,7 +471,7 @@ DECLARED: tuple[dict, ...] = tuple(
     dict(doc="harness/skills/ragraf-core/reference/repair.md", ref="src/ragraf/cpg.py:9-11", key="F"),
     dict(doc="harness/skills/ragraf-core/reference/repair.md", ref="src/ragraf/cpg.py:118-120", key="A"),
     dict(doc="harness/skills/ragraf-core/reference/repair.md", ref="src/ragraf/cpg.py:173", key="A"),
-    dict(doc="harness/skills/ragraf-core/reference/repair.md", ref="src/ragraf/indexer.py:1868-1872", key="F"),
+    dict(doc="harness/skills/ragraf-core/reference/repair.md", ref="src/ragraf/indexer.py:1864-1868", key="F"),
     dict(doc="harness/skills/ragraf-core/reference/repair.md", ref="src/ragraf/util.py:162-175", key="F"),
     dict(doc="harness/skills/ragraf-core/reference/repair.md", ref="src/ragraf/config.py:541", key="F"),
     dict(doc="harness/skills/ragraf-core/reference/repair.md", ref="src/ragraf/indexer.py:781-789", key="F"),
@@ -383,7 +479,48 @@ DECLARED: tuple[dict, ...] = tuple(
     dict(doc="harness/skills/ragraf-core/reference/repair.md", ref="src/ragraf/config.py:276-301", key="F"),
     dict(doc="harness/skills/ragraf-core/reference/repair.md", ref="src/ragraf/compute.py:141-146", key="F"),
     dict(doc="harness/skills/ragraf-core/reference/repair.md", ref="src/ragraf/settings.py:327-386", key="A"),
+    # Этап И36: адрес замера дефекта операции code (внешняя заглушка).
+    dict(doc="docs/AGENTS-context.md", ref="src/ragraf/db_index.py:862-878", key="F"),
+    # Этап И35: адреса записи о единой точке записи отпечатка структуры.
+    dict(doc="docs/AGENTS-context.md", ref="src/ragraf/cli.py:809", key="F"),
+    dict(doc="docs/AGENTS-context.md", ref="src/ragraf/indexer.py:1161", key="F"),
+    dict(doc="docs/AGENTS-context.md", ref="src/ragraf/admin_server.py:2206", key="F"),
+    dict(doc="docs/AGENTS-context.md", ref="src/ragraf/db_collect.py:247", key="F"),
+    dict(doc="docs/AGENTS-context.md", ref="src/ragraf/db_writer.py:123", key="F"),
     )
+)
+
+# Пары этапа И41: адреса правок трёх проверок и места в коде, где записано
+# исправление дефекта «записанное умолчание стало заявлением». Проверяется
+# ПОПАДАНИЕ: ссылка обязана вести на строку, где ожидаемый признак есть.
+PAIRS = PAIRS + (
+    dict(doc="docs/AGENTS-context.md", anchor="1. `tests/test_dedupe_prompt.py",
+         path="tests/test_dedupe_prompt.py", marker="DEDUPE_SETTINGS"),
+    dict(doc="docs/AGENTS-context.md", anchor="2. `tests/test_dedupe_stability.py",
+         path="tests/test_dedupe_stability.py", marker="FIXTURE"),
+    dict(doc="docs/AGENTS-context.md", anchor="3. `tests/test_telemetry_agent.py",
+         path="tests/test_telemetry_agent.py", marker="NULL_ROWS"),
+    dict(doc="docs/AGENTS-context.md", anchor="Исправлено в двух местах",
+         path="src/ragraf/settings.py", marker="def save("),
+)
+
+
+# Мастер-план внесён в SCOPE 2026-10-29: он заявляет факты о коде и версии, и эти
+# адреса обязаны проверяться, а не держаться на совести автора.
+PAIRS = PAIRS + (
+    dict(doc="docs/00_plan/PLAN.md", anchor="«числа измерены на версии 0.4.0»",
+         path="src/ragraf/__init__.py", marker="__version__"),
+    dict(doc="docs/00_plan/PLAN.md", anchor="«Отсутствует Java/JVM»",
+         path="config/ragraf.yaml", marker="joern_enabled"),
+    dict(doc="docs/00_plan/PLAN.md", anchor="Исправление 2026-10-29",
+         path="config/ragraf.yaml", marker="joern_enabled"),
+    # Документ называет число, документ-объект его содержит: проверяется попадание
+    # в строку, а не только адресуемость.
+    # Мёртвое объявление: ссылка обязана вести на строку, где массив объявлен.
+    dict(doc="docs/00_plan/PLAN.md", anchor="Вернуть сравнение в чекер",
+         path="tools/Invoke-ProjectDoctrine.ps1", marker="$documents = @("),
+    dict(doc="docs/00_plan/PLAN.md", anchor="Как это ловилось",
+         path="tools/Invoke-ProjectDoctrine.ps1", marker="$documents = @("),
 )
 
 

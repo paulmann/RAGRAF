@@ -65,6 +65,14 @@ FAIL = 0
 # Форма записи размеров индекса — ТА ЖЕ, что у потребителей: чекер
 # (tools/Invoke-ProjectDoctrine.ps1, Test-DocumentedNumbers) и ворота
 # публикации (tools/release/gate_release.py) ищут одно и то же предложение.
+#: Числа поверхности в абзаце «Published figures»: операции фасада, инструменты
+#: MCP, подкоманды CLI, разобранные деревом и подключённые текстом языки, форматы.
+SURFACE_RE = re.compile(
+    r"\*\*(\d+) operations\*\* on the facade, \*\*(\d+) MCP tools\*\*, "
+    r"\*\*(\d+)\*\* CLI subcommands, \*\*(\d+)\*\* tree-parsed languages "
+    r"and \*\*(\d+)\*\* text-attached ones[^;]*?, \*\*(\d+)\*\* data formats"
+)
+
 NUMBERS_RE = re.compile(
     r"the RAGRAF index itself — ([\d ]+?)\s*files,\s*([\d ]+?)\s*nodes\s+and\s+([\d ]+?)\s*edges"
 )
@@ -97,12 +105,33 @@ SANDBOX_FILES = (
     "community/README.es.md",
     "community/README.hi.md",
     "community/README.zh.md",
+    # Файлы, на которые ссылаются сами переводы: проверка адресов требует, чтобы
+    # относительная цель указывала на файл ПОСТАВКИ. Без них песочница объявляет
+    # целую ссылку битой (`CHANGELOG.md`), и чекер краснеет на здоровом дереве —
+    # провал песочницы, а не продукта. Найдено прогоном этапа 11.
+    # Полный список целей, на которые ссылаются переводы: имя файла поставки
+    # из них и складывается. Список взят из фактических ссылок перевода, а не
+    # наугад — иначе песочница снова окажется неполной на следующей ссылке.
+    "community/CHANGELOG.md",
+    "community/CITATION.cff",
+    "community/CONTRIBUTING.md",
+    "community/CODE_OF_CONDUCT.md",
+    "community/SECURITY.md",
+    "LICENSE",
+    "CLA.md",
+    "SUPPORT.md",
+    "NOTICE",
+    "docs/03_implementation/LICENSING.md",
     "catalog/catalog.json",
     "config/ragraf.yaml",
     "tools/Invoke-ProjectDoctrine.ps1",
     "tools/rev_snapshot.py",
     "tools/registry_line.py",
     "tools/check_translations.py",
+    # Числа поверхности (операции, инструменты MCP, команды CLI, языки, форматы)
+    # чекер считает этим инструментом. Без файла проверка «числа совпадают с
+    # кодом» отказывает сама — и тест краснел отказом песочницы.
+    "tools/surface_counts.py",
     "tools/release/manifest.toml",
     "tools/release/gate_release.py",
     "tools/release/relcommon.py",
@@ -187,7 +216,13 @@ def replace_registry(text: str, doc: registry_line.Document,
 # своего расположения, поэтому в песочнице он обязан найти `src/ragraf`, иначе
 # конфиг не читается и проверка объявляет «активная ревизия не прочитана».
 # Это условие проверки, а не удобство: копия трёх модулей её ломала.
-SANDBOX_TREES = ("src/ragraf",)
+# `assets` копируется потому, что проверка адресов переводов сверяет ссылки с
+# файлами поставки, а обложка README — относительный `assets/social-preview.png`.
+# Без копии песочница объявляла обложку отсутствующей, и чекер краснел на
+# «активном» состоянии — то есть тест падал на собственной неполноте, а не на
+# дефекте продукта. Найдено прогоном этапа 11: набор не входит ни в одну группу
+# `check_all`, поэтому его краснота не была видна в общем прогоне.
+SANDBOX_TREES = ("src/ragraf", "assets")
 
 
 def build_sandbox(root: Path) -> None:
@@ -334,6 +369,29 @@ def main() -> int:
     gates: dict[str, tuple[int, str]] = {}
     try:
         for label, files, nodes, edges in variants:
+            if label == "активно":
+                # Активная ревизия — ПОДВИЖНАЯ цель: на живом корпусе работают
+                # долгоживущие процессы, и чужая переиндексация меняет числа
+                # посреди прогона (замер 31.10.2026: прогон упал на одном пункте
+                # именно так — rev ушёл вперёд между чтением и проверкой).
+                # Перечитываем состояние непосредственно перед подстановкой и
+                # один раз повторяем, если ревизия всё-таки сдвинулась. Это не
+                # «повтор, чтобы стало зелено»: повторяется измерение подвижной
+                # величины, а провал «врёт» повторить нельзя по построению.
+                for attempt in (1, 2):
+                    fresh_id, files, nodes, edges, fresh_at = history_states()[0]
+                    readme.write_text(replace_numbers(original, files, nodes, edges),
+                                      encoding="utf-8", newline="\n")
+                    results[label] = run_checker(root)
+                    if "отставание" not in results[label][1]:
+                        break
+                    print(f"  [примечание] активная ревизия сменилась во время "
+                          f"попытки {attempt}: {active_id} → {fresh_id}; "
+                          f"перечитываю числа")
+                    active_id, active_files, active_nodes, active_edges, active_at = (
+                        fresh_id, files, nodes, edges, fresh_at)
+                gates[label] = run_publication_gate(root)
+                continue
             readme.write_text(replace_numbers(original, files, nodes, edges),
                               encoding="utf-8", newline="\n")
             results[label] = run_checker(root)
@@ -530,6 +588,12 @@ def main() -> int:
     set_registry_all(root, originals, stale_date, 1, 0)
     decoy_text = (root / "docs" / "registry-line-decoy.md").read_text(encoding="utf-8")
     before = {name: (root / name).read_bytes() for name in REGISTRY_DOCS}
+    # Слепок ЧИСЕЛ ПОВЕРХНОСТИ до прогона генератора. Литерал «54 operations»
+    # держал в тесте устаревшее ожидание и красил набор после каждой правки
+    # поверхности — проверять надо само свойство: генератор строки реестра не
+    # имеет права трогать остальной текст README. Слепок берётся из файла, а не
+    # из памяти теста, поэтому он не устаревает.
+    surface_before = SURFACE_RE.findall((root / "README.md").read_text(encoding="utf-8"))
 
     write_code, write_payload, write_out = run_registry_tool(root, "--write")
     check(write_code == 0, "генератор отработал без отказа", f"код {write_code}")
@@ -578,9 +642,12 @@ def main() -> int:
           "несовпадение с опубликованной копией объявлено признаком «нет»",
           ru_row[4] if ru_row else "нет строки")
     readme_after = (root / "README.md").read_text(encoding="utf-8")
-    check("Published figures (checked on 26.10.2026" in readme_after
-          and "**54 operations** on the facade" in readme_after,
-          "остальной текст README генератор не переписал: числа поверхности не тронуты")
+    surface_after = SURFACE_RE.findall(readme_after)
+    check(surface_before and surface_before == surface_after,
+          "остальной текст README генератор не переписал: числа поверхности не тронуты",
+          f"было {len(surface_before)}, стало {len(surface_after)}")
+    check("Published figures (checked on " in readme_after,
+          "абзац опубликованных чисел на месте")
 
     # Числа индекса пишутся тем же прогоном и берутся из ЗАПИСИ РЕВИЗИИ: они
     # сдвигаются от добавления одного файла, и два сторожа (ворота поставки и

@@ -20,6 +20,22 @@ REPO = Path(__file__).resolve().parents[1]
 SERVER = REPO / "tools" / "ragraf-mcp.py"
 CONFIG = REPO / "config" / "revoap.yaml"
 
+PASSED = 0
+FAILED = 0
+
+#: Печать проверки с подсчётом. До этапа 11 файл печатал `[OK ]`/`[FAIL]` без
+#: сводки, и раннер писал «0 пройдено, 0 провалено» — число, которое читается
+#: как «проверок нет». Двадцать настоящих проверок при этом выполнялись.
+def check(cond, message: str, detail: str = "") -> bool:
+    global PASSED, FAILED
+    if cond:
+        PASSED += 1
+        print(f"  [OK ] {message}" + (f": {detail}" if detail else ""))
+    else:
+        FAILED += 1
+        print(f"  [FAIL] {message}" + (f": {detail}" if detail else ""))
+    return bool(cond)
+
 
 def run_session(requests: list[dict]) -> list[dict | None]:
     """Отправить запросы серверу и собрать ответы."""
@@ -58,23 +74,33 @@ def main() -> int:
     tools = next((r for r in responses if r and r.get("id") == 2), None)
     ok = True
 
-    if init and init.get("result", {}).get("serverInfo", {}).get("name") == "ragraf":
-        print(f"  [OK ] initialize: {init['result']['serverInfo']}")
-    else:
-        print(f"  [FAIL] initialize: {init}")
-        ok = False
+    info = (init or {}).get("result", {}).get("serverInfo", {})
+    ok = check(info.get("name") == "ragraf", "initialize отвечает именем сервера",
+               str(info)) and ok
 
     tool_list = (tools or {}).get("result", {}).get("tools", [])
     names = [t["name"] for t in tool_list]
-    print(f"  [{'OK ' if len(names) >= 16 else 'FAIL'}] инструментов объявлено: {len(names)}")
-    if len(names) < 16:
-        ok = False
+    ok = check(len(names) >= 16, "инструментов объявлено не меньше 16",
+               str(len(names))) and ok
     print(f"       {', '.join(n.replace('ragraf_', '') for n in names)}")
 
     forbidden = [n for n in names if any(k in n for k in ("query", "cypher", "sql", "exec"))]
-    print(f"  [{'OK ' if not forbidden else 'FAIL'}] нет инструмента свободных запросов: {forbidden or 'нет'}")
-    if forbidden:
-        ok = False
+    ok = check(not forbidden, "нет инструмента свободных запросов",
+               str(forbidden or "нет")) and ok
+
+    # Каждый инструмент обязан быть КЛАССИФИЦИРОВАН: клиент по `annotations`
+    # отличает чтение от записи. Замер 01.11.2026 (чистая установка из колеса):
+    # `ragraf_compact` и `ragraf_excludes` отдавались с пустыми `annotations`,
+    # и сервер на каждом запуске писал в stderr «поверхность инструментов
+    # расходится». Видно это было только в stderr, поэтому теперь — проверка.
+    unclassified = [t.get("name") for t in tool_list
+                    if not (t.get("annotations") or {}) or not t.get("title")]
+    ok = check(not unclassified, "у каждого инструмента есть title и annotations",
+               str(unclassified or "нет")) and ok
+    annotated = [t.get("name") for t in tool_list
+                 if "readOnlyHint" not in (t.get("annotations") or {})]
+    ok = check(not annotated, "у каждого инструмента назван режим (readOnlyHint)",
+               str(annotated or "нет")) and ok
 
     print("\n=== MCP: вызов инструментов ===")
     responses = run_session(
@@ -97,17 +123,14 @@ def main() -> int:
         texts = [c.get("text", "") for c in status["result"]["content"]]
         first = texts[0]
         has_rev = "rev=" in first
-        print(f"  [{'OK ' if has_rev else 'FAIL'}] index_status отдаёт шапку с ревизией")
-        print(f"       {first.splitlines()[0]}")
-        if not has_rev:
-            ok = False
+        ok = check(has_rev, "index_status отдаёт шапку с ревизией",
+                   first.splitlines()[0] if first else "") and ok
         payload = json.loads(texts[1])
         # counts лежит на верхнем уровне конверта: extra сливается в корень ответа.
         counts = payload.get("counts") or {}
         print(f"       файлов={counts.get('files')} узлов={counts.get('nodes')} рёбер={counts.get('edges')}")
     else:
-        print("  [FAIL] ответ на index_status не получен")
-        ok = False
+        ok = check(False, "ответ на index_status получен") and ok
 
     impact = next((r for r in responses if r and r.get("id") == 11), None)
     if impact:
@@ -115,35 +138,31 @@ def main() -> int:
         payload = json.loads(texts[1])
         res = payload.get("result") or {}
         cnt = res.get("affected_count") or {}
-        print(f"  [{'OK ' if payload.get('found') else 'FAIL'}] impact: "
-              f"доказанных={cnt.get('stated')} эвристических={cnt.get('derived')}")
-        if not payload.get("found"):
-            ok = False
+        ok = check(bool(payload.get("found")), "impact находит цель",
+                   f"доказанных={cnt.get('stated')} эвристических={cnt.get('derived')}") and ok
     else:
-        print("  [FAIL] ответ на impact не получен")
-        ok = False
+        ok = check(False, "ответ на impact получен") and ok
 
     search = next((r for r in responses if r and r.get("id") == 12), None)
     if search:
         texts = [c.get("text", "") for c in search["result"]["content"]]
         payload = json.loads(texts[1])
         n = len(payload.get("result") or [])
-        print(f"  [{'OK ' if n else 'FAIL'}] search вернул {n} результатов")
-        if not n:
-            ok = False
+        ok = check(n > 0, "search вернул результаты", str(n)) and ok
     else:
-        print("  [FAIL] ответ на search не получен")
-        ok = False
+        ok = check(False, "ответ на search получен") and ok
 
     refused = next((r for r in responses if r and r.get("id") == 13), None)
     if refused and refused.get("error", {}).get("code") == -32602:
-        print(f"  [OK ] отказ на язык запросов: {refused['error']['message'][:70]}")
+        ok = check(True, "отказ на язык запросов",
+                   refused["error"]["message"][:70]) and ok
     else:
-        print(f"  [FAIL] попытка передать язык запросов не отвергнута: {refused}")
-        ok = False
+        ok = check(False, "попытка передать язык запросов отвергнута",
+                   str(refused)) and ok
 
     print("\n" + ("=== все проверки MCP пройдены ===" if ok else "=== ЕСТЬ ОШИБКИ ==="))
-    return 0 if ok else 1
+    print(f"ИТОГ: пройдено {PASSED}, провалено {FAILED}")
+    return 0 if (ok and not FAILED) else 1
 
 
 if __name__ == "__main__":

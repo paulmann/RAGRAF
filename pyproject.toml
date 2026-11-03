@@ -85,6 +85,12 @@ Issues = "https://github.com/paulmann/RAGRAF/issues"
 
 [project.scripts]
 ragraf = "ragraf.cli:main"
+# MCP-сервер и панель — тот же код, что в tools/*.py, но доступный из
+# установленного пакета. Замер 01.11.2026: в колесе 0.5.6 не было ни одной
+# команды, кроме `ragraf`, поэтому на чистой установке запустить MCP-сервер
+# было нечем: `tools/` в колесо не попадает.
+ragraf-mcp = "ragraf.mcp_server:main"
+ragraf-admin = "ragraf.admin_server:main_cli"
 
 [tool.setuptools]
 package-dir = { "" = "src" }

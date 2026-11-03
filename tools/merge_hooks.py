@@ -26,12 +26,13 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO / "src"))
 #: Источники в порядке слияния: сначала чужие хуки, потом наши. Порядок важен
 #: для SessionStart (сборка идёт по порядку групп), а решения PreToolUse всё
 #: равно сливаются протоколом как `deny > ask > allow`.
 SOURCES = [
-    ("xerj", Path(str(pathlib.Path(__file__).resolve().parents[1].parent / "tools/xerj/hooks.json"))),
-    ("bsg", Path(str(pathlib.Path(__file__).resolve().parents[1].parent / "tools/bsg/hooks.json"))),
+    ("xerj", REPO.parent / "tools" / "xerj" / "hooks.json"),
+    ("bsg", REPO.parent / "tools" / "bsg" / "hooks.json"),
     ("ragraf", REPO / "harness" / "hooks.json"),
 ]
 #: Куда пишется свод. Лежит В РАГРАФЕ по двум причинам: (1) свод — это
@@ -69,8 +70,47 @@ def build() -> dict:
         "Причина одного файла: одна запись плагина в профиле; вторая запись того же",
         "плагина не поднимается — измерено 21.10.2026 (гейт RAGRAF не получал вызовов",
         "неделю, хотя его SessionStart-хук обязан срабатывать на каждом старте).",
+        "Команды переписаны в форму без кавычек: PowerShell не принимает строку,",
+        "начинающуюся с кавычки (ParserError, код 1 — измерено 02.11.2026).",
     ]
+    changed = normalize_commands(hooks)
+    if changed:
+        print("  команды переписаны без кавычек: " + ", ".join(changed))
     return {"_readme": readme, "sources": used, "hooks": hooks}
+
+
+def normalize_commands(hooks: dict) -> list[str]:
+    """Привести команды свода к форме, которую понимает оболочка клиента.
+
+    Зачем. Мост запускает команду хука через PowerShell, а PowerShell не
+    принимает строку, начинающуюся с кавычки: `"C:\\Program Files\\...\\pwsh.exe"`
+    даёт `ParserError`, код 1 (измерено 02.11.2026 — так падал не только гейт
+    RAGRAF, но и хуки xerj/bsg). Источники править не нужно: свод переписывает
+    команду в форму без кавычек (8.3 либо пусковой `.cmd`).
+
+    Возвращает список событий, где команда действительно изменилась.
+    """
+    try:
+        from ragraf import harness
+    except Exception as exc:  # noqa: BLE001 — свод важнее нормализации
+        print(f"  нормализация команд недоступна: {type(exc).__name__}: {exc}")
+        return []
+    changed: list[str] = []
+    for event, groups in hooks.items():
+        for group in groups:
+            for hook in group.get("hooks") or []:
+                command = str(hook.get("command") or "")
+                if not command:
+                    continue
+                parts = harness.split_command(command)
+                fixed = harness.safe_command(parts, launcher_dir=REPO / "harness" / "bin")
+                if fixed["command"] and fixed["command"] != command:
+                    hook["command"] = fixed["command"]
+                    if event not in changed:
+                        changed.append(event)
+                elif not fixed["command"]:
+                    print(f"  ВНИМАНИЕ: команда {event} не приведена: {fixed['reason']}")
+    return changed
 
 
 def render(data: dict) -> str:

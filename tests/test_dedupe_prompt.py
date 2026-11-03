@@ -10,12 +10,19 @@
 
 from __future__ import annotations
 
+import os
 import pathlib
 import re
 import sys
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
-PROMPT = pathlib.Path.home() / ".pi/agent/AGENTS.md"
+# Путь к промпту переопределяется переменной окружения: без этого проверку
+# нельзя прогнать на КОПИИ промпта в песочнице, а значит нельзя доказать, что
+# она краснеет на подсаженном нарушении. По умолчанию — живой промпт агента.
+PROMPT = pathlib.Path(
+    os.environ.get("RAGRAF_PROMPT")
+    or (pathlib.Path.home() / ".pi/agent/AGENTS.md")
+)
 sys.path.insert(0, str(REPO / "src"))
 
 PASS = 0
@@ -71,17 +78,40 @@ check(not not_mentioned, "все значения перечислений уп�
 
 # Все настройки схлопывания должны быть названы В РАЗДЕЛЕ о дублях.
 #
-# `ragraf_mode` из этого списка исключён сознательно: это настройка КАНАЛА
-# работы (cli / mcp-stdio / mcp-http / both), а не схлопывания, и её место —
-# раздел 8.20. Проверять её наличие в 8.16 значило бы требовать упоминания
-# чужой темы в разделе о копиях; ниже она проверяется там, где описана.
-DEDUPE_ENUM_KEYS = [k for k in ENUM_KEYS if k != "ragraf_mode"]
-missing_keys = [k for k in DEDUPE_ENUM_KEYS if k not in section]
-missing_keys += [k for k in ("dedupe_enabled", "dedupe_report")
-                 if k not in section]
+# Список строится по СВОЙСТВУ: «хранится в настройках и относится к дублям»,
+# то есть имя начинается с `dedupe_`. Прежняя редакция брала все `ENUM_KEYS`
+# минус `ragraf_mode`, и это делало проверку заложницей чужих тем: как только
+# в настройках появилось перечислимое значение другого раздела (издание,
+# провайдер SSO, приёмник и протокол SIEM, видимость секретов по умолчанию),
+# раздел 8.16 потребовал упоминать их у себя — и проверка покраснела по чужой
+# причине (замер 28.10.2026: 5 лишних ключей, провалено 1).
+#
+# Перечисления берутся из модуля схлопывания (`SCOPES`, `MODES`, `KEEP_RULES`),
+# а не из настроек: значения проверяются выше, здесь — только имена настроек.
+DEDUPE_SETTINGS = sorted(k for k in DEFAULTS if k.startswith("dedupe_"))
+print(f"  настройки схлопывания по имени dedupe_*: {DEDUPE_SETTINGS}")
+missing_keys = [k for k in DEDUPE_SETTINGS if k not in section]
 print(f"  настройки не упомянуты: {missing_keys or 'нет'}")
 check(not missing_keys, "все настройки схлопывания названы",
       f"нет: {missing_keys}")
+# Список не должен быть пустым: пустой список прошёл бы проверку молча.
+check(len(DEDUPE_SETTINGS) >= 5,
+      "настройки схлопывания найдены в настройках (а не пустой список)",
+      f"найдено {DEDUPE_SETTINGS}")
+
+# Два источника значений обязаны совпадать: перечисления в настройках и
+# константы модуля схлопывания. Расхождение значило бы, что интерфейс
+# предлагает одно, а индексатор принимает другое.
+settings_enums = {k: set(v) for k, v in ENUM_KEYS.items()
+                  if k.startswith("dedupe_")}
+module_enums = {"dedupe_scope": set(SCOPES), "dedupe_mode": set(MODES),
+                "dedupe_keep": set(KEEP_RULES)}
+print("  перечисления в настройках: "
+      + ", ".join(f"{k}={sorted(v)}"
+                  for k, v in sorted(settings_enums.items())))
+check(settings_enums == module_enums,
+      "перечисления настроек совпадают с константами модуля схлопывания",
+      f"настройки {settings_enums}, модуль {module_enums}")
 
 # Режим канала описан в своём разделе, вместе со всеми допустимыми значениями.
 mode_values = ENUM_KEYS.get("ragraf_mode", ())

@@ -419,7 +419,11 @@ class Handler(BaseHTTPRequestHandler):
                                      "или запустите сервер из каталога проекта"},
             }
         server = McpServer(project, agent=AGENT, agent_kind=AGENT_KIND,
-                           access_label=principal.label)
+                           access_label=principal.label,
+                           # Уровни выданного доступа передаются серверу: без
+                           # них проверка прав видит только МЕТКУ и отказывать
+                           # не может (замер этапа 14).
+                           access_scopes=list(principal.scopes))
         try:
             return server.handle(body)
         except Exception as exc:

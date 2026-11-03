@@ -893,6 +893,71 @@ def stored_fingerprint(control_conn, rev_id: str) -> str:
         return str(row[0])
 
 
+def _structure_changes(cfg, rev_id: str, result: IntrospectionResult,
+                       limit: int = 6) -> list[str]:
+    """Назвать изменения структуры словами: что добавилось, что ушло.
+
+    Отпечаток отвечает «да/нет», и этого мало: находка «структура
+    изменилась» без перечня непроверяема — читателю приходится верить.
+    Сравнивается текущая структура с той, что записана в индексе под
+    активную ревизию (graph.sqlite). Второго отпечатка здесь нет:
+    значение по-прежнему считается `schema_fingerprint`.
+
+    Пустой список означает «в индексе нет записанной структуры для
+    сравнения», а не «изменений нет»: в этом случае вердикт остаётся с
+    общей причиной, и выдавать её за перечень нельзя.
+    """
+    try:
+        from . import store as store_mod
+
+        conn = store_mod.connect(cfg.graph_db, readonly=True)
+    except Exception:
+        return []
+    try:
+        rows = conn.execute(
+            "SELECT t.database_name, t.table_name, c.column_name, c.data_type "
+            "FROM db_live_table t LEFT JOIN db_live_column c "
+            "ON c.rev_id = t.rev_id AND c.table_id = t.table_id "
+            "WHERE t.rev_id = ?", (rev_id,)).fetchall()
+    except Exception:
+        return []
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+    if not rows:
+        return []
+
+    stored_tables = {(r[0], r[1]) for r in rows}
+    stored_columns = {(r[0], r[1], r[2], r[3]) for r in rows if r[2]}
+    current_tables = {(d.name, t.name) for d in result.databases
+                      for t in d.tables}
+    current_columns = {(d.name, t.name, c.name, c.data_type)
+                       for d in result.databases for t in d.tables
+                       for c in t.columns}
+
+    changes: list[str] = []
+    for database, table in sorted(current_tables - stored_tables):
+        changes.append(f"добавлена таблица {database}.{table}")
+    for database, table in sorted(stored_tables - current_tables):
+        changes.append(f"удалена таблица {database}.{table}")
+    gone = stored_tables & current_tables
+    for database, table, column, data_type in sorted(
+            current_columns - stored_columns):
+        if (database, table) in gone:
+            changes.append(
+                f"добавлена колонка {database}.{table}.{column} {data_type}")
+    for database, table, column, data_type in sorted(
+            stored_columns - current_columns):
+        if (database, table) in gone:
+            changes.append(
+                f"удалена колонка {database}.{table}.{column}")
+    if len(changes) > limit:
+        changes = changes[:limit] + [f"и ещё {len(changes) - limit}"]
+    return changes
+
+
 def db_structure_changed(cfg, *, enabled: bool | None = None) -> dict:
     """Изменилась ли структура баз с момента последней индексации.
 
@@ -945,12 +1010,18 @@ def db_structure_changed(cfg, *, enabled: bool | None = None) -> dict:
     if not stored:
         return {"checked": False, "changed": False, "rev_id": rev,
                 "reason": "отпечаток структуры не записан: выполните команду db"}
-    return {
+    changed = stored != current
+    verdict = {
         "checked": True,
-        "changed": stored != current,
+        "changed": changed,
         "rev_id": rev,
         "stored": stored[:24],
         "current": current[:24],
-        "reason": ("структура баз изменилась" if stored != current
-                   else "структура баз не изменилась"),
+        "reason": "структура баз изменилась" if changed
+                  else "структура баз не изменилась",
     }
+    if changed:
+        # Перечень изменений прикладывается только к находке: на
+        # неизменной структуре это была бы работа впустую.
+        verdict["changes"] = _structure_changes(cfg, rev, result)
+    return verdict

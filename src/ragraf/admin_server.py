@@ -54,6 +54,7 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "src"))
 
 from ragraf import access as access_mod  # noqa: E402
+from ragraf import paths as paths_mod  # noqa: E402
 from ragraf import client_setup  # noqa: E402
 from ragraf import catalog as catalog_mod  # noqa: E402
 from ragraf import settings as settings_mod  # noqa: E402
@@ -284,7 +285,9 @@ _SLOW_STATE: dict[str, Any] = {
 # размеры баз до конца сбора. Файл лежит в `catalog/` — этот каталог исключён
 # из корпуса (`config/ragraf.yaml`), поэтому служебные данные не попадают
 # ни в индекс, ни в поиск агента.
-_SLOW_SNAPSHOT = REPO / "catalog" / "admin_snapshot.json"
+# Снимки панели — тоже состояние: путь через `paths` (этап 15), иначе на
+# установке они писались в каталог интерпретатора.
+_SLOW_SNAPSHOT = paths_mod.state_file("admin_snapshot.json")
 
 #: Запись снимков разрешена ТОЛЬКО процессу панели.
 #: Служебные проверки (например `tools/check_admin_i18n.py`, раздел «контракт
@@ -448,7 +451,7 @@ _DETAIL_STATE: dict[str, Any] = {"running": False}
 #: Снимок разделов на диске: панель показывает их СРАЗУ после запуска, а не через
 #: минуту. Прежде оба раздела были пусты, пока идёт сбор, и проверки проекта
 #: падали на пустых разделах — трёхкратный ложный отказ (замерено 15.10.2026).
-_DETAIL_SNAPSHOT = REPO / "catalog" / "admin_detail.json"
+_DETAIL_SNAPSHOT = paths_mod.state_file("admin_detail.json")
 
 
 def _detail_snapshot_load() -> None:
@@ -2091,7 +2094,8 @@ def _db_active_rev() -> str:
         conn = store_mod.connect(cfg.graph_db, readonly=True)
         try:
             row = conn.execute(
-                "SELECT rev_id FROM rev ORDER BY rev_id DESC LIMIT 1").fetchone()
+                "SELECT rev_id FROM rev WHERE state IN ('ready', 'sealed') "
+                "ORDER BY rev_id DESC LIMIT 1").fetchone()
         finally:
             conn.close()
         return str(row["rev_id"]) if row else ""
@@ -2177,7 +2181,7 @@ def db_collect_now(payload: dict | None = None) -> dict:
     from . import db_writer as writer_mod
     from .embeddings import Embedder
     from .lexvec import LexVecStore
-    from .revisions import GraphWriter
+    from .revisions import ControlStore, GraphWriter
 
     payload = payload or {}
     access = access_mod.DbAccessStore().load()
@@ -2194,21 +2198,25 @@ def db_collect_now(payload: dict | None = None) -> dict:
     if not rev_id:
         return {"ok": False, "reason": "в корпусе нет ревизии: сначала выполните index"}
     graph = GraphWriter(cfg)
+    control = ControlStore(cfg)
     lex = LexVecStore(cfg)
     embedder = Embedder(cfg, allow_download=False)
     try:
-        stats = writer_mod.write_introspection(graph, rev_id, collected["result"],
-                                              collected.get("samples") or {})
+        # Отпечаток пишется в control.sqlite — туда, откуда его читает
+        # классификатор. Прежняя редакция писала его в graph.sqlite (через
+        # graph.conn), и сторож свежести этого ключа не видел никогда.
+        stats = writer_mod.write_introspection(
+            graph, rev_id, collected["result"],
+            collected.get("samples") or {}, control=control.conn)
         lex_stats = writer_mod.write_lexvec(lex, embedder, rev_id,
                                            collected["result"],
                                            collected.get("samples") or {})
-        index_mod.record_fingerprint(graph.conn, rev_id, collected["fingerprint"],
-                                     access.dialect)
     finally:
         try:
             lex.close()
         except Exception:
             pass
+        control.close()
     return {
         "ok": True,
         "rev_id": rev_id,
@@ -2650,6 +2658,19 @@ def main(argv: list[str]) -> int:
     finally:
         server.server_close()
     return 0
+
+
+def main_cli() -> int:
+    """Точка входа консольной команды `ragraf-admin`.
+
+    Зачем обёртка: `main(argv)` принимает список аргументов (так его вызывает
+    `tools/ragraf-admin.py`), а console-script вызывает функцию без аргументов.
+    Без этой обёртки `ragraf-admin` из установленного пакета падал бы
+    TypeError — проверено на чистой установке 01.11.2026.
+    """
+    import sys as _sys
+
+    return main(_sys.argv[1:])
 
 
 if __name__ == "__main__":

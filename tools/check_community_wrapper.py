@@ -26,6 +26,9 @@
    `secrets.key`, `config/*.local.*`) и на абсолютные пути машины владельца;
 6. старая сборочная копия `.staging/release-v0.2/RAGRAF` не изменена: хэши её
    файлов совпадают с зафиксированными в том же документе;
+   **и обвязка берётся из МАНИФЕСТА, а не из каталога**: каждый `include`
+   с `kind = "wrapper"` обязан иметь строку в таблице, даже если файл лежит
+   вне `community/` (это свойство шире прежнего «у каждого файла community/**»);
 7. параметры установщика, которые называет CI (например `-SummaryJson`),
    объявлены самим установщиком. Измеренный дефект: живой `ci.yml:125` вызывал
    `-SummaryJson`, которого в живом `scripts/install.ps1` не было вовсе.
@@ -58,6 +61,7 @@
 from __future__ import annotations
 
 import hashlib
+import tomllib
 import re
 import sys
 from pathlib import Path
@@ -157,7 +161,12 @@ def parse_sources(text: str) -> tuple[list[list[str]], list[list[str]]]:
         if not ROW.match(line):
             continue
         cells = cells_of(line)
-        if len(cells) == ROW_COLUMNS and cells[0].startswith("community/"):
+        # Строка источников — любая строка из шести ячеек, кроме заголовка и
+        # разделителя: привязка к каталогу `community/` была дефектом разбора,
+        # из-за которого объявленный в манифесте wrapper вне каталога не
+        # проверялся вовсе (измерено 28.10.2026).
+        if (len(cells) == ROW_COLUMNS and "/" in cells[0]
+                and re.fullmatch(r"[A-Za-z0-9_.\-/]+", cells[0]) is not None):
             wrapper_rows.append(cells)
         elif len(cells) == 2 and cells[0].startswith(".staging/release-v0.2/RAGRAF/"):
             staging_rows.append(cells)
@@ -208,6 +217,29 @@ def main() -> int:
     by_path: dict[str, list[str]] = {}
     for cells in wrapper_rows:
         by_path.setdefault(cells[0], cells)
+
+    # --- 2а. Манифест поставки: обвязка объявлена в нём, а не каталогом ---
+    # Прежняя редакция проверяла только `community/**`: файл, объявленный
+    # wrapper'ом вне этого каталога, не осматривался вовсе — свойство было про
+    # каталог, а не про состав поставки.
+    manifest_path = REPO / "tools" / "release" / "manifest.toml"
+    expect(manifest_path.is_file(),
+           "нет tools/release/manifest.toml — состав обвязки не объявлен")
+    wrapper_paths: list[str] = []
+    if manifest_path.is_file():
+        try:
+            manifest = tomllib.loads(manifest_path.read_text(encoding="utf-8"))
+        except Exception as exc:  # noqa: BLE001 - разбор TOML, причина называется
+            manifest = {}
+            expect(False, f"manifest.toml не разбирается: {type(exc).__name__}: {exc}")
+        for item in manifest.get("include", []):
+            if str(item.get("kind", "")) == "wrapper":
+                wrapper_paths.append(str(item.get("from", "")))
+        expect(bool(wrapper_paths),
+               "в манифесте нет ни одного include с kind=wrapper")
+    for relative in wrapper_paths:
+        expect(relative in by_path,
+               f"обвязка объявлена в манифесте, но строки в таблице нет: {relative}")
 
     for path in files:
         relative = path.relative_to(REPO).as_posix()

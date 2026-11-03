@@ -1,0 +1,176 @@
+{
+  "schema": 1,
+  "products": [
+    {
+      "slug": "openclaw",
+      "title": "OpenClaw",
+      "transport": "MCP stdio",
+      "config": "~/.openclaw/openclaw.json",
+      "template": "openclaw.template.json",
+      "levels": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "smoke": "smoke.ps1",
+      "checklist": "",
+      "l0": "OpenClaw 2026.10.5"
+    },
+    {
+      "slug": "hermes",
+      "title": "Hermes Agent (Nous)",
+      "transport": "MCP stdio",
+      "config": "~/.config/hermes/config.yaml",
+      "template": "hermes.template.yaml",
+      "levels": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "smoke": "smoke.ps1",
+      "checklist": "",
+      "l0": "не измерено на этой машине"
+    },
+    {
+      "slug": "claude-code",
+      "title": "Claude Code",
+      "transport": "MCP stdio",
+      "config": ".mcp.json",
+      "template": "claude.template.json",
+      "levels": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "smoke": "smoke.ps1",
+      "checklist": "",
+      "l0": "Claude Code 2.1.316 (не авторизован в этой сессии)"
+    },
+    {
+      "slug": "codex-cli",
+      "title": "OpenAI Codex CLI",
+      "transport": "MCP stdio",
+      "config": "~/.codex/config.toml",
+      "template": "codex.template.toml",
+      "levels": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "smoke": "smoke.ps1",
+      "checklist": "",
+      "l0": "codex-cli 0.166.0"
+    },
+    {
+      "slug": "opencode",
+      "title": "OpenCode",
+      "transport": "MCP stdio",
+      "config": "opencode.json",
+      "template": "opencode.template.json",
+      "levels": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "smoke": "smoke.ps1",
+      "checklist": "",
+      "l0": "opencode 1.19.5"
+    },
+    {
+      "slug": "cline",
+      "title": "Cline (расширение VS Code)",
+      "transport": "MCP stdio",
+      "config": "cline_mcp_settings.json",
+      "template": "cline.template.json",
+      "levels": [
+        "L1",
+        "L3",
+        "L4"
+      ],
+      "smoke": "",
+      "checklist": "checklist.md",
+      "l0": "Cline 4.1.26 (GUI, смоука нет)"
+    },
+    {
+      "slug": "pi",
+      "title": "Pi",
+      "transport": "MCP stdio",
+      "config": "~/.pi/config.json",
+      "template": "pi.template.json",
+      "levels": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "smoke": "smoke.ps1",
+      "checklist": "",
+      "l0": "Pi 1.4.0"
+    },
+    {
+      "slug": "deepseek-harness",
+      "title": "DeepSeek Harness",
+      "transport": "MCP stdio",
+      "config": "cordis.patch.yml",
+      "template": "harness.template.yaml",
+      "levels": [
+        "L1",
+        "L3",
+        "L4"
+      ],
+      "smoke": "",
+      "checklist": "checklist.md",
+      "l0": "DeepSeek Harness 0.2.1-rc.3 (GUI)"
+    },
+    {
+      "slug": "autoclaw",
+      "title": "AutoClaw",
+      "transport": "MCP stdio + HTTP",
+      "config": "openclaw.json (Settings → Tools & connections)",
+      "template": "autoclaw.template.json",
+      "levels": [
+        "L1",
+        "L3",
+        "L4"
+      ],
+      "smoke": "",
+      "checklist": "checklist.md",
+      "l0": "AutoClaw 1.20.0 (GUI)"
+    },
+    {
+      "slug": "cursor",
+      "title": "Cursor",
+      "transport": "MCP stdio",
+      "config": ".cursor/mcp.json",
+      "template": "cursor.template.json",
+      "levels": [
+        "L1",
+        "L3",
+        "L4"
+      ],
+      "smoke": "",
+      "checklist": "checklist.md",
+      "l0": "не измерено (GUI)"
+    },
+    {
+      "slug": "manus",
+      "title": "Manus",
+      "transport": "MCP по HTTP (если клиент это умеет)",
+      "config": "нет локальной конфигурации",
+      "template": "manus.template.json",
+      "levels": [
+        "L1",
+        "L3",
+        "L4"
+      ],
+      "smoke": "",
+      "checklist": "checklist.md",
+      "l0": "облачный SaaS, локальной установки нет"
+    }
+  ]
+}

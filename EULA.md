@@ -27,7 +27,9 @@ RAGRAF Enterprise** и к двум **уровням лицензии** внут�
 | уровень | что открывает |
 |---|---|
 | Community | базовые возможности: поиск и чтение, граф кода, схема и права, живые базы, состояние и доверие. Бесплатно, лицензионного файла нет |
-| Pro | уровень Community плюс `quality-loop` (контур качества: `quality_suite`, `quality_diff`, `quality_prune`), `shared-index` (общий индекс: `shared_index_status`, `shared_index_publish`, `shared_index_query`) и `secret-broker` (брокер секретов: `broker_issue`, `broker_rotate`) |
+| Pro | уровень Community плюс `quality-loop` (контур качества: `quality_suite`, `quality_diff`, `quality_prune`), `shared-index` (общий индекс: `shared_index_status`, `shared_index_publish`, `shared_index_query`) и `secret-broker` (брокер секретов: `broker_issue`, `broker_rotate`) и `exclude-management` (управление списком исключений: какие каталоги не считать в корпус; операция `excludes`) |
+- `doc-graph` — документный граф: извлечение фактов из документов через модель и пять операций чтения (`entity_neighbors`, `doc_relations`, `doc_search_levels`, `themes`, `global_overview`) с адресом у каждого факта и у каждой темы; на Community эти операции отвечают отказом с названием издания, а базовый поиск и документный слой остаются бесплатными.
+- `doc-ocr` — распознавание текста на изображениях и сканах локальным движком на этой машине; без движка возможность честно сообщает причину и текст не выдумывает.
 | Enterprise | уровень Pro плюс `sso` (`sso_login`, `sso_map_roles`), `siem-export` (`siem_export`, `siem_test`), `offline-license` (`license_offline`), `attestation` (`attest_bundle`) |
 
 Возможности `connectors` (коннекторы к внешним системам) и `fleet` (управление

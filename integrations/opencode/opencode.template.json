@@ -1,0 +1,11 @@
+{
+  "mcp": {
+    "ragraf": {
+      "type": "local",
+      "command": [
+        "ragraf-mcp"
+      ],
+      "enabled": true
+    }
+  }
+}

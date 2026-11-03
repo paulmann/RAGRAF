@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import atexit
 import json
 import pathlib
 import subprocess
@@ -21,6 +22,25 @@ import zipfile
 REPO = pathlib.Path(__file__).resolve().parents[1]
 PASS = 0
 FAIL = 0
+
+# Реестр разработок восстанавливается после прогона: `index` песочного корпуса
+# пишет его в `catalog/catalog.json`, и запись переживает удаление каталога.
+# Измерено 28.10.2026: запись `docidx` от такого прогона осталась в реестре и
+# перестала соответствовать чему-либо на диске.
+CATALOG = REPO / "catalog" / "catalog.json"
+_CATALOG_BYTES = CATALOG.read_bytes() if CATALOG.exists() else None
+
+
+def _restore_registry() -> None:
+    if _CATALOG_BYTES is None:
+        return
+    try:
+        CATALOG.write_bytes(_CATALOG_BYTES)
+    except OSError:
+        pass
+
+
+atexit.register(_restore_registry)
 
 
 def check(cond: bool, label: str, detail: str = "") -> None:
@@ -115,8 +135,14 @@ with tempfile.TemporaryDirectory(prefix="ragraf-docidx-") as tmp:
     for label, filename in (("HELLO-PDF-IDX", "text.pdf"),
                             ("HELLO-XLSX-IDX", "data.xlsx"),
                             ("HELLO-ODT-IDX", "notes.odt")):
+        # Вид чанка документа — `doc`, а НЕ `file`: так его записывает
+        # документный слой (`source_kind="doc"`), и именно по этому признаку
+        # `doc_search` отличает документ от кода. Прежняя редакция проверки
+        # спрашивала `--kind file` и объявляла найденный текст потерянным —
+        # дефект был в проверке, а не в индексе (замер 29.10.2026: тот же
+        # маркер находится с `--kind doc`).
         found = run(["--json", "-p", str(config), "query", "search", label,
-                     "--kind", "file", "--limit", "10"])
+                     "--kind", "doc", "--limit", "10"])
         try:
             data = json.loads(found.stdout)
         except json.JSONDecodeError:
@@ -124,6 +150,19 @@ with tempfile.TemporaryDirectory(prefix="ragraf-docidx-") as tmp:
             continue
         paths = [str(item.get("path")) for item in (data.get("result") or [])]
         check(filename in paths, f"{filename}: маркер найден поиском", str(paths[:5]))
+        # И обратное свойство: вид `file` эти чанки НЕ отдаёт. Иначе фильтр
+        # по виду перестал бы различать документ и код, и разница между
+        # `search` и `doc_search` исчезла бы.
+        other = run(["--json", "-p", str(config), "query", "search", label,
+                     "--kind", "file", "--limit", "10"])
+        try:
+            other_paths = [str(item.get("path")) for item in
+                           (json.loads(other.stdout).get("result") or [])]
+        except json.JSONDecodeError:
+            other_paths = []
+        check(filename not in other_paths,
+              f"{filename}: вид file не подменяет документ",
+              str(other_paths[:3]))
 
     print()
     print("=" * 78)

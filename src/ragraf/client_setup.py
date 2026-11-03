@@ -43,11 +43,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from ragraf import paths
+
 REPO = Path(__file__).resolve().parents[2]
 VENV_PYTHON = REPO / ".venv" / "Scripts" / "python.exe"
 SERVER = REPO / "tools" / "ragraf-mcp.py"
 HTTP_SERVER = REPO / "tools" / "ragraf-mcp-http.py"
-ADMIN_CONFIG = REPO / "config" / "ragraf.yaml"
+ADMIN_CONFIG = paths.config_dir() / "ragraf.yaml"
 
 USER_HOME = Path(os.path.expanduser("~"))
 DSH_HOME = Path(os.environ.get("DSH_HOME") or (USER_HOME / ".dsh"))

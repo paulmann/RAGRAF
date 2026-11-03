@@ -1,0 +1,10 @@
+# Шаблон конфигурации MCP для RAGRAF. Значений секретов здесь нет.
+mcp:
+  patches:
+    - id: ragraf-mcp
+      after: mcp
+      value:
+        servers:
+          ragraf:
+            command: ragraf-mcp
+            args: []

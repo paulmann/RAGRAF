@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "ragraf": {
+      "type": "stdio",
+      "command": "<каталог RAGRAF>\\.venv\\Scripts\\python.exe",
+      "args": [
+        "<каталог RAGRAF>\\tools\\ragraf-mcp.py",
+        "--agent",
+        "claude-code",
+        "--agent-kind",
+        "external"
+      ],
+      "env": {
+        "PYTHONIOENCODING": "utf-8",
+        "PYTHONUTF8": "1"
+      }
+    }
+  }
+}
