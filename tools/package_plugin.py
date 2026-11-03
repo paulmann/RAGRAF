@@ -33,6 +33,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -44,7 +45,10 @@ REPO = Path(__file__).resolve().parents[1]
 PLUGIN = REPO / "plugin"
 MARKETPLACE = REPO / ".claude-plugin" / "marketplace.json"
 MANIFEST = PLUGIN / ".claude-plugin" / "plugin.json"
-DEFAULT_OUT = REPO / "dist"
+#: Каталог сборки по умолчанию — ВНЕ дерева проекта. Пакет внутри дерева
+#: проверяльщик поставки видит как «файл без места»: он не публикуется и не
+#: объявлен удержанным, и при перестройке дерева пропал бы молча.
+DEFAULT_OUT = Path(os.environ.get("TEMP") or "/tmp") / "ragraf-plugin-dist"
 
 #: Файлы, которые обязаны лежать внутри плагина: каталог смотрит на лицензию
 #: в самой папке плагина, а не по ссылке в описании.
