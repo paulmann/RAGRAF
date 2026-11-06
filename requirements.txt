@@ -19,7 +19,7 @@ tree-sitter-language-pack>=1.20,<2.0
 sqlite-vec>=0.1.9,<0.2
 
 # --- локальные эмбеддинги без torch (ONNX Runtime) ---
-fastembed>=0.8,<0.9
+fastembed>=0.8,<0.10
 
 # --- потоковый разбор экспорта Joern (GraphSON) ---
 # Самодельный разбор JSON терял узлы на реальном файле 95 МБ — см. docs/03_implementation/CPG_INTEGRATION.md
