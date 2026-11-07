@@ -203,16 +203,32 @@ jobs:
         run: |
           python -m pip install --disable-pip-version-check --upgrade pip
           python -m pip install --disable-pip-version-check -e .
+      # Собранное дерево (то, что публикуется) не содержит каталога `community/`:
+      # обвязка в нём уже разложена по корню. Проверки сборки читают ИСХОДНОЕ
+      # дерево и на собранном падают «нет источника community/…». Поэтому тип
+      # раскладки определяется здесь, и проверки сборки выполняются только на
+      # дереве разработки; на собранном они проверяли бы сами себя. Пропуск назван
+      # явно, чтобы он не выглядел пройденной проверкой.
+      - name: Detect layout (does the tree keep the community/ sources?)
+        id: layout
+        shell: pwsh
+        run: |
+          $dev = if (Test-Path community) { 'true' } else { 'false' }
+          "dev=$dev" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
       - name: Preview the build (prints, writes nothing)
+        if: steps.layout.outputs.dev == 'true'
         shell: pwsh
         run: python tools/release/build_release.py --dry-run
       - name: Composition — assembled strictly by the manifest
+        if: steps.layout.outputs.dev == 'true'
         shell: pwsh
         run: python tools/check_release_manifest.py
       - name: Runs — the tree indexes and answers through the document layer
+        if: steps.layout.outputs.dev == 'true'
         shell: pwsh
         run: python tools/check_release_runs.py
       - name: Planted defect — a manifest without the document layer MUST fail
+        if: steps.layout.outputs.dev == 'true'
         shell: pwsh
         run: |
           # Подсадка живёт в самом инструменте (--plant и --expect-failure), а не в этом
