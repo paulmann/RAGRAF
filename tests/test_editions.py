@@ -137,8 +137,14 @@ try:
     # Этап 3 агентских интеграций (01.11.2026) добавил две операции документного
     # графа (`entity_neighbors`, `doc_relations`): было 64.
     # Этап 4 (02.11.2026) добавил `doc_search_levels` (dual-level поиск), этап 5 —
-    # `themes` и `global_overview` (темы и карта графа): действующее число — 67.
-    check(len(BUILD_OPS) == 67, "операций в сборке — 65 (как в документах текущего состояния)",
+    # `themes` и `global_overview` (темы и карта графа). 07.11.2026 — `contract_drift`
+    # (сверка замысла и кода по FQN, издание enterprise). 09.11.2026 —
+    # `doc_asof` и `dependents` (провенанс документа и вывода, издание pro), затем
+    # `quality_pair` (парный прогон по фиксированным кейсам, этап X4) и `preflight`
+    # (цена и границы до старта, этап X5) и `contract_pin_status` /
+    # `contract_pin_approve` (пиннинг подписи операций, этап X6):
+    # действующее число — 74.
+    check(len(BUILD_OPS) == 76, "операций в сборке — 76 (как в документах текущего состояния)",
           str(len(BUILD_OPS)))
     ops_in_two = [op for op, names in edition.operations_index(BASE).items() if len(names) > 1]
     check(not ops_in_two, "ни одна операция не объявлена в двух возможностях", str(ops_in_two[:3]))

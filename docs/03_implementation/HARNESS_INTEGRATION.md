@@ -106,8 +106,8 @@ UnicodeEncodeError: 'charmap' codec can't encode characters in position 97-105
 `/sources`), документы PDF/DOCX/XLSX/PPTX/EML/ODT/RTF (язык `document`,
 `search` + `live_read`) и локальная польза (CLI `feedback`, `analytics`,
 страница `/value`). Числа берутся из кода, а не из этого текста, и сверяются
-проверкой `Test-DocumentedNumbers`: сервер отдаёт **74 инструмента**,
-фасад — 67 операций, CLI — 24 подкоманды; чекер — 46 проверок.
+проверкой `Test-DocumentedNumbers`: сервер отдаёт **83 инструмента**,
+фасад — 76 операций, CLI — 26 подкоманд; чекер — 46 проверок.
 
 Настройка обоих агентов и полный каталог возможностей —
 `docs/03_implementation/AGENTS_SETUP_AND_CAPABILITIES.md`.

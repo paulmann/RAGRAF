@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import bisect
 import hashlib
 import json
 import os
@@ -26,6 +27,79 @@ def to_posix(path: str | Path) -> str:
 def rel_posix(root: str | Path, path: str | Path) -> str:
     """Путь относительно корня в POSIX-форме. Всегда с прямыми слешами."""
     return to_posix(Path(path).resolve().relative_to(Path(root).resolve()))
+
+
+_SHORT_PATHS: dict[str, str] = {}
+
+
+def ascii_path(path: str | Path) -> str:
+    """Путь, который JVM на Windows прочитает без искажения.
+
+    ЗАЧЕМ. Командная строка и `-D`-флаги до JVM доходят через ANSI-кодировку,
+    поэтому не-ASCII символы в пути превращаются в `?`. Замер 06.11.2026 на
+    корпусе с кириллицей в пути (`.work/joern-cyr/Документы/проект`):
+    `Error: Argument input-dir failed when given '…\\??????'. Illegal char <?>`
+    и рядом `WARNING: java.io.tmpdir directory does not exist` — то есть без
+    CPG не только сборка, а ещё и временный каталог JVM. `capability=degraded`
+    при этом выглядел как отказ инструмента, а не как дефект передачи пути.
+
+    Лечение — короткое имя 8.3 (`GetShortPathNameW`): оно всегда ASCII, и оно
+    СУЩЕСТВУЕТ на диске, так что это не копия и не подмена пути. Проверено
+    прогоном: тот же корпус с коротким путём даёт CPG (код 0).
+
+    Путь без не-ASCII символов, а также POSIX-путь возвращается БЕЗ изменений:
+    на Linux JVM читает UTF-8 и подмены не требует. Если 8.3 отключён на томе,
+    `GetShortPathNameW` возвращает длинный путь — тогда путь остаётся как есть,
+    а вызывающий код обязан назвать причину (см. `cpg.py`, заметка об отказе).
+    """
+    text = str(path)
+    if text.isascii():
+        return text
+    if os.name != "nt":
+        return text
+    cached = _SHORT_PATHS.get(text)
+    if cached is not None:
+        return cached
+    short = _short_path_nt(text)
+    _SHORT_PATHS[text] = short
+    return short
+
+
+def _short_path_nt(text: str) -> str:
+    """Короткое имя 8.3 для пути, которого ещё нет: предок + остаток.
+
+    Замер 06.11.2026: `GetShortPathNameW` для НЕСУЩЕСТВУЮЩЕГО листа возвращает
+    длинный путь без ошибки — то есть проверка «ASCII получился» прошла бы,
+    а `-o <путь>` всё равно уехал бы в JVM искажённым. Поэтому короткое имя
+    берётся у ближайшего СУЩЕСТВУЮЩЕГО каталога, а остаток (имена, которые
+    создаёт сам RAGRAF: `rev-0001.cpg.bin`, `query_<хэш>.sc`) дописывается.
+    """
+    import ctypes
+
+    text = str(Path(text))
+    tail: list[str] = []
+    current = Path(text)
+    while True:
+        if current.exists():
+            buf = ctypes.create_unicode_buffer(4096)
+            try:
+                length = ctypes.windll.kernel32.GetShortPathNameW(str(current), buf, 4096)
+            except Exception:
+                return text
+            base = buf.value if (length and buf.value) else str(current)
+            joined = os.path.join(base, *reversed(tail)) if tail else base
+            return joined
+        parent = current.parent
+        if parent == current:      # дошли до корня и ничего не нашли
+            return text
+        tail.append(current.name)
+        current = parent
+
+
+def is_ascii_path(path: str | Path) -> bool:
+    """True, если путь дойдёт до JVM без искажения (или его можно перевести)."""
+    return ascii_path(path).isascii()
+
 
 
 def sha256_bytes(data: bytes) -> str:
@@ -69,6 +143,39 @@ def text_line(text: str, pos: int, start_line: int) -> int:
     if pos < 0:
         return max(1, int(start_line))
     return max(1, int(start_line) + text.count("\n", 0, pos) - chunk_header_lines(text))
+
+
+class LineIndex:
+    """Номер строки по смещению — за логарифм, а не за проход по всему тексту.
+
+    ЗАЧЕМ ОТДЕЛЬНЫЙ КЛАСС. Естественная запись `text.count("\\n", 0, pos) + 1`
+    читает текст ОТ НАЧАЛА ФАЙЛА на КАЖДОЕ совпадение регулярного выражения.
+    На обычном файле это незаметно, на сгенерированном — нет.
+
+    ЗАМЕР 06.11.2026 (`Qwen_small.html` из корпуса `default-workspace`):
+    17 646 577 символов, 79 695 совпадений `class=`, 9,3 мс на вызов у конца
+    файла → **разбор одного файла 477,4 с**, и ещё 8 670 вызовов в
+    `php_ast` — 52,8 с сверх того. Корпус не доходил до второй стадии часами,
+    держал `catalog/catalog.lock`, и ЛЮБАЯ операция (даже по другому корпусу)
+    ждала замок и отваливалась по таймауту.
+
+    Цена подготовки: `str.find` в цикле работает на C-уровне — на 86 016 строк
+    это 0,05 с, каждый запрос строки — двоичный поиск.
+    """
+
+    __slots__ = ("_newlines",)
+
+    def __init__(self, text: str) -> None:
+        offsets: list[int] = []
+        pos = text.find("\n")
+        while pos >= 0:
+            offsets.append(pos)
+            pos = text.find("\n", pos + 1)
+        self._newlines = offsets
+
+    def line_of(self, pos: int) -> int:
+        """Номер строки для смещения; семантика та же, что у `text.count`. """
+        return bisect.bisect_left(self._newlines, pos) + 1
 
 
 def sha256_file(path: str | Path, chunk: int = 1 << 20) -> str:
@@ -251,6 +358,23 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
 
 
+def parse_iso(stamp: str):
+    """Разобрать метку, записанную `now_iso`. None — если формат чужой.
+
+    Возврат — `datetime` с часовым поясом. «Не разобралось» и «ноль» различимы:
+    вызывающий обязан назвать причину, а не показывать возраст 0 секунд.
+    """
+    from datetime import datetime
+
+    text = str(stamp or "").strip()
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        return None
+
+
 def batched(items: Iterable[Any], size: int) -> Iterator[list[Any]]:
     batch: list[Any] = []
     for item in items:
@@ -403,3 +527,89 @@ def cmd_command(cmd: Sequence[str], comspec: str = "cmd.exe") -> str:
                 )
     body = " ".join(f'"{str(part)}"' for part in cmd)
     return f'{comspec} /d /s /v:off /c "{body}"'
+
+# --------------------------------------------------------------------------
+# Единый текст отказа
+# --------------------------------------------------------------------------
+#
+# Зачем один помощник. Отказы писались в трёх местах и разными словами, а совет,
+# что делать, был только у части ответов и каждый раз формулировался заново.
+# Правило: у отказа обязаны быть что не так, почему, ОДНА команда и признак
+# «возможно ли это вообще». Виды отказа — закрытый список.
+#: Закрытый список видов отказа.
+REFUSAL_KINDS: tuple[str, ...] = (
+    "no_index",      # индекса нет — нужен первый прогон
+    "stale_index",   # индекс отстал от кода
+    "no_documents",  # документный слой не построен
+    "feature",       # возможность объявлена, но кода нет в сборке
+    "edition",       # возможность есть, но издание её не открывает
+    "license",       # лицензия недействительна или истекла
+    "degraded",      # режим ревизии не позволяет операцию
+    "no_data",       # операция возможна, данных в корпусе нет
+    "bad_input",     # вход неверен — исправляется вызывающим
+)
+
+#: Основа команд. Путь к конфигу подставляется, если он известен.
+_COMMANDS: dict[str, str] = {
+    "no_index": "python tools/ragraf.py -p {arg} index",
+    "stale_index": "python tools/ragraf.py -p {arg} ensure",
+    "no_documents": "python tools/ragraf.py -p {arg} query doc_status",
+    "feature": "python tools/ragraf.py edition",
+    "edition": "python tools/ragraf.py edition",
+    "license": "python tools/ragraf.py edition",
+    "degraded": "python tools/ragraf.py -p {arg} index --cpg",
+}
+
+#: Что не так и почему — по виду отказа.
+_TEXT: dict[str, tuple[str, str, bool]] = {
+    "no_index": ("индекса у корпуса нет",
+                 "операция читает индекс, а он ещё не построен", True),
+    "stale_index": ("индекс отстал от кода",
+                    "файлы изменились после последней индексации", True),
+    "no_documents": ("документный слой не построен",
+                     "в индексе нет чанков документов этой ревизии", True),
+    "feature": ("возможность объявлена, но её кода нет в этой сборке",
+                "сборка неполная: модуль возможности не поставлен", False),
+    "edition": ("возможность закрыта изданием",
+                "лицензия не открывает эту возможность", True),
+    "license": ("лицензия недействительна",
+                "подпись не сходится, срок истёк или файл не найден", True),
+    "degraded": ("режим ревизии не позволяет операцию",
+                 "свойства кода (PDG/DDG) не построены — режим ниже full", True),
+    "no_data": ("в корпусе нет данных для этого вопроса",
+                "операция выполнена, но искомого в индексе нет", False),
+    "bad_input": ("вход неверен",
+                  "операция не смогла разобрать аргумент", True),
+}
+
+
+def next_action(operation: str, arg: str = "", *, kind: str = "no_index",
+                detail: str = "") -> dict[str, object]:
+    """Совет к отказу: что не так, почему, одна команда, возможно ли вообще.
+
+    `arg` — путь к конфигу корпуса (или имя проекта), если он известен: без него
+    команда остаётся общей, и это названо в `action_note`, а не спрятано.
+    """
+    if kind not in REFUSAL_KINDS:
+        raise ValueError(f"вид отказа {kind!r} вне списка: {', '.join(REFUSAL_KINDS)}")
+    problem, why, possible = _TEXT[kind]
+    template = _COMMANDS.get(kind, "")
+    action = ""
+    note = ""
+    if template:
+        if arg:
+            action = template.format(arg=arg)
+        else:
+            action = template.replace("-p {arg} ", "").format(arg="")
+            note = "путь к конфигу не назван: команда дана в общей форме"
+    else:
+        note = "команды нет: этот отказ исправляется не действием с корпусом"
+    return {
+        "operation": str(operation or ""),
+        "kind": kind,
+        "problem": problem if not detail else f"{problem}: {detail}",
+        "why": why,
+        "action": action,
+        "action_note": note,
+        "possible": bool(possible),
+    }

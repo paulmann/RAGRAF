@@ -132,6 +132,12 @@ SANDBOX_FILES = (
     # чекер считает этим инструментом. Без файла проверка «числа совпадают с
     # кодом» отказывает сама — и тест краснел отказом песочницы.
     "tools/surface_counts.py",
+    # X2: генератор чисел поверхности, его шаблоны и артефакт. Без них шаг
+    # «числа в разметке» отказывает сам — отказ песочницы, а не продукта.
+    "tools/surface_gen.py",
+    "tools/surface_templates.json",
+    "docs/surface.json",
+    "docs/03_implementation/EDITIONS-PRO.md",
     "tools/release/manifest.toml",
     "tools/release/gate_release.py",
     "tools/release/relcommon.py",
@@ -285,6 +291,33 @@ def run_publication_gate(root: Path) -> tuple[int, str]:
         capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
     )
     return completed.returncode, (completed.stdout or "") + (completed.stderr or "")
+
+
+def run_surface(root: Path, *extra: str) -> tuple[int, dict, str]:
+    """Гейт чисел поверхности: код, машинный ответ, вывод."""
+    completed = subprocess.run(
+        [sys.executable, str(root / "tools" / "surface_gen.py"),
+         "--root", str(root), "--json", *extra],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
+    )
+    output = (completed.stdout or "") + (completed.stderr or "")
+    try:
+        payload = json.loads(completed.stdout or "")
+    except json.JSONDecodeError:
+        payload = {}
+    return completed.returncode, payload, output
+
+
+def surface_counts_live() -> dict:
+    """Числа из единственного источника — обёртки `tools/surface_counts.py`."""
+    completed = subprocess.run(
+        [sys.executable, str(REPO / "tools" / "surface_counts.py")],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
+    )
+    try:
+        return json.loads(completed.stdout or "")
+    except json.JSONDecodeError:
+        return {}
 
 
 def summary_line(output: str) -> str:
@@ -658,6 +691,78 @@ def main() -> int:
           == (active_files, active_nodes, active_edges),
           "генератор записал размеры активной ревизии, а не литерал",
           str(published.groups()) if published else "не найдено")
+
+    print()
+    print("=" * 78)
+    print("5. ПОВЕРХНОСТЬ: ЧИСЛА В РАЗМЕТКЕ (X2)")
+    print("=" * 78)
+    counts_live = surface_counts_live()
+    code, payload, output = run_surface(root, "--check")
+    check(code == 0, "песочница: числа поверхности совпадают с кодом", output[-300:])
+    counts = payload.get("counts") or {}
+    check(counts.get("ops") == counts_live.get("facade_ops")
+          and counts.get("tools") == counts_live.get("mcp_tools")
+          and counts.get("caps") == counts_live.get("capabilities"),
+          "генератор и обёртка surface_counts считают одно и то же", str(counts))
+    templates = json.loads((REPO / "tools" / "surface_templates.json")
+                           .read_text(encoding="utf-8"))
+    docs_listed = set((templates.get("docs") or {}))
+    check(not any("skills/" in name for name in docs_listed),
+          "числа навыка не дублируются: их проверяет check_skill_variants",
+          str(sorted(docs_listed)[:2]))
+
+    readme_path = root / "README.md"
+    original = readme_path.read_text(encoding="utf-8")
+    # Приманка считается ОТ ЗАМЕРА: число поверхности меняется от этапа к этапу,
+    # и литерал в наборе превращал бы изменение числа в ложный провал.
+    ops_now = int(counts_live.get("facade_ops") or 0)
+    marker_ok = f"<!-- surface:figures -->**{ops_now} operations**"
+    marker_bad = f"<!-- surface:figures -->**{ops_now - 1} operations**"
+    broken = original.replace(marker_ok, marker_bad, 1)
+    check(broken != original, "в песочнице есть размеченный абзац чисел")
+    readme_path.write_text(broken, encoding="utf-8", newline="\n")
+    code, payload, output = run_surface(root, "--check")
+    findings = payload.get("findings") or []
+    check(code == 1 and any("README.md:figures" in item for item in findings),
+          "порча числа — находка с адресом документа", str(findings[:2]))
+    check(any(str(ops_now - 1) in item and str(ops_now) in item for item in findings),
+          "находка называет ожидаемое и фактическое", str(findings[:2]))
+
+    code, _, output = run_surface(root, "--write")
+    check(code == 0, "--write возвращает число к коду", output[-200:])
+    fixed = readme_path.read_text(encoding="utf-8")
+    check(marker_ok in fixed, "в документе снова число из кода")
+    bytes_after_fix = readme_path.read_bytes()
+    artifact_after_fix = (root / "docs" / "surface.json").read_bytes()
+    code, payload, _ = run_surface(root, "--write")
+    check(code == 0 and not (payload.get("findings") or []),
+          "--write идемпотентен: находок нет", str(payload.get("findings")))
+    check(readme_path.read_bytes() == bytes_after_fix
+          and (root / "docs" / "surface.json").read_bytes() == artifact_after_fix,
+          "повторный --write не меняет байты")
+
+    decoy_surface = root / "docs" / "surface-decoy.md"
+    decoy_body = "<!-- surface:figures -->**1 operations**<!-- /surface:figures -->"
+    decoy_surface.write_text(decoy_body, encoding="utf-8", newline="\n")
+    code, payload, _ = run_surface(root, "--check")
+    check(code == 0, "посторонний файл не ломает проверку", str(payload.get("findings")))
+    run_surface(root, "--write")
+    check(decoy_surface.read_text(encoding="utf-8") == decoy_body,
+          "документ вне списка не проверяется и не переписывается")
+    decoy_surface.unlink()
+
+    artifact = json.loads((root / "docs" / "surface.json").read_text(encoding="utf-8"))
+    original_digest = artifact.get("digest")
+    artifact["digest"] = "0" * 64
+    (root / "docs" / "surface.json").write_text(
+        json.dumps(artifact, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8", newline="\n")
+    code, payload, _ = run_surface(root, "--check")
+    check(code == 1 and any("отпечаток" in item for item in payload.get("findings") or []),
+          "подмена отпечатка артефакта — отказ", str(payload.get("findings"))[:200])
+    run_surface(root, "--write")
+    restored = json.loads((root / "docs" / "surface.json").read_text(encoding="utf-8"))
+    check(restored.get("digest") == original_digest, "--write восстанавливает отпечаток")
 
     shutil.rmtree(decoy, ignore_errors=True)
     shutil.rmtree(root, ignore_errors=True)

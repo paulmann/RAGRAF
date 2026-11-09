@@ -1,0 +1,2294 @@
+{
+  "schema": 1,
+  "counts": {
+    "ops": 76,
+    "tools": 83,
+    "cli": 26,
+    "tree": 29,
+    "text": 40,
+    "formats": 84,
+    "caps": 20,
+    "caps_pro": 14,
+    "caps_enterprise": 20
+  },
+  "ops": [
+    {
+      "name": "attest_bundle",
+      "params": [
+        {
+          "name": "verify",
+          "type": "bool",
+          "default": "False"
+        },
+        {
+          "name": "out",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "bundle",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "tree",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "with_sbom",
+          "type": "bool",
+          "default": "False"
+        },
+        {
+          "name": "with_editions",
+          "type": "bool",
+          "default": "True"
+        },
+        {
+          "name": "gate_report",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "sign",
+          "type": "bool",
+          "default": "True"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "broker_issue",
+      "params": [
+        {
+          "name": "secret",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "agent",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "ttl_minutes",
+          "type": "int",
+          "default": "0"
+        },
+        {
+          "name": "reason",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "reveal",
+          "type": "bool",
+          "default": "True"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "broker_rotate",
+      "params": [
+        {
+          "name": "secret",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "mode",
+          "type": "str",
+          "default": "'status'"
+        },
+        {
+          "name": "every_days",
+          "type": "int",
+          "default": "0"
+        },
+        {
+          "name": "value",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "reason",
+          "type": "str",
+          "default": "''"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "calibrate",
+      "params": [
+        {
+          "name": "kind",
+          "type": "str",
+          "default": "'confidence'"
+        },
+        {
+          "name": "samples",
+          "type": "dict | None",
+          "default": "None"
+        }
+      ],
+      "returns": [
+        "kind",
+        "note",
+        "params",
+        "sample_size"
+      ],
+      "returns_from": "literal"
+    },
+    {
+      "name": "callees",
+      "params": [
+        {
+          "name": "fqn",
+          "type": "str"
+        },
+        {
+          "name": "depth",
+          "type": "int",
+          "default": "1"
+        },
+        {
+          "name": "hard_only",
+          "type": "bool",
+          "default": "False"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "default": "200"
+        },
+        {
+          "name": "min_confidence",
+          "type": "float | None",
+          "default": "None"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "callers",
+      "params": [
+        {
+          "name": "fqn",
+          "type": "str"
+        },
+        {
+          "name": "depth",
+          "type": "int",
+          "default": "1"
+        },
+        {
+          "name": "hard_only",
+          "type": "bool",
+          "default": "False"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "default": "200"
+        },
+        {
+          "name": "answer",
+          "type": "bool",
+          "default": "False"
+        },
+        {
+          "name": "min_confidence",
+          "type": "float | None",
+          "default": "None"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "catalog",
+      "params": [],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "class_usage",
+      "params": [
+        {
+          "name": "name",
+          "type": "str | None",
+          "default": "None"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "default": "200"
+        },
+        {
+          "name": "mode",
+          "type": "str",
+          "default": "'all'"
+        }
+      ],
+      "returns": [
+        "class",
+        "classes",
+        "count",
+        "defined",
+        "defined_count",
+        "mode",
+        "note",
+        "status",
+        "used",
+        "used_count"
+      ],
+      "returns_from": "literal"
+    },
+    {
+      "name": "code",
+      "params": [
+        {
+          "name": "fqn",
+          "type": "str | None",
+          "default": "None"
+        },
+        {
+          "name": "path",
+          "type": "str | None",
+          "default": "None"
+        },
+        {
+          "name": "style",
+          "type": "str",
+          "default": "'compact'"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "default": "5"
+        },
+        {
+          "name": "entry_ids",
+          "type": "str | None",
+          "default": "None"
+        },
+        {
+          "name": "start",
+          "type": "int | None",
+          "default": "None"
+        },
+        {
+          "name": "end",
+          "type": "int | None",
+          "default": "None"
+        },
+        {
+          "name": "source",
+          "type": "str",
+          "default": "'auto'"
+        },
+        {
+          "name": "include_containers",
+          "type": "bool",
+          "default": "False"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "compact",
+      "params": [
+        {
+          "name": "apply",
+          "type": "bool",
+          "default": "False"
+        },
+        {
+          "name": "vacuum",
+          "type": "bool | None",
+          "default": "None"
+        },
+        {
+          "name": "retain",
+          "type": "int | None",
+          "default": "None"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "contract_drift",
+      "params": [
+        {
+          "name": "manifest_path",
+          "type": "str | None",
+          "default": "None"
+        },
+        {
+          "name": "source",
+          "type": "str",
+          "default": "'manifest'"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "contract_pin_approve",
+      "params": [
+        {
+          "name": "op",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "everything",
+          "type": "bool",
+          "default": "False"
+        },
+        {
+          "name": "by",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "note",
+          "type": "str",
+          "default": "''"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "contract_pin_status",
+      "params": [
+        {
+          "name": "limit",
+          "type": "int",
+          "default": "50"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "db_cross",
+      "params": [],
+      "returns": [
+        "code_names",
+        "dynamic_sql"
+      ],
+      "returns_from": "literal"
+    },
+    {
+      "name": "db_drift",
+      "params": [
+        {
+          "name": "previous_rev",
+          "type": "str | None",
+          "default": "None"
+        }
+      ],
+      "returns": [
+        "drift",
+        "from",
+        "migrations_vs_live",
+        "to"
+      ],
+      "returns_from": "literal"
+    },
+    {
+      "name": "db_relations",
+      "params": [
+        {
+          "name": "table",
+          "type": "str"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "db_sample",
+      "params": [
+        {
+          "name": "table",
+          "type": "str"
+        },
+        {
+          "name": "database",
+          "type": "str | None",
+          "default": "None"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "db_schema",
+      "params": [
+        {
+          "name": "table",
+          "type": "str | None",
+          "default": "None"
+        },
+        {
+          "name": "database",
+          "type": "str | None",
+          "default": "None"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "default": "200"
+        }
+      ],
+      "returns": [
+        "info",
+        "tables"
+      ],
+      "returns_from": "literal"
+    },
+    {
+      "name": "db_table",
+      "params": [
+        {
+          "name": "table",
+          "type": "str"
+        },
+        {
+          "name": "database",
+          "type": "str | None",
+          "default": "None"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "dead_code",
+      "params": [
+        {
+          "name": "scope",
+          "type": "str | None",
+          "default": "None"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "default": "200"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "dependents",
+      "params": [
+        {
+          "name": "fact",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "locator",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "depth",
+          "type": "int",
+          "default": "3"
+        },
+        {
+          "name": "include_stated",
+          "type": "bool",
+          "default": "True"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "diff",
+      "params": [
+        {
+          "name": "since",
+          "type": "str | None",
+          "default": "None"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "default": "50"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "doc_asof",
+      "params": [
+        {
+          "name": "query",
+          "type": "str"
+        },
+        {
+          "name": "date",
+          "type": "str"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "default": "20"
+        },
+        {
+          "name": "kind",
+          "type": "str | None",
+          "default": "None"
+        },
+        {
+          "name": "with_text",
+          "type": "bool",
+          "default": "True"
+        },
+        {
+          "name": "text_width",
+          "type": "int",
+          "default": "240"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "doc_get",
+      "params": [
+        {
+          "name": "locator",
+          "type": "str"
+        },
+        {
+          "name": "with_provenance",
+          "type": "bool",
+          "default": "True"
+        },
+        {
+          "name": "asof",
+          "type": "str | None",
+          "default": "None"
+        }
+      ],
+      "returns": [
+        "doc_id",
+        "extraction_status",
+        "kind",
+        "locator",
+        "parts",
+        "path",
+        "source",
+        "text",
+        "vector_chars"
+      ],
+      "returns_from": "literal"
+    },
+    {
+      "name": "doc_ocr",
+      "params": [
+        {
+          "name": "path",
+          "type": "str",
+          "default": "''"
+        }
+      ],
+      "returns": [
+        "edition",
+        "enabled",
+        "engine",
+        "reason",
+        "state"
+      ],
+      "returns_from": "literal"
+    },
+    {
+      "name": "doc_relations",
+      "params": [
+        {
+          "name": "doc",
+          "type": "str | None",
+          "default": "None"
+        },
+        {
+          "name": "entity",
+          "type": "str | None",
+          "default": "None"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "default": "50"
+        },
+        {
+          "name": "asof",
+          "type": "str | None",
+          "default": "None"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "doc_search",
+      "params": [
+        {
+          "name": "query",
+          "type": "str"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "default": "20"
+        },
+        {
+          "name": "kind",
+          "type": "str | None",
+          "default": "None"
+        },
+        {
+          "name": "doc",
+          "type": "str | None",
+          "default": "None"
+        },
+        {
+          "name": "with_text",
+          "type": "bool",
+          "default": "True"
+        },
+        {
+          "name": "text_width",
+          "type": "int",
+          "default": "240"
+        },
+        {
+          "name": "asof",
+          "type": "str | None",
+          "default": "None"
+        },
+        {
+          "name": "include_superseded",
+          "type": "bool",
+          "default": "False"
+        }
+      ],
+      "returns": [
+        "asof",
+        "count",
+        "doc_hits_before_filter",
+        "filtered_by_validity",
+        "hits",
+        "include_superseded",
+        "query"
+      ],
+      "returns_from": "literal"
+    },
+    {
+      "name": "doc_search_levels",
+      "params": [
+        {
+          "name": "query",
+          "type": "str"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "default": "20"
+        },
+        {
+          "name": "mode",
+          "type": "str",
+          "default": "'both'"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "doc_status",
+      "params": [
+        {
+          "name": "doc_id",
+          "type": "str | None",
+          "default": "None"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "doc_validate",
+      "params": [
+        {
+          "name": "doc_id",
+          "type": "str | None",
+          "default": "None"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "drift_ack",
+      "params": [
+        {
+          "name": "entry_ids",
+          "type": "list[int]"
+        },
+        {
+          "name": "note",
+          "type": "str | None",
+          "default": "None"
+        },
+        {
+          "name": "by_whom",
+          "type": "str",
+          "default": "'agent'"
+        }
+      ],
+      "returns": [
+        "acked",
+        "requested"
+      ],
+      "returns_from": "literal"
+    },
+    {
+      "name": "drift_report",
+      "params": [
+        {
+          "name": "since",
+          "type": "int | None",
+          "default": "None"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "default": "500"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "duplicates",
+      "params": [
+        {
+          "name": "scope",
+          "type": "str | None",
+          "default": "None"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "default": "100"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "edge_evidence",
+      "params": [
+        {
+          "name": "fqn",
+          "type": "str"
+        },
+        {
+          "name": "kind",
+          "type": "str | None",
+          "default": "None"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "default": "200"
+        }
+      ],
+      "returns": [
+        "count",
+        "evidence",
+        "in",
+        "kind_filter",
+        "kinds_allowed",
+        "note",
+        "out",
+        "path",
+        "start_line",
+        "target"
+      ],
+      "returns_from": "literal"
+    },
+    {
+      "name": "entity_neighbors",
+      "params": [
+        {
+          "name": "entity",
+          "type": "str"
+        },
+        {
+          "name": "depth",
+          "type": "int",
+          "default": "1"
+        },
+        {
+          "name": "kind",
+          "type": "str",
+          "default": "'entity'"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "default": "50"
+        },
+        {
+          "name": "asof",
+          "type": "str | None",
+          "default": "None"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "entrypoints",
+      "params": [
+        {
+          "name": "path",
+          "type": "str | None",
+          "default": "None"
+        },
+        {
+          "name": "scope",
+          "type": "str | None",
+          "default": "None"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "default": "200"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "excludes",
+      "params": [
+        {
+          "name": "action",
+          "type": "str",
+          "default": "'show'"
+        },
+        {
+          "name": "dirs",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "force",
+          "type": "bool",
+          "default": "False"
+        }
+      ],
+      "returns": [
+        "current",
+        "dirs",
+        "forced",
+        "impact",
+        "written"
+      ],
+      "returns_from": "literal"
+    },
+    {
+      "name": "freshness",
+      "params": [
+        {
+          "name": "force",
+          "type": "bool",
+          "default": "False"
+        },
+        {
+          "name": "auto_reindex",
+          "type": "bool",
+          "default": "True"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "gate",
+      "params": [
+        {
+          "name": "payload",
+          "type": "dict | str | None",
+          "default": "None"
+        },
+        {
+          "name": "mode",
+          "type": "str | None",
+          "default": "None"
+        }
+      ],
+      "returns": [
+        "counters",
+        "hook",
+        "note"
+      ],
+      "returns_from": "literal"
+    },
+    {
+      "name": "global_overview",
+      "params": [
+        {
+          "name": "limit",
+          "type": "int",
+          "default": "20"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "impact",
+      "params": [
+        {
+          "name": "target",
+          "type": "str"
+        },
+        {
+          "name": "mode",
+          "type": "str",
+          "default": "'full'"
+        },
+        {
+          "name": "depth",
+          "type": "int",
+          "default": "3"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "default": "500"
+        },
+        {
+          "name": "answer",
+          "type": "bool",
+          "default": "False"
+        },
+        {
+          "name": "min_confidence",
+          "type": "float | None",
+          "default": "None"
+        }
+      ],
+      "returns": [
+        "affected_count",
+        "affected_files",
+        "confidence_threshold",
+        "derived",
+        "edge_kinds",
+        "evidence",
+        "heuristic_budget_percent",
+        "heuristic_share",
+        "hidden_by_confidence",
+        "mode",
+        "stated",
+        "target"
+      ],
+      "returns_from": "literal"
+    },
+    {
+      "name": "index_status",
+      "params": [],
+      "returns": [
+        "coverage",
+        "drift",
+        "edge_kinds",
+        "embedding_model",
+        "graph_compute",
+        "lexvec",
+        "project",
+        "quality",
+        "rev",
+        "root",
+        "stages",
+        "storage",
+        "vector_available"
+      ],
+      "returns_from": "literal"
+    },
+    {
+      "name": "license_offline",
+      "params": [
+        {
+          "name": "mode",
+          "type": "str",
+          "default": "'accept'"
+        },
+        {
+          "name": "request",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "license",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "out",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "edition_name",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "licensee",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "days",
+          "type": "int",
+          "default": "365"
+        },
+        {
+          "name": "note",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "public_key",
+          "type": "str",
+          "default": "''"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "live_read",
+      "params": [
+        {
+          "name": "path",
+          "type": "str"
+        },
+        {
+          "name": "start",
+          "type": "int | None",
+          "default": "None"
+        },
+        {
+          "name": "end",
+          "type": "int | None",
+          "default": "None"
+        }
+      ],
+      "returns": [
+        "changed_since_index",
+        "path",
+        "requested",
+        "sha256_index",
+        "sha256_now",
+        "text",
+        "total_lines"
+      ],
+      "returns_from": "literal"
+    },
+    {
+      "name": "neighbors",
+      "params": [
+        {
+          "name": "query",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "name",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "default": "20"
+        },
+        {
+          "name": "per_corpus",
+          "type": "int",
+          "default": "5"
+        },
+        {
+          "name": "stack",
+          "type": "str | list[str] | None",
+          "default": "None"
+        },
+        {
+          "name": "min_shared",
+          "type": "int",
+          "default": "1"
+        },
+        {
+          "name": "with_text",
+          "type": "bool",
+          "default": "True"
+        },
+        {
+          "name": "verify",
+          "type": "bool",
+          "default": "True"
+        },
+        {
+          "name": "kinds",
+          "type": "list[str] | None",
+          "default": "None"
+        },
+        {
+          "name": "answer",
+          "type": "bool",
+          "default": "False"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "note",
+      "params": [
+        {
+          "name": "text",
+          "type": "str"
+        },
+        {
+          "name": "task",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "tags",
+          "type": "list[str] | None",
+          "default": "None"
+        },
+        {
+          "name": "path",
+          "type": "str",
+          "default": "''"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "notes",
+      "params": [
+        {
+          "name": "task",
+          "type": "str | None",
+          "default": "None"
+        },
+        {
+          "name": "query",
+          "type": "str | None",
+          "default": "None"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "default": "50"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "policy_trace",
+      "params": [
+        {
+          "name": "symbol",
+          "type": "str"
+        },
+        {
+          "name": "action",
+          "type": "str | None",
+          "default": "None"
+        },
+        {
+          "name": "depth",
+          "type": "int",
+          "default": "3"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "default": "300"
+        },
+        {
+          "name": "min_confidence",
+          "type": "float | None",
+          "default": "None"
+        }
+      ],
+      "returns": [
+        "action_filter",
+        "allows",
+        "body_read",
+        "callers",
+        "default_behavior",
+        "denies",
+        "lines",
+        "path",
+        "symbol"
+      ],
+      "returns_from": "literal"
+    },
+    {
+      "name": "preflight",
+      "params": [
+        {
+          "name": "root",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "sample",
+          "type": "int",
+          "default": "50"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "quality_diff",
+      "params": [
+        {
+          "name": "from_run",
+          "type": "int",
+          "default": "0"
+        },
+        {
+          "name": "to_run",
+          "type": "int",
+          "default": "0"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "quality_pair",
+      "params": [
+        {
+          "name": "from_run",
+          "type": "int",
+          "default": "0"
+        },
+        {
+          "name": "to_run",
+          "type": "int",
+          "default": "0"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "quality_prune",
+      "params": [
+        {
+          "name": "keep",
+          "type": "int | None",
+          "default": "None"
+        },
+        {
+          "name": "dry_run",
+          "type": "bool",
+          "default": "True"
+        },
+        {
+          "name": "confirm",
+          "type": "bool",
+          "default": "False"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "quality_suite",
+      "params": [
+        {
+          "name": "label",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "record",
+          "type": "bool",
+          "default": "True"
+        },
+        {
+          "name": "session",
+          "type": "str",
+          "default": "''"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "quality_trace",
+      "params": [
+        {
+          "name": "action",
+          "type": "str",
+          "default": "'list'"
+        },
+        {
+          "name": "case_id",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "trace_id",
+          "type": "int",
+          "default": "0"
+        },
+        {
+          "name": "session",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "label",
+          "type": "str",
+          "default": "''"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "references",
+      "params": [
+        {
+          "name": "fqn",
+          "type": "str"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "default": "100"
+        },
+        {
+          "name": "min_confidence",
+          "type": "float | None",
+          "default": "None"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "repo_map",
+      "params": [
+        {
+          "name": "scope",
+          "type": "str | None",
+          "default": "None"
+        },
+        {
+          "name": "budget_tokens",
+          "type": "int",
+          "default": "2000"
+        },
+        {
+          "name": "detail",
+          "type": "str",
+          "default": "'normal'"
+        }
+      ],
+      "returns": [
+        "budget_chars",
+        "budget_note",
+        "budget_tokens",
+        "chars_used",
+        "files",
+        "files_included",
+        "files_total",
+        "ranking",
+        "ranking_note",
+        "scope"
+      ],
+      "returns_from": "literal"
+    },
+    {
+      "name": "route",
+      "params": [
+        {
+          "name": "query",
+          "type": "str"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "default": "10"
+        },
+        {
+          "name": "verify",
+          "type": "bool",
+          "default": "True"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "routes",
+      "params": [
+        {
+          "name": "path",
+          "type": "str | None",
+          "default": "None"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "default": "200"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "schema",
+      "params": [
+        {
+          "name": "table",
+          "type": "str | None",
+          "default": "None"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "default": "200"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "search",
+      "params": [
+        {
+          "name": "query",
+          "type": "str"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "default": "20"
+        },
+        {
+          "name": "kinds",
+          "type": "list[str] | None",
+          "default": "None"
+        },
+        {
+          "name": "with_text",
+          "type": "bool",
+          "default": "False"
+        },
+        {
+          "name": "text_width",
+          "type": "int",
+          "default": "160"
+        },
+        {
+          "name": "answer",
+          "type": "bool",
+          "default": "False"
+        },
+        {
+          "name": "mode",
+          "type": "str",
+          "default": "'auto'"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "search_multi",
+      "params": [
+        {
+          "name": "queries",
+          "type": "list[str]"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "default": "20"
+        },
+        {
+          "name": "scope",
+          "type": "str | None",
+          "default": "None"
+        },
+        {
+          "name": "regex",
+          "type": "bool",
+          "default": "False"
+        },
+        {
+          "name": "answer",
+          "type": "bool",
+          "default": "False"
+        }
+      ],
+      "returns": [
+        "families",
+        "queries",
+        "scope",
+        "summary"
+      ],
+      "returns_from": "literal"
+    },
+    {
+      "name": "shared_index_publish",
+      "params": [
+        {
+          "name": "action",
+          "type": "str",
+          "default": "'open'"
+        },
+        {
+          "name": "label",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "port",
+          "type": "int",
+          "default": "0"
+        },
+        {
+          "name": "note",
+          "type": "str",
+          "default": "''"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "shared_index_query",
+      "params": [
+        {
+          "name": "operation",
+          "type": "str"
+        },
+        {
+          "name": "params",
+          "type": "dict | None",
+          "default": "None"
+        },
+        {
+          "name": "url",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "timeout",
+          "type": "float",
+          "default": "30.0"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "shared_index_status",
+      "params": [],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "siem_export",
+      "params": [
+        {
+          "name": "source",
+          "type": "str",
+          "default": "'all'"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "default": "0"
+        },
+        {
+          "name": "dry_run",
+          "type": "bool",
+          "default": "False"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "siem_test",
+      "params": [],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "slice",
+      "params": [
+        {
+          "name": "fqn",
+          "type": "str"
+        },
+        {
+          "name": "direction",
+          "type": "str",
+          "default": "'back'"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "default": "200"
+        },
+        {
+          "name": "min_confidence",
+          "type": "float | None",
+          "default": "None"
+        }
+      ],
+      "returns": [
+        "direction",
+        "evidence",
+        "node_count",
+        "nodes",
+        "note",
+        "target"
+      ],
+      "returns_from": "literal"
+    },
+    {
+      "name": "sso_login",
+      "params": [
+        {
+          "name": "code",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "state",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "provider",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "redirect_uri",
+          "type": "str",
+          "default": "''"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "sso_map_roles",
+      "params": [
+        {
+          "name": "groups",
+          "type": "list[str] | None",
+          "default": "None"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "stale_cascade",
+      "params": [
+        {
+          "name": "changed",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "depth",
+          "type": "int",
+          "default": "3"
+        },
+        {
+          "name": "apply",
+          "type": "bool",
+          "default": "False"
+        },
+        {
+          "name": "clear",
+          "type": "bool",
+          "default": "False"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "default": "50"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "symbol",
+      "params": [
+        {
+          "name": "name",
+          "type": "str"
+        },
+        {
+          "name": "path",
+          "type": "str | None",
+          "default": "None"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "default": "20"
+        },
+        {
+          "name": "answer",
+          "type": "bool",
+          "default": "False"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "table_usage",
+      "params": [
+        {
+          "name": "table",
+          "type": "str"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "default": "200"
+        },
+        {
+          "name": "mode",
+          "type": "str",
+          "default": "'all'"
+        }
+      ],
+      "returns": [
+        "read_count",
+        "references",
+        "table",
+        "table_in_schema",
+        "unresolved_tables",
+        "write_count"
+      ],
+      "returns_from": "literal"
+    },
+    {
+      "name": "task_set",
+      "params": [
+        {
+          "name": "name",
+          "type": "str | None",
+          "default": "None"
+        },
+        {
+          "name": "clear",
+          "type": "bool",
+          "keyword": true,
+          "default": "False"
+        }
+      ],
+      "returns": [
+        "changed",
+        "cleared",
+        "env_var",
+        "previous",
+        "root",
+        "state_file",
+        "task",
+        "ttl_seconds"
+      ],
+      "returns_from": "literal"
+    },
+    {
+      "name": "task_stats",
+      "params": [
+        {
+          "name": "task",
+          "type": "str | None",
+          "default": "None"
+        },
+        {
+          "name": "fmt",
+          "type": "str",
+          "default": "'markdown'"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "default": "10"
+        }
+      ],
+      "returns": [
+        "figures",
+        "markdown",
+        "report",
+        "task"
+      ],
+      "returns_from": "literal"
+    },
+    {
+      "name": "themes",
+      "params": [
+        {
+          "name": "scope",
+          "type": "str | None",
+          "default": "None"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "default": "20"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "write_check",
+      "params": [
+        {
+          "name": "table",
+          "type": "str"
+        },
+        {
+          "name": "columns",
+          "type": "list[str] | None",
+          "default": "None"
+        },
+        {
+          "name": "operation",
+          "type": "str",
+          "default": "'insert'"
+        },
+        {
+          "name": "values",
+          "type": "int | None",
+          "default": "None"
+        }
+      ],
+      "returns": [
+        "all_required_columns",
+        "checked_columns",
+        "column_count",
+        "columns_marks",
+        "default_expression_columns",
+        "generated_columns",
+        "generated_from_live",
+        "generated_from_migrations",
+        "generated_kinds",
+        "generated_requested",
+        "insert_required",
+        "keys_live",
+        "live_only_columns",
+        "note",
+        "operation",
+        "primary_key",
+        "source",
+        "table",
+        "table_found",
+        "unknown_columns",
+        "values_count",
+        "values_mismatch"
+      ],
+      "returns_from": "literal"
+    }
+  ],
+  "tools": [
+    "ragraf_attest_bundle",
+    "ragraf_broker_issue",
+    "ragraf_broker_rotate",
+    "ragraf_callees",
+    "ragraf_callers",
+    "ragraf_catalog",
+    "ragraf_class_usage",
+    "ragraf_code",
+    "ragraf_compact",
+    "ragraf_context",
+    "ragraf_contract_drift",
+    "ragraf_contract_pin_approve",
+    "ragraf_contract_pin_status",
+    "ragraf_db_cross",
+    "ragraf_db_drift",
+    "ragraf_db_relations",
+    "ragraf_db_sample",
+    "ragraf_db_schema",
+    "ragraf_db_table",
+    "ragraf_dead_code",
+    "ragraf_dependents",
+    "ragraf_diff",
+    "ragraf_doc_asof",
+    "ragraf_doc_get",
+    "ragraf_doc_ocr",
+    "ragraf_doc_relations",
+    "ragraf_doc_search",
+    "ragraf_doc_search_levels",
+    "ragraf_doc_status",
+    "ragraf_doc_validate",
+    "ragraf_drift_ack",
+    "ragraf_drift_report",
+    "ragraf_duplicates",
+    "ragraf_edge_evidence",
+    "ragraf_ensure",
+    "ragraf_entity_neighbors",
+    "ragraf_entrypoints",
+    "ragraf_excludes",
+    "ragraf_freshness",
+    "ragraf_global_overview",
+    "ragraf_impact",
+    "ragraf_index_status",
+    "ragraf_license_offline",
+    "ragraf_live_read",
+    "ragraf_neighbors",
+    "ragraf_note",
+    "ragraf_notes",
+    "ragraf_policy_trace",
+    "ragraf_preflight",
+    "ragraf_quality_diff",
+    "ragraf_quality_pair",
+    "ragraf_quality_prune",
+    "ragraf_quality_suite",
+    "ragraf_quality_trace",
+    "ragraf_references",
+    "ragraf_repo_map",
+    "ragraf_route",
+    "ragraf_routes",
+    "ragraf_schema",
+    "ragraf_search",
+    "ragraf_search_multi",
+    "ragraf_secret_delete",
+    "ragraf_secret_grant",
+    "ragraf_secret_list",
+    "ragraf_secret_policy",
+    "ragraf_secret_reveal",
+    "ragraf_secret_revoke",
+    "ragraf_secret_set",
+    "ragraf_secret_show",
+    "ragraf_siem_export",
+    "ragraf_siem_test",
+    "ragraf_slice",
+    "ragraf_sso_login",
+    "ragraf_sso_map_roles",
+    "ragraf_stale_cascade",
+    "ragraf_symbol",
+    "ragraf_table_usage",
+    "ragraf_task",
+    "ragraf_task_stats",
+    "ragraf_themes",
+    "ragraf_usage",
+    "ragraf_use_project",
+    "ragraf_write_check"
+  ],
+  "cli": [
+    "analytics",
+    "catalog",
+    "check",
+    "compact",
+    "db",
+    "docgraph",
+    "drift",
+    "drop",
+    "edges",
+    "edition",
+    "ensure",
+    "feedback",
+    "index",
+    "init",
+    "locks",
+    "map",
+    "query",
+    "register",
+    "reindex",
+    "route",
+    "secrets",
+    "selftest",
+    "server",
+    "sources",
+    "status",
+    "usage"
+  ],
+  "features": [
+    {
+      "name": "doc-ocr",
+      "edition": "pro",
+      "status": "shipped",
+      "operations": [
+        "doc_ocr"
+      ]
+    },
+    {
+      "name": "documents",
+      "edition": "community",
+      "status": "shipped",
+      "operations": [
+        "doc_get",
+        "doc_search",
+        "doc_status",
+        "doc_validate"
+      ]
+    },
+    {
+      "name": "provenance",
+      "edition": "pro",
+      "status": "shipped",
+      "operations": [
+        "dependents",
+        "doc_asof",
+        "stale_cascade"
+      ]
+    },
+    {
+      "name": "doc-graph",
+      "edition": "pro",
+      "status": "shipped",
+      "operations": [
+        "doc_relations",
+        "entity_neighbors",
+        "global_overview",
+        "themes"
+      ]
+    },
+    {
+      "name": "exclude-management",
+      "edition": "pro",
+      "status": "shipped",
+      "operations": [
+        "excludes"
+      ]
+    },
+    {
+      "name": "search",
+      "edition": "community",
+      "status": "shipped",
+      "operations": [
+        "code",
+        "doc_search_levels",
+        "freshness",
+        "live_read",
+        "neighbors",
+        "references",
+        "route",
+        "search",
+        "search_multi",
+        "symbol"
+      ]
+    },
+    {
+      "name": "graph",
+      "edition": "community",
+      "status": "shipped",
+      "operations": [
+        "callees",
+        "callers",
+        "dead_code",
+        "diff",
+        "duplicates",
+        "edge_evidence",
+        "entrypoints",
+        "impact",
+        "repo_map",
+        "slice"
+      ]
+    },
+    {
+      "name": "schema",
+      "edition": "community",
+      "status": "shipped",
+      "operations": [
+        "class_usage",
+        "policy_trace",
+        "routes",
+        "schema",
+        "table_usage",
+        "write_check"
+      ]
+    },
+    {
+      "name": "db-live",
+      "edition": "community",
+      "status": "shipped",
+      "operations": [
+        "db_cross",
+        "db_drift",
+        "db_relations",
+        "db_sample",
+        "db_schema",
+        "db_table"
+      ]
+    },
+    {
+      "name": "audit",
+      "edition": "community",
+      "status": "shipped",
+      "operations": [
+        "calibrate",
+        "catalog",
+        "compact",
+        "drift_ack",
+        "drift_report",
+        "gate",
+        "index_status",
+        "note",
+        "notes",
+        "task_set",
+        "task_stats"
+      ]
+    },
+    {
+      "name": "shared-index",
+      "edition": "pro",
+      "status": "shipped",
+      "operations": [
+        "shared_index_publish",
+        "shared_index_query",
+        "shared_index_status"
+      ]
+    },
+    {
+      "name": "secret-broker",
+      "edition": "pro",
+      "status": "shipped",
+      "operations": [
+        "broker_issue",
+        "broker_rotate"
+      ]
+    },
+    {
+      "name": "quality-loop",
+      "edition": "pro",
+      "status": "shipped",
+      "operations": [
+        "quality_diff",
+        "quality_pair",
+        "quality_prune",
+        "quality_suite",
+        "quality_trace"
+      ]
+    },
+    {
+      "name": "preflight",
+      "edition": "pro",
+      "status": "shipped",
+      "operations": [
+        "preflight"
+      ]
+    },
+    {
+      "name": "contract-pin",
+      "edition": "enterprise",
+      "status": "shipped",
+      "operations": [
+        "contract_pin_approve",
+        "contract_pin_status"
+      ]
+    },
+    {
+      "name": "sso",
+      "edition": "enterprise",
+      "status": "shipped",
+      "operations": [
+        "sso_login",
+        "sso_map_roles"
+      ]
+    },
+    {
+      "name": "siem-export",
+      "edition": "enterprise",
+      "status": "shipped",
+      "operations": [
+        "siem_export",
+        "siem_test"
+      ]
+    },
+    {
+      "name": "offline-license",
+      "edition": "enterprise",
+      "status": "shipped",
+      "operations": [
+        "license_offline"
+      ]
+    },
+    {
+      "name": "attestation",
+      "edition": "enterprise",
+      "status": "shipped",
+      "operations": [
+        "attest_bundle"
+      ]
+    },
+    {
+      "name": "contract-drift",
+      "edition": "enterprise",
+      "status": "shipped",
+      "operations": [
+        "contract_drift"
+      ]
+    }
+  ],
+  "sources": {
+    "ops": "src/ragraf/facade.py",
+    "tools": "src/ragraf/mcp_server.py",
+    "cli": "src/ragraf/cli.py",
+    "languages": "src/ragraf/config.py",
+    "formats": "src/ragraf/formats.py",
+    "features": "src/ragraf/edition_baseline.json"
+  },
+  "digest": "6eb30f839b05ac3c1ec2b04e03ee3292466714e5a6746caaf48b0e4e9ba5c1e3",
+  "revision": {
+    "rev_id": "rev-1495",
+    "files": 978,
+    "nodes": 7079,
+    "edges": 98771,
+    "sealed_at": "2026-11-09T23:38:03+03:00",
+    "source": "graph",
+    "notes": []
+  }
+}

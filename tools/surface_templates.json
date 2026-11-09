@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "why": "Шаблоны чисел поверхности по документам. Число в тексте живёт только между маркерами <!-- surface:slot --> и <!-- /surface:slot -->; генератор рендерит шаблон из чисел src/ragraf/surface.py. Всё вне маркеров — история, она не проверяется. Шаблон хранится здесь, а не в коде, чтобы правка формулировки не требовала правки генератора и наоборот. В шаблон включено окружение числа: иначе короткая строка («70 операций») встречается дважды и разметка попадает не туда.",
+  "docs": {
+    "README.md": {
+      "ops_heading": "**{ops} operations** over a repository",
+      "tools_mcp": "**{tools} MCP tools** (`ragraf_*`)",
+      "figures": "**{ops} operations** on the facade, **{tools} MCP tools**, **{cli}** CLI subcommands, **{tree}** tree-parsed languages and **{text}** text-attached ones (including `document`), **{formats}** data formats in the registry (61 languages, 9 document families, 10 data kinds, 4 without a parser)"
+    },
+    "community/README.ru.md": {
+      "ops_heading": "**{ops_phrase}** над репозиторием",
+      "tools_mcp": "**{tools_phrase} MCP** (`ragraf_*`)",
+      "figures": "**{ops_phrase}** фасада, **{tools_phrase} MCP**, **{cli}** подкоманд CLI, **{tree}** языков деревом и **{text}** текстом (включая `document`), **{formats}** формата данных в реестре (61 язык, 9 семейств документов, 10 видов данных, 4 без разборщика)"
+    },
+    "community/README.de.md": {
+      "ops_heading": "**{ops} Operationen** auf dem Repository",
+      "tools_mcp": "**{tools} MCP-Werkzeuge** (`ragraf_*`)",
+      "figures": "**{ops} Operationen** der Fassade, **{tools} MCP-Werkzeuge**, **{cli}** CLI-Unterbefehle, **{tree}** Sprachen über den Syntaxbaum und **{text}** als Text (einschließlich `document`), **{formats}** Datenformate im Register (61 Sprachen, 9 Familien von Dokumenten, 10 Arten von Daten, 4 ohne Parser)"
+    },
+    "community/README.es.md": {
+      "ops_heading": "**{ops} operaciones** sobre un repositorio",
+      "tools_mcp": "**{tools} herramientas MCP** (`ragraf_*`)",
+      "figures": "**{ops} operaciones** en la fachada, **{tools} herramientas MCP**, **{cli}** subcomandos de CLI, **{tree}** lenguajes analizados por árbol y **{text}** conectados como texto (incluido `document`), **{formats}** formatos de datos en el registro (61 lenguajes, 9 familias de documentos, 10 tipos de datos, 4 sin analizador)"
+    },
+    "community/README.zh.md": {
+      "ops_heading": "**{ops} 个操作**作用于代码仓库",
+      "tools_mcp": "**{tools} 个 MCP 工具**（`ragraf_*`）",
+      "figures": "外观上的 **{ops} 个操作**、**{tools} 个 MCP 工具**、**{cli}** 个 CLI 子命令、**{tree}** 种语法树语言与 **{text}** 种文本接入语言（包括 `document`）、登记表中 **{formats}** 种数据格式（61 种语言、9 类文档家族、10 类数据、4 种无解析器）"
+    },
+    "community/README.hi.md": {
+      "ops_heading": "रिपॉज़िटरी पर **{ops} ऑपरेशन**",
+      "tools_mcp": "**{tools} MCP टूल** (`ragraf_*`)",
+      "figures": "फ़साड पर **{ops} ऑपरेशन**, **{tools} MCP टूल**, **{cli}** CLI उपकमांड, सिंटैक्स-ट्री से पढ़ी जाने वाली **{tree}** भाषाएँ और पाठ के रूप में जोड़ी गई **{text}** (जिनमें `document` भी), रजिस्टर में **{formats}** डेटा फ़ॉर्मैट (61 भाषाएँ, दस्तावेज़ के 9 कुल, डेटा के 10 प्रकार, 4 पार्सर के बिना)"
+    },
+    "docs/03_implementation/INTEGRATION.md": {
+      "tools_claim": "Сервер объявляет **{tools} инструментов** с префиксом `ragraf_`"
+    },
+    "docs/03_implementation/EDITIONS-PRO.md": {
+      "caps_claim": "у **enterprise** действуют **{caps} возможностей**",
+      "pro_claim": "У **pro** действуют **{caps_pro}**"
+    }
+  }
+}

@@ -89,6 +89,10 @@ class IndexReport:
     # узел. Пустой словарь — стадия не выполнялась (старая ревизия, прерванный
     # прогон); это отличается от «рёбер в никуда нет».
     references: dict = field(default_factory=dict)
+    # Провенанс документа: сколько версий с объявленным интервалом и сколько
+    # фактов записано. Отдельное поле, а не строка заметки: «интервалов нет» надо
+    # отличать от «слой не строился» машинно, а не чтением текста.
+    provenance: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -115,6 +119,7 @@ class IndexReport:
             "budget_stage": self.budget_stage,
             "budget_files_done": self.budget_files_done,
             "references": self.references,
+            "provenance": self.provenance,
         }
 
 
@@ -182,13 +187,20 @@ def _catalog_dir_overridden() -> bool:
 
 
 class Indexer:
-    def __init__(self, cfg: ProjectConfig, *, mode: str = "full") -> None:
+    def __init__(self, cfg: ProjectConfig, *, mode: str = "full",
+                 heartbeat=None) -> None:
         """`mode` — глубина прогона: `"full"` (с CPG) или `"fast"`.
 
         Режим нужен не только индексатору: от него зависит, собирать ли снимки
         строк баз. Это КОНТЕНТ, а не структура, и в быстрой переиндексации он
         стоит 7,5 с из 45 с (замер 31.10.2026). Раньше режим нигде не был
         известен, и оба прогона делали одинаковую работу.
+
+        `heartbeat` — необязательный вызов «прогон жив», который делает
+        вызывающий (обычно `Catalog.touch_corpus_lock`). Зачем: замок корпуса
+        нужно отличать от брошенного, а «возраст файла» — плохая мера: полный
+        прогон идёт 700 с, а зависший держит часы. Обновление метки на каждой
+        стадии и раз в 32 файла делает замок честно живым.
         """
         self.cfg = cfg
         self.mode = mode
@@ -202,6 +214,23 @@ class Indexer:
         self.embedder = Embedder(cfg, allow_download=True)  # индексация может получить модель
         self.report = IndexReport(rev_id="", ok=False, capability="degraded", seconds=0.0)
         self._stages: list[dict] = []
+        # Признак живости замка корпуса: не чаще раза в 10 с (запись файла —
+        # не бесплатная, а порог живости — минуты).
+        self._heartbeat = heartbeat
+        self._last_beat = 0.0
+
+    def beat(self) -> None:
+        """Отметить, что прогон жив (обновляет признак живости замка корпуса)."""
+        if self._heartbeat is None:
+            return
+        now = time.time()
+        if now - self._last_beat < 10.0:
+            return
+        self._last_beat = now
+        try:
+            self._heartbeat()
+        except Exception:  # noqa: BLE001 — метка не имеет права ронять прогон
+            pass
 
     # ------------------------------------------------------------------
     # Полный прогон
@@ -634,6 +663,28 @@ class Indexer:
                             note=graph_note)
                 self.report.notes.append(graph_note)
                 self.report.docgraph = graph_info
+            # Derived-факты и рёбра деривации строятся ПОСЛЕ записи графа: вход у
+            # них — цитата из графа, и до его записи связывать нечего.
+            from . import provenance as provenance_mod
+
+            prov_stats = provenance_mod.build_derived(self.lexvec.conn, rev_id)
+            self.report.notes.append(
+                "провенанс: выведенных фактов "
+                f"{prov_stats['derived']}, рёбер к входам {prov_stats['edges']}, "
+                f"без входа {prov_stats['inputs_missing']}"
+            )
+            self.report.provenance = prov_stats
+            # Каскад устаревания (X7): изменение входа доказывается sha256
+            # версии документа в предыдущей ревизии, а не догадкой о правке.
+            cascade_stats = provenance_mod.auto_cascade(self.lexvec.conn, rev_id)
+            if cascade_stats.get("marked") or cascade_stats.get(
+                    "changed_documents"):
+                self.report.notes.append(
+                    "устаревание: изменённых документов "
+                    f"{cascade_stats['changed_documents']}, помечено выводов "
+                    f"{cascade_stats['marked']}"
+                    + (f" ({cascade_stats['reason']})"
+                       if cascade_stats.get("reason") else ""))
         if budget_over("lexvec"):
             return self.report
         t0 = time.perf_counter()
@@ -871,6 +922,10 @@ class Indexer:
             processed += 1
             if check_budget is not None and processed % 32 == 0:
                 check_budget("ast", processed)
+            # Самая долгая стадия обновляет признак живости замка на ходу:
+            # иначе на корпусе в тысячи файлов стадия `ast` идёт минутами и
+            # замок живого прогона выглядит молчащим.
+            self.beat()
             declined = docread.declines(cf.path)
             if declined:
                 # Формат наш, но возможность выключена. Файл не читается вовсе:
@@ -1631,6 +1686,22 @@ class Indexer:
         from . import cpg as cpg_mod
         from .joern_export import normalize_joern_path
 
+        # ДЛЯ PYTHON СЕРВЕРНЫЙ ПУТЬ НЕПРИМЕНИМ — проверка ДО запуска.
+        # Замер 06.11.2026 на этой установке (Windows, Joern 4.0.99):
+        # `importCode` для Python отвечает
+        # `CPG generator does not exist at …py2cpg.sh` — в дереве Joern есть
+        # только `.bat`-обёртка; `importCpg` падает NPE в
+        # `XTypeRecoveryPassGenerator` (это замер и примечание _calls_from_file).
+        # Раньше отказ обнаруживался только после двух проходов сервера,
+        # и в отчёте стояло размытое «сервер вернул пустой список вызовов».
+        language = getattr(runner, "corpus_language", lambda: None)()
+        if language == "PYTHON":
+            self.report.notes.append(
+                "серверный путь для Python недоступен (нет генератора py2cpg.sh, "
+                "importCpg падает в XTypeRecoveryPassGenerator): работаем обычным"
+            )
+            return None
+
         started = time.perf_counter()
         build = runner.build_via_server(rev_id)
         if not build.ok:
@@ -1809,17 +1880,33 @@ class Indexer:
                 return cache[key]
 
             for candidate in (norm, norm.split("<module>.")[-1]):
-                row = self.graph.conn.execute(
-                    "SELECT node_id FROM node WHERE rev_id = ? AND fqn = ? LIMIT 1",
+                # Кандидат обязан быть РОВНО ОДИН. Раньше здесь стояло
+                # `LIMIT 1` без проверки единственности, и при двух узлах с
+                # одинаковым fqn (вложенные функции с одним именем в одном
+                # файле — на живом корпусе таких fqn 8, например
+                # `src/ragraf/vault_ops.py:run` встречается 8 раз) выбор
+                # зависел от порядка строк в таблице. Замер 06.11.2026:
+                # два прогона на неизменённом дереве дали 92 294 и 92 297
+                # рёбер, разница целиком в `calls_heuristic`; число
+                # не воспроизводилось, и гейт публикации справедливо ругался.
+                found = self.graph.conn.execute(
+                    "SELECT node_id FROM node WHERE rev_id = ? AND fqn = ?"
+                    " ORDER BY node_id LIMIT 2",
                     (rev_id, candidate),
-                ).fetchone()
-                if row:
+                ).fetchall()
+                if len(found) == 1:
                     # Доступ по ПОЗИЦИИ, а не по имени колонки: у обычного
                     # соединения sqlite3 нет row_factory, и обращение по имени
                     # падало бы с TypeError. Проверка поймала это на соединении
                     # без row_factory до того, как дефект дошёл до чужого кода.
-                    cache[key] = (str(row[0]), 1.0, "fullname")
+                    cache[key] = (str(found[0][0]), 1.0, "fullname")
                     return cache[key]
+                if len(found) > 1:
+                    # Два узла с одним fqn — не доказательство, а выбор из
+                    # нескольких. По правилу этого же резолвера такой кандидат
+                    # не выбирается; ниже есть попытка по паре (файл, имя),
+                    # и она тоже требует единственности.
+                    break
 
             # Попытка 1б (этап 10): полное имя Joern, приведённое к НАШЕЙ форме.
             #
@@ -2295,7 +2382,7 @@ class Indexer:
         требует `extraction_failed` в отчёте, а исключение индексатор переживёт
         и файл исчезнет из отчёта молча.
         """
-        from . import docchunk, docindex, docread
+        from . import docchunk, docindex, docread, provenance
 
         try:
             raw = abs_path.read_bytes()
@@ -2326,6 +2413,15 @@ class Indexer:
         # в `doc_status` как `degraded`.
         if result.nodes and result.status in ("ok", "degraded"):
             document.chunks = docchunk.chunk_nodes(result.nodes, document.doc_id)
+        # Интервал действия — из явных метаданных (front matter, поля реквизитов).
+        # Угадывание по имени файла запрещено: выдуманная дата хуже отсутствующей.
+        interval = provenance.parse_interval(rel, raw, result.metadata)
+        document.valid_from = interval.valid_from
+        document.valid_to = interval.valid_to
+        document.superseded_by = interval.superseded_by
+        document.logical_id = interval.logical_id
+        document.validity_source = interval.source
+        document.validity_warnings = list(interval.warnings)
         return document
 
     def _document_chunks(self, document) -> list[ChunkRec]:
@@ -2357,15 +2453,19 @@ class Indexer:
         """Записать документы и прогнать валидатор ДО запечатывания ревизии."""
         if not documents:
             return {}
-        from . import docindex
+        from . import docindex, provenance
 
         conn = self.lexvec.conn
         counts = docindex.write(conn, rev_id, documents)
         conn.commit()
+        prov = provenance.write_layer(conn, rev_id, documents)
         verdict = docindex.validate(conn, rev_id)
         summary = docindex.summary(documents)
         summary["nodes"] = counts["nodes"]
         summary["problems"] = verdict["problems"]
+        # Числа провенанса идут в сводку прогона: иначе «интервалов нет» и «слой не
+        # построен» выглядели бы одинаково в отчёте индексации.
+        summary["provenance"] = prov
         return summary
 
     def _stage(self, rev_id: str, name: str, seconds: float, items: int,
@@ -2377,6 +2477,9 @@ class Indexer:
         # здесь нет намеренно: он тянул бы блокировку записи в журнал и
         # мешал второму процессу.
         self.control.touch_revision(rev_id)
+        # Тот же момент — обновление ЗАМКА корпуса: замок и ревизия должны
+        # стареть вместе, иначе замок живого прогона выглядит брошенным.
+        self.beat()
         self._stages.append(
             {"stage": name, "seconds": seconds, "items": items, "note": note}
         )

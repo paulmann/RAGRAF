@@ -1,0 +1,65 @@
+{
+  "format": 1,
+  "title": {
+    "en": "RAGRAF",
+    "ru": "RAGRAF"
+  },
+  "description": {
+    "en": "Local code index for DeepSeek Harness: graph, full-text search, vectors and path:line evidence; the MCP server and the index-first gate in one plugin.",
+    "ru": "Локальный индекс кода для DeepSeek Harness: граф, полнотекстовый поиск, векторы и ссылки path:line; MCP-сервер и гейт «сначала индекс» одним плагином."
+  },
+  "metadata": {
+    "categories": {
+      "developer-tools": {
+        "title": {
+          "en": "Developer tools",
+          "ru": "Инструменты разработчика"
+        }
+      }
+    }
+  },
+  "plugins": [
+    {
+      "name": "ragraf-dsh",
+      "title": {
+        "en": "RAGRAF — code index",
+        "ru": "RAGRAF — индекс кода"
+      },
+      "description": {
+        "en": "Ask where something is defined, who calls it and what breaks before reading files. Ships the MCP server, session hooks and an index-first gate; the index never leaves the machine.",
+        "ru": "Спросить, где определено, кто вызывает и что сломается, — вместо чтения файлов. Ставит MCP-сервер, хуки сеанса и гейт «сначала индекс»; индекс не покидает машину."
+      },
+      "author": "Mikhail Deynekin",
+      "homepage": "https://github.com/paulmann/RAGRAF",
+      "repository": {
+        "url": "https://github.com/paulmann/RAGRAF",
+        "directory": "integrations/dsh-plugin"
+      },
+      "metadata": {
+        "category": "developer-tools",
+        "keywords": [
+          "code-search",
+          "code-index",
+          "mcp",
+          "offline",
+          "impact-analysis"
+        ]
+      },
+      "versions": [
+        {
+          "version": "0.1.0",
+          "publishTimestamp": 1792598969,
+          "source": {
+            "type": "git",
+            "url": "https://github.com/paulmann/RAGRAF",
+            "commit": "15612b8fea10730bc75f82112f4f98e98a50f5dc",
+            "path": "integrations/dsh-plugin"
+          },
+          "engines": {
+            "dsh": ">=0.2.1-rc.5 <0.3.0"
+          }
+        }
+      ]
+    }
+  ]
+}

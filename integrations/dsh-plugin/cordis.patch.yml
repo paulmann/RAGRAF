@@ -1,0 +1,79 @@
+# RAGRAF для DeepSeek Harness — ОДИН bundle вместо правки профиля руками.
+#
+# Ставится как плагин: dsh plugin --profile <p> add <каталог | npm-спека>,
+# ставит и проверяет то же самое `python tools/install_dsh_plugin.py install`.
+# Удаляется: dsh plugin --profile <p> remove ragraf-dsh.
+#
+# Почему пакет, а не блок в cordis.patch.yml профиля:
+#
+#  1. Правка профиля теряется и расходится. Замер 02–03.11.2026: после
+#     обновления клиента (44.7.0) пакет моста хуков исчез из сборки, запись в
+#     профиле осталась и указывала в пустоту — хуки не вызывались неделю, а
+#     ошибки не было ни в одном выводе. Пакет же объявляет зависимость сам, и
+#     `dsh plugin add` ставит её в профиль.
+#  2. Правка профиля не имеет версии и отката: `dsh plugin remove` возвращает
+#     состояние «до», а копия YAML — нет (её легко перезаписать следующей
+#     правкой).
+#  3. Правка профиля не видна в панели Plugins: пользователь не может ни
+#     увидеть, что стоит, ни выключить это без чтения YAML.
+#
+# Три записи ниже отвечают трём измеренным причинам, по которым гейт RAGRAF
+# молчал после обновления (03.11.2026):
+#
+#  A. Бюджет инструкций. Базовый `agent-instructions` держит maxBytes 65536, а
+#     глобальный ~/.dsh/AGENTS.md вырос до 71 230 байт — DSH отбрасывал его
+#     ЦЕЛИКОМ («Workspace instruction budget 65536 bytes: omitted …»), вместе с
+#     разделом «сначала RAGRAF». Теперь бюджет 196 608: файл доезжает, гейт
+#     перестаёт быть единственной защитой.
+#  B. Мост хуков. Он объявлен зависимостью пакета, поэтому его наличие больше
+#     не зависит от того, что положила в сборку очередная версия клиента.
+#  C. Режим гейта. Команды хуков собираются установщиком с `--mode=deny` и
+#     записываются в $DSH_HOME/ragraf/hooks.json; в режиме `warn` гейт только
+#     подсказывал — измерено, что подсказку игнорируют.
+#
+# Пути вычисляются выражением, а не литералом: пакет один для всех машин.
+# `$DSH_HOME` — то же правило, что у @deepseek-ai/dsh-home-paths (иначе
+# ~/.dsh). `RAGRAF_PYTHON` — необязательное указание интерпретатора; по
+# умолчанию `python` из PATH, а дальше выбор делает scripts/dispatch.py
+# (.venv рабочей копии RAGRAF, затем пакет).
+#
+# Чего здесь СОЗНАТЕЛЬНО нет:
+#  * `--project`: сервер определяет корпус по реестру, а чужой каталог
+#    называется инструментом use_project — прибитый путь означал бы, что все
+#    проекты получают чужой корпус;
+#  * пересборки индекса на старте: полный ensure корпуса занимает минуты, а
+#    SessionStart получает 30 с; актуализация — первое действие агента, и его
+#    требует гейт (см. tools/harness_gate.py), а не обещание в тексте.
+
+- insert:
+    - id: mcp-ragraf
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: ragraf
+        transport: stdio
+        command: !!js "process.env.RAGRAF_PYTHON || 'python'"
+        args:
+          - !!js '((h) => h + "/ragraf/dispatch.py")((() => { const v = process.env.DSH_HOME || ((process.env.USERPROFILE || process.env.HOME || ".") + "/.dsh"); return v.length > 1 && (v.endsWith("/") || v.endsWith("\\")) ? v.slice(0, -1) : v; })())'
+          - mcp
+          - '--agent'
+          - 'DeepSeek Harness'
+          - '--agent-kind'
+          - external
+        env:
+          PYTHONIOENCODING: utf-8
+          PYTHONUTF8: '1'
+          RAGRAF_CLIENT: dsh
+        toolCallTimeoutMs: 300000
+        failOnStartupError: false
+
+- insert:
+    - id: hooks-ragraf
+      name: '@deepseek-ai/dsh-hooks-claude-code'
+      config:
+        configPath: !!js '((h) => h + "/ragraf/hooks.json")((() => { const v = process.env.DSH_HOME || ((process.env.USERPROFILE || process.env.HOME || ".") + "/.dsh"); return v.length > 1 && (v.endsWith("/") || v.endsWith("\\")) ? v.slice(0, -1) : v; })())'
+        defaultTimeoutMs: 120000
+
+- id: agent-instructions
+  name: '@deepseek-ai/dsh-agent-instructions'
+  config:
+    maxBytes: 196608

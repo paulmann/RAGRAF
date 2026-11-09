@@ -12,6 +12,8 @@
 from __future__ import annotations
 
 import json
+import os
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -19,6 +21,11 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 SERVER = REPO / "tools" / "ragraf-mcp.py"
 CONFIG = REPO / "config" / "revoap.yaml"
+
+#: Сколько ждать ответа сервера. Меняется переменной окружения — нужно, чтобы
+#: проверить сам аварийный путь (короткий срок) и чтобы медленная машина
+#: не объявляла исправный сервер мёртвым.
+TIMEOUT_SEC = float(os.environ.get("RAGRAF_MCP_TEST_TIMEOUT", "300"))
 
 PASSED = 0
 FAILED = 0
@@ -37,15 +44,68 @@ def check(cond, message: str, detail: str = "") -> bool:
     return bool(cond)
 
 
+def terminate_tree(proc: subprocess.Popen) -> bool:
+    """Снять сервер ВМЕСТЕ с потомками. True — пришлось снимать силой.
+
+    ЗАЧЕМ. `proc.communicate(timeout=…)` на истечении срока бросает исключение
+    и НЕ трогает дочерний процесс. Замерено 04.11.2026: после такого прогона
+    остался жить `tools/ragraf-mcp.py` (он держал `catalog/catalog.lock` и
+    переиндексировал корпус), а `ragraf status` при этом ждал замок до 120 с.
+    Сирота видна так: `Get-CimInstance Win32_Process | ? CommandLine -like
+    '*ragraf-mcp.py*'` — в списке появляется процесс с чужим `ParentProcessId`.
+
+    Почему дерево, а не `proc.kill()`. Индексатор запускает внешние процессы
+    (Joern, `pysrc2cpg`), и они переживают смерть родителя. На Windows дерево
+    снимает `taskkill /T`, на POSIX — сигнал своей группе (поэтому сервер
+    запускается в отдельном сеансе).
+    """
+    if proc.poll() is not None:
+        return False
+    try:
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                           capture_output=True, check=False, timeout=60)
+        else:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+    except Exception:
+        pass
+    try:
+        proc.wait(timeout=30)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        try:
+            proc.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            pass
+    return True
+
+
 def run_session(requests: list[dict]) -> list[dict | None]:
     """Отправить запросы серверу и собрать ответы."""
     proc = subprocess.Popen(
         [sys.executable, str(SERVER), "--project", str(CONFIG)],
         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         text=True, encoding="utf-8", errors="replace", bufsize=1,
+        # Своя группа процессов: без неё сигнал на POSIX уйдёт только серверу,
+        # а его потомки (Joern) останутся работать.
+        start_new_session=(os.name != "nt"),
     )
     payload = "\n".join(json.dumps(r, ensure_ascii=False) for r in requests) + "\n"
-    out, err = proc.communicate(input=payload, timeout=300)
+    out, err = "", ""
+    try:
+        out, err = proc.communicate(input=payload, timeout=TIMEOUT_SEC)
+    except subprocess.TimeoutExpired:
+        # Сперва снимаем, потом читаем остаток: иначе вывод сервера теряется.
+        terminate_tree(proc)
+        try:
+            out, err = proc.communicate(timeout=30)
+        except subprocess.TimeoutExpired:
+            out, err = "", "сервер не завершился даже после снятия дерева"
+        print(f"  [FAIL] сервер не ответил за {TIMEOUT_SEC:g} с: снят принудительно; "
+              f"stderr: {(err or '')[:400]}")
+        # Нет ответов — значит нечего разбирать; выше это будет видно как провал
+        # конкретных проверок ("ответ не получен"), а не как таймаут без следа.
+        return []
     responses: list[dict | None] = []
     for line in out.splitlines():
         line = line.strip()

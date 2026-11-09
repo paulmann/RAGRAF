@@ -542,23 +542,37 @@ def _ensure_new(catalog: Catalog, root: Path, start: float, *, create: bool,
         outcome.seconds = time.time() - start
         return outcome
 
+    from .catalog import Catalog
     from .indexer import Indexer
+    from .watch import category_for
 
     budget = budget_seconds if budget_seconds is not None else cfg.index.budget_seconds
-    idx = Indexer(cfg)
-    try:
-        report = idx.run(budget_seconds=budget, with_vectors=bool(with_vectors))
-    except Exception as exc:  # noqa: BLE001
-        outcome.status = "error"
-        outcome.reason = (
-            f"индексация нового корпуса не удалась: {type(exc).__name__}: {exc}")
-        outcome.seconds = time.time() - start
-        return outcome
-    finally:
+    # Замок ПО КОРПУСУ: `ensure` — такой же путь, запускающий индексатор, как
+    # `index` и `reindex`. Без него два одновременных заведения одного корпуса
+    # писали бы одну ревизию вдвоём (замер 06.11.2026 на двух `index`).
+    catalog = Catalog()
+    with catalog.corpus_lock(category_for(cfg)) as got:
+        if not got:
+            outcome.status = "error"
+            outcome.reason = ("индексация этого корпуса уже идёт другим процессом: "
+                              "повторите позже, прежний индекс не тронут")
+            outcome.seconds = time.time() - start
+            return outcome
+        idx = Indexer(cfg, heartbeat=lambda: catalog.touch_corpus_lock(
+            category_for(cfg)))
         try:
-            idx.close()
-        except Exception:  # noqa: BLE001
-            pass
+            report = idx.run(budget_seconds=budget, with_vectors=bool(with_vectors))
+        except Exception as exc:  # noqa: BLE001
+            outcome.status = "error"
+            outcome.reason = (
+                f"индексация нового корпуса не удалась: {type(exc).__name__}: {exc}")
+            outcome.seconds = time.time() - start
+            return outcome
+        finally:
+            try:
+                idx.close()
+            except Exception:  # noqa: BLE001
+                pass
 
     data = report.to_dict()
     outcome.rev_id = data.get("rev_id", "")

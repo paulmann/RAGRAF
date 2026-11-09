@@ -10,7 +10,9 @@
 Что проверяется (каждый пункт — отдельная проверка с названием):
 
   1. `integrations/index.json` разбирается, схема и обязательные поля на месте;
-  2. каталог есть у каждого объявленного продукта, и лишних каталогов нет;
+  2. каталог есть у каждого объявленного продукта, и лишних каталогов нет
+     (каталог-бандл со своим индексом маркетплейса продуктом не считается —
+     см. `_is_bundle`);
   3. README каталога содержит разделы «Подключение», «Проверка», «Границы»;
   4. шаблон разбирается тем же разборщиком, что продукт (JSON/YAML/TOML),
      и называет сервер `ragraf`;
@@ -141,12 +143,35 @@ def check_index(data: dict[str, Any]) -> list[str]:
     return problems
 
 
+def _is_bundle(path: Path) -> bool:
+    """Каталог-бандл: свой индекс маркетплейса, а не конфигурация клиента.
+
+    Зачем исключение. `integrations/dsh-plugin` — плагин DeepSeek Harness: у него
+    собственный `index.json` со схемой `format: 1` и списком `plugins`, свой
+    установщик (`install_dsh_plugin.py`) и свои границы, описанные в
+    `docs/03_implementation/DSH-PLUGIN.md`. В таблице продуктов он не значится и
+    значиться не должен: продукт здесь — клиент с конфигурацией MCP.
+
+    Замер 03.11.2026: без этого исключения проверка падала на живом дереве
+    (`dsh-plugin: каталог есть, а в index.json не объявлен`), то есть правило
+    «лишних каталогов нет» было шире, чем устройство самого проекта.
+    """
+    manifest = path / "index.json"
+    if not manifest.is_file():
+        return False
+    try:
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+    except ValueError:
+        return False
+    return isinstance(data, dict) and isinstance(data.get("plugins"), list)
+
+
 def check_dirs(root: Path, products: list[dict]) -> list[str]:
     problems: list[str] = []
     base = root / "integrations"
     declared = {str(item.get("slug")) for item in products}
     actual = {path.name for path in base.iterdir()
-              if path.is_dir() and not path.name.startswith(".")}
+              if path.is_dir() and not path.name.startswith(".") and not _is_bundle(path)}
     for slug in sorted(declared - actual):
         problems.append(f"{slug}: объявлен, а каталога integrations/{slug} нет")
     for slug in sorted(actual - declared):

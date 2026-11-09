@@ -82,7 +82,7 @@ def main() -> int:
     index = json.loads((REPO / "integrations" / "index.json").read_text(encoding="utf-8"))
     products = index["products"]
     slugs = [item["slug"] for item in products]
-    check(len(products) == 11, "объявлено одиннадцать продуктов", str(len(products)))
+    check(len(products) == 12, "объявлено двенадцать продуктов", str(len(products)))
     check(len(slugs) == len(set(slugs)), "слаги не повторяются",
           str([s for s in slugs if slugs.count(s) > 1]))
     missing = [slug for slug in slugs
@@ -159,12 +159,21 @@ def main() -> int:
           "смоук без кода возврата пойман", "; ".join(caught["problems"])[:200])
     smoke.write_text(smoke_text, encoding="utf-8", newline="\n")
 
-    # (5) таблица документа разошлась с объявлением: уровень снят у одного продукта
+    # (5) таблица документа разошлась с объявлением: уровень снят у одного продукта.
+    # Подсадка ищет строку продукта, а не точный текст колонок: 03.11.2026
+    # выяснилось, что якорь вида «| L1, L2, L3, L4 | MCP stdio | `.mcp.json`»
+    # перестал совпадать после того, как в колонку «Конфигурация» добавили второй
+    # путь (`~/.claude.json` и `.mcp.json`). Подсадка тогда ничего не меняла и
+    # «провал не поймавшего» теста означал испорченный якорь, а не дефект чекера —
+    # ровно тот класс ложной тревоги, из-за которого доверие к гейту теряется.
     doc = root / DOC
     doc_text = doc.read_text(encoding="utf-8")
-    doc.write_text(doc_text.replace("| `clud` |", "| `claude-code` |")
-                            .replace("| L1, L2, L3, L4 | MCP stdio | `.mcp.json`",
-                                     "| L1, L3, L4 | MCP stdio | `.mcp.json`"),
+    mutated: list[str] = []
+    for line in doc_text.splitlines():
+        if "`claude-code`" in line and "| L1, L2, L3, L4 |" in line:
+            line = line.replace("| L1, L2, L3, L4 |", "| L1, L3, L4 |", 1)
+        mutated.append(line)
+    doc.write_text("\n".join(mutated) + ("\n" if doc_text.endswith("\n") else ""),
                    encoding="utf-8", newline="\n")
     caught = run_tool(root)
     check(caught["code"] == 1

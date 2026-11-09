@@ -34,6 +34,14 @@ python tools/ragraf.py -p config/ragraf.yaml query search "что ищем"
 | Как устроено внутри | [Архитектура](02_architecture/ARCHITECTURE.md) |
 | Что требовалось | [Техническое задание](02_architecture/TZ.md) |
 | Чем это проверено | [Протоколы замеров и приёмки](02_architecture/ACCEPTANCE.md) |
+| Откуда берутся числа в документах | [Числа поверхности](03_implementation/SURFACE-NUMBERS.md) |
+| Как проверяется замысел, записанный в коде | [Якоря замысла](03_implementation/CONTRACT-ANCHORS.md) |
+| Чем измеряется поведение, а не индекс | [Кейсы поведения](03_implementation/QUALITY-CASES.md) |
+| Чего будет стоить индекс и что не покроется | [Подготовка корпуса](03_implementation/PREFLIGHT.md) |
+| Как узнать, что контракт операций изменился | [Пиннинг подписи](03_implementation/CONTRACT-PIN.md) |
+| Что поставлено этапами X1–X6 и чем проверено | [Сводка этапов](03_implementation/STAGES-X1-X6.md) |
+| Что осталось закрыть в X7 и чем это принято | [Остатки X7](03_implementation/STAGES-X7.md) |
+| Девять блоков плана: возможность, операция, код, проверка | [Карта поставки](03_implementation/DELIVERY-MAP.md) |
 | Как подключить к агенту | [Регламент интеграции](03_implementation/INTEGRATION.md) |
 | Как подключено к AutoClaw | [RAGRAF и AutoClaw](03_implementation/AUTOCLAW_INTEGRATION.md) |
 | Как этим пользуется агент | [Обзор навыка](skills/ragraf-core/SKILL.md) |

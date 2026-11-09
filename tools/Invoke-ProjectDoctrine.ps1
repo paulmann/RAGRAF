@@ -759,6 +759,74 @@ function Test-RegistryCoverage {
         if ($helperBlock.Success -and $helperBlock.Value -notmatch 'if\s+not\s+rev_id') {
             $problems.Add('общая точка записи принимает пустую ревизию: неудачный прогон затрёт состояние разработки в реестре')
         }
+        # Свойство 2 (замер 06.11.2026): числа берутся из ЗАПЕЧАТАННОЙ ревизии, а не
+        # из отчёта индексатора. Отчёт считает до схлопывания повторов: на корпусе
+        # `default-workspace` он назвал 4 595 узлов и 125 828 рёбер при 2 233 и
+        # 34 306 в таблицах. Реестр — единственное место, откуда состояние берут
+        # панель и операция `catalog`, и расхождение читается как «в индексе
+        # втрое больше, чем есть».
+        if ($helperBlock.Success) {
+            $examined++
+            if ($helperBlock.Value -notmatch '_sealed_counts\s*\(') {
+                $problems.Add('record_index_run не берёт числа из запечатанной ревизии: реестр снова начнёт расходиться с графом')
+            }
+        }
+        # Свойство 3: индексация блокируется ПО КОРПУСУ. Общий замок превращал
+        # зависание одного корпуса в «MCP недоступен» для всех.
+        $examined++
+        if ($watchText -notmatch 'acquire_corpus_lock\s*\(') {
+            $problems.Add('watch.py не берёт замок по корпусу: тяжёлый корпус снова заблокирует индексацию остальных')
+        }
+        if ($watchText -match 'catalog\.acquire_lock\s*\(') {
+            $problems.Add('watch.py берёт общий замок реестра на всю индексацию: один зависший корпус остановит все')
+        }
+        # Свойство 4: временный каталог JVM обязан быть ASCII — иначе zstd-jni
+        # не загружается и CPG молча не строится (замер 06.11.2026).
+        $cpgPath = Join-Path $script:ProjectRoot 'src/ragraf/cpg.py'
+        if (Test-Path -LiteralPath $cpgPath) {
+            $examined++
+            $cpgText = Get-ProjectText $cpgPath
+            if ($cpgText -notmatch 'def\s+joern_tmp_ascii\s*\(') {
+                $problems.Add('в cpg.py нет проверки ASCII временного каталога JVM: не-ASCII путь даст потерю zstd-jni')
+            }
+            if ($cpgText -notmatch 'util\.ascii_path\s*\(\s*self\.cfg\.root\s*\)') {
+                $problems.Add('cpg.py не переводит корень корпуса в форму, читаемую JVM: не-ASCII путь даст Illegal char')
+            }
+        }
+        # Свойство 5 (замер 06.11.2026): пересбор по пределу интервала не
+        # запускается внутри обращения, если он не влезает в бюджет. Иначе
+        # прогон обречён: бюджет кончается, ревизия не закрепляется, и каждое
+        # обращение агента снова тратит минуты (жалоба HARNESS).
+        $examined++
+        if ($watchText -notmatch 'cost_exceeds_budget') {
+            $problems.Add('watch.choose_mode не пропускает пересбор, не влезающий в бюджет: обращения агента снова будут висеть')
+        }
+        if ($watchText -match 'info\[.interval_minutes.\]\s*=\s*True\s*\r?\n\s*info\[.reason.\]\s*=.*\r?\n\s*return\s+.full.') {
+            $problems.Add('выбор режима возвращает full по интервалу без сверки с бюджетом')
+        }
+        # Свойство 6 (замер 06.11.2026): устаревание обязано попадать в ТЕКСТ
+        # ответа. Клиент показывает модели только текстовые блоки, поэтому
+        # причина в одном `freshness` для агента невидима.
+        $serverPath = Join-Path $script:ProjectRoot 'src/ragraf/mcp_server.py'
+        if (Test-Path -LiteralPath $serverPath) {
+            $examined++
+            $serverText = Get-ProjectText $serverPath
+            if ($serverText -notmatch 'def\s+_warn_if_stale\s*\(') {
+                $problems.Add('в mcp_server.py нет подъёма устаревания в stale_warnings: агент не увидит причину')
+            }
+            if ($serverText -notmatch 'self\._warn_if_stale\s*\(\s*result\s*\)') {
+                $problems.Add('единая точка выдачи не зовёт _warn_if_stale: предупреждение не дойдёт до текста')
+            }
+        }
+        # Свойство 7: тяжёлый графовый расчёт не должен запускаться из статуса.
+        $facadePath = Join-Path $script:ProjectRoot 'src/ragraf/facade.py'
+        if (Test-Path -LiteralPath $facadePath) {
+            $examined++
+            $facadeText = Get-ProjectText $facadePath
+            if ($facadeText -notmatch 'def\s+graph_compute_state\s*\(\s*self\s*,\s*compute\s*:\s*bool\s*=\s*False') {
+                $problems.Add('graph_compute_state снова считает центральность по умолчанию: первый вызов статуса будет стоить секунды карты')
+            }
+        }
     }
 
     foreach ($entry in $paths) {
@@ -2110,8 +2178,8 @@ function Test-SourceMaterialHygiene {
     $declaredRules = @(
         @{ Dir = 'config'; Pattern = '\.yaml\.bak\.\d{8}-\d{6}-[a-z]+$';
            Reason = 'копии настроек корпусов: их пишет панель, это состояние, а не исходник продукта' }
-        @{ Dir = 'catalog'; Pattern = '^settings\.json\.bak-[^/\\]+$';
-           Reason = 'копии файла настроек машины: состояние, а не исходник продукта; их делает миграция настроек' }
+        @{ Dir = 'catalog'; Pattern = '^(settings|gate_state)\.json\.bak-[^/\\]+$';
+           Reason = 'копии файлов состояния машины: настройки и состояние гейта; это состояние, а не исходник продукта — их пишет сама программа' }
     )
 
     # Корни обхода. Деревья навыка добавлены 25.10.2026 (ПРОМТ-И12): источник

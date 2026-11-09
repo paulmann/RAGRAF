@@ -33,7 +33,13 @@ from ragraf.init_corpus import EXCLUDE_DIRS  # noqa: E402
 # Служебные каталоги, которые не должны попадать в индекс.
 SERVICE = (".ragraf", ".zwork", ".staging", ".git", ".agents", ".pi",
            ".dev_agent", "node_modules", "vendor", "__pycache__", "obj",
-           "bin", "publish", ".tools", ".ort_gpu_probe")
+           "bin", "publish", ".tools", ".ort_gpu_probe",
+           # Добавлено 03.11.2026 по решению владельца: рабочие каталоги проб,
+           # окружения интеграций и состояние клиента Claude Code. Все три —
+           # не исходники проекта: пробы меняли контрольную сумму корпуса на
+           # каждом прогоне, окружения LangChain живут в `.venvs`, настройки
+           # клиента — в `.claude`.
+           ".work", ".venvs", ".claude")
 
 CORPORA = [
     ("z-batteryservice.yaml", "z.batteryservice.ru"),

@@ -285,16 +285,18 @@ def routes_from_text(path: str, text: str) -> list[dict]:
         seen.add(key)
         out.append({"route": route, "method": method, "line": line, "kind": kind})
 
+    lines = util.LineIndex(text)
+
     for m in ROUTE_CALL_RE.finditer(text):
-        add(m.group(2), m.group(1).upper(), text.count("\n", 0, m.start()) + 1, "route")
+        add(m.group(2), m.group(1).upper(), lines.line_of(m.start()), "route")
     for m in ENDPOINT_ATTR_RE.finditer(text):
-        add(m.group(1), "", text.count("\n", 0, m.start()) + 1, "endpoint")
+        add(m.group(1), "", lines.line_of(m.start()), "endpoint")
     for m in ENDPOINT_CALL_RE.finditer(text):
-        add(m.group(1), "", text.count("\n", 0, m.start()) + 1, "endpoint")
+        add(m.group(1), "", lines.line_of(m.start()), "endpoint")
     for m in INCLUDE_ATTR_RE.finditer(text):
-        add(m.group(1), "", text.count("\n", 0, m.start()) + 1, "include")
+        add(m.group(1), "", lines.line_of(m.start()), "include")
     for m in SSI_INCLUDE_RE.finditer(text):
-        add(m.group(1), "", text.count("\n", 0, m.start()) + 1, "include")
+        add(m.group(1), "", lines.line_of(m.start()), "include")
     out.sort(key=lambda r: (r["line"], r["route"]))
     return out
 
@@ -312,6 +314,7 @@ def file_refs_from_text(text: str) -> list[tuple[str, int]]:
     """
     out: list[tuple[str, int]] = []
     seen: set[tuple[str, int]] = set()
+    lines = util.LineIndex(text)
     for m in FILE_LITERAL_RE.finditer(text):
         raw = m.group(1)
         if "://" in raw or raw.startswith("//"):
@@ -319,7 +322,7 @@ def file_refs_from_text(text: str) -> list[tuple[str, int]]:
         path = util.to_posix(raw).lstrip("/")
         if path.startswith("./"):
             path = path[2:]
-        line = text.count("\n", 0, m.start()) + 1
+        line = lines.line_of(m.start())
         if not path or (path, line) in seen:
             continue
         seen.add((path, line))
@@ -352,9 +355,10 @@ def placeholders_from_text(text: str) -> list[tuple[str, int]]:
     """Ключи плейсхолдеров `%{Key}`, `@{Key}`, `{{Key}}` со строками."""
     out: list[tuple[str, int]] = []
     seen: set[tuple[str, int]] = set()
+    lines = util.LineIndex(text)
     for m in PLACEHOLDER_RE.finditer(text):
         key = m.group(1) or m.group(2)
-        line = text.count("\n", 0, m.start()) + 1
+        line = lines.line_of(m.start())
         if (key, line) in seen:
             continue
         seen.add((key, line))
@@ -1270,10 +1274,11 @@ class PhpExtractor:
         потому что классом такой обрубок не является.
         """
         text = self._data.decode("utf-8", errors="replace")
+        lines = util.LineIndex(text)
         seen: set[str] = set()
         dynamic: set[str] = set()
         for m in MARKUP_CLASS_RE.finditer(text):
-            line = text.count("\n", 0, m.start()) + 1
+            line = lines.line_of(m.start())
             for name in m.group(1).split():
                 if not MARKUP_CLASS_NAME_RE.fullmatch(name):
                     continue

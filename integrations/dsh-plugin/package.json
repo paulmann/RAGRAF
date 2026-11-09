@@ -1,0 +1,48 @@
+{
+  "name": "ragraf-dsh",
+  "version": "0.1.0",
+  "description": "RAGRAF code index for DeepSeek Harness: the MCP server, session hooks and an index-first gate, wired by one installable bundle instead of hand-edited profile YAML.",
+  "type": "module",
+  "main": "lib/index.js",
+  "files": [
+    "lib/index.js",
+    "cordis.patch.yml",
+    "scripts/dispatch.py",
+    "README.md"
+  ],
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "code-index",
+    "code-search",
+    "mcp",
+    "offline"
+  ],
+  "license": "BUSL-1.1",
+  "author": {
+    "name": "Mikhail Deynekin",
+    "email": "Mikhail@Deynekin.com",
+    "url": "https://Deynekin.com"
+  },
+  "homepage": "https://github.com/paulmann/RAGRAF",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/paulmann/RAGRAF.git",
+    "directory": "integrations/dsh-plugin"
+  },
+  "engines": {
+    "dsh": ">=0.2.1-rc.5 <0.3.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-hook-protocol": "^0.2.1-rc.5",
+    "@deepseek-ai/dsh-hooks-claude-code": "^0.2.1-rc.5"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "~4.0.5"
+  }
+}

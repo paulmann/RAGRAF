@@ -394,8 +394,18 @@ class Extractor:
                                 commit=False, with_schema=False)
                 relations_written += 1
             conn.commit()
+            # Derived-факты и их входы — сразу после записи графа: иначе
+            # `dependents` не знал бы, из какого чанка выведена связь.
+            from . import provenance as provenance_mod
+
+            derived = provenance_mod.build_derived(conn, rev_id)
+            # Каскад устаревания (X7) — там же, где появились рёбра: у
+            # пометки и у вывода один и тот же вход.
+            cascade = provenance_mod.auto_cascade(conn, rev_id)
             return {"entities": len(entities), "mentions": mentions_written,
-                    "relations": relations_written}
+                    "relations": relations_written, "derived_facts": derived["derived"],
+                    "derivation_edges": derived["edges"],
+                    "stale_marked": cascade.get("marked", 0)}
         except Exception:
             try:
                 conn.rollback()

@@ -114,7 +114,7 @@ flowchart TB
         REINDEX["автоматическая<br/>реиндексация"]
     end
 
-    subgraph FACADE["Фасад: 67 операций"]
+    subgraph FACADE["Фасад: 76 операций"]
         OPS["search, symbol, schema,<br/>write_check, impact, ..."]
         ENV["Конверт ответа:<br/>index_rev, freshness,<br/>limits, stale_warnings"]
     end

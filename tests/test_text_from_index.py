@@ -372,18 +372,25 @@ for row in planted.get("result") or []:
 planted["found"] = True
 check(not found_implies_text(planted), "подсаженный «пустой found» пойман")
 
-outside = facade.op_code(path="src/ragraf/facade.py", start=9000, end=9100)
+# Границы окна считаются ОТ ЗАМЕРА, а не зашиты числом: файл растёт, и
+# фиксированные 9000–9100 стали попадать внутрь (09.11.2026, X7: facade.py
+# вырос до 9089 строк, проверка начала зеленеть на «отказе», которого нет).
+facade_lines = len((REPO / "src" / "ragraf" / "facade.py").read_text(
+    encoding="utf-8").splitlines())
+outside_start, outside_end = facade_lines + 100, facade_lines + 200
+outside = facade.op_code(path="src/ragraf/facade.py", start=outside_start,
+                         end=outside_end)
 check(outside.get("found") is False, "окно за спанами: честный отказ",
       str(outside.get("error")))
 reason = str(outside.get("error") or "")
-check("9000" in reason and "9100" in reason,
+check(str(outside_start) in reason and str(outside_end) in reason,
       "причина отказа называет границы числами", reason)
 
 reverse = facade.op_code(path="src/ragraf/facade.py", start=200, end=100)
 check(reverse.get("found") is False and "наоборот" in str(reverse.get("error") or ""),
       "перевёрнутое окно названо своей причиной", str(reverse.get("error")))
 
-for label, kwargs in (("за файлом", dict(start=9000, end=9100)),
+for label, kwargs in (("за файлом", dict(start=outside_start, end=outside_end)),
                       ("наоборот", dict(start=200, end=100))):
     env = facade.op_live_read("src/ragraf/facade.py", **kwargs)
     check(env.get("found") is False and str(env.get("error") or "").strip(),

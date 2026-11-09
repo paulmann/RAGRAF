@@ -410,6 +410,25 @@ class GateState:
     def session(self, session_id: str) -> dict | None:
         return (self._load()["sessions"] or {}).get(str(session_id or "")) or None
 
+    def decisions(self, session_id: str = "", limit: int = 200) -> list[dict]:
+        """Решения гейта этого сеанса: вид вызова, вердикт, причина, правило.
+
+        Зачем читатель. Решения уже пишутся (`note_decision`), но прочитать их
+        извне было нельзя: журнал был виден только самому гейту, и ответ на
+        вопрос «агент пошёл мимо индекса?» приходилось собирать глазами.
+        Потребитель — кейсы поведения (`quality_cases`): обход доказывается
+        ЗАПИСЬЮ решения гейта, а не пересказом.
+
+        Порядок — от старых к новым, чтобы трасса читалась как ход работы.
+        """
+        rows = list(self._load().get("decisions") or [])
+        sid = str(session_id or "")
+        if sid:
+            rows = [row for row in rows if str(row.get("session_id") or "") == sid]
+        # В файле записи лежат новые сверху (insert(0)); для трассы нужен ход.
+        rows = list(reversed(rows))
+        return [dict(row) for row in rows[:max(1, int(limit))]]
+
     def note_decision(self, decision: GateDecision, call: dict, *,
                       session_id: str = "", task: str = "") -> None:
         """Записать решение в состояние: счётчики и короткий журнал."""

@@ -171,6 +171,22 @@
       "smoke": "",
       "checklist": "checklist.md",
       "l0": "облачный SaaS, локальной установки нет"
+    },
+    {
+      "slug": "langchain",
+      "title": "LangChain (библиотека, не клиент)",
+      "transport": "прямой вызов Python + MCP stdio",
+      "config": "конфигурация корпуса RAGRAF (RAGRAF_CONFIG)",
+      "template": "mcp.template.json",
+      "levels": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "smoke": "smoke.ps1",
+      "checklist": "",
+      "l0": "langchain 1.4.8 в отдельном окружении (замерено 03.11.2026)"
     }
   ]
 }

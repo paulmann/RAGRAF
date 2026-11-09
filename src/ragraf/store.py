@@ -758,9 +758,14 @@ def init_lexvec(conn: sqlite3.Connection) -> None:
     # прогон того же корпуса платил бы заново.
     from .docgraph import DOCGRAPH_DDL
     from .llm import LLM_CACHE_DDL
+    from .provenance import PROVENANCE_DDL
 
     conn.executescript(DOCGRAPH_DDL)
     conn.executescript(LLM_CACHE_DDL)
+    # Провенанс документа и вывода: версии, интервалы действия, рёбра деривации.
+    # Тот же файл, что у документов и графа: политика хранения считает таблицы
+    # по колонке `rev_id`, и второй файл она бы не увидела.
+    conn.executescript(PROVENANCE_DDL)
     conn.execute(
         "INSERT OR REPLACE INTO meta(key, value) VALUES('schema_version', ?)",
         (str(SCHEMA_VERSION),),

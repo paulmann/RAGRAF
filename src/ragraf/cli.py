@@ -18,7 +18,7 @@ from . import __version__, util
 from .config import ConfigError, ProjectConfig, load as load_config
 # Перечни значений параметров живут в фасаде: оболочка берёт их оттуда, чтобы
 # перечень не разошёлся с проверкой (одно свойство — одна точка).
-from .facade import OP_CHOICES
+from .facade import OP_CHOICES, IndexNotBuilt
 
 EXIT_OK = 0
 EXIT_ERROR = 1
@@ -51,6 +51,9 @@ OPS = [
     "duplicates", "entrypoints", "dead_code",
     # Слой живых баз данных: структура, связи, примеры, сверки.
     "db_schema", "db_table", "db_relations", "db_sample", "db_drift", "db_cross",
+    # Сверка замысла и кода по FQN (Enterprise): внешний YAML-манифест проекта
+    # против вычисленного графа. Операция только читает манифест и индекс.
+    "contract_drift",
     # P2: сравнение ревизий и память о решениях.
     "diff", "note", "notes",
     # Управление списком исключений (уровень pro): что не считать в корпус.
@@ -67,8 +70,26 @@ OPS = [
     # Прореживание журнала (ПРОМТ-И10) — там же: это тот же контур и тот же
     # журнал, у него нет отдельной возможности издания.
     "quality_suite", "quality_diff", "quality_prune",
+    # Подготовка корпуса к индексации (X5): осмотр ДО создания индекса.
+    "preflight",
+    # Пиннинг подписи операций (X6): состояние пинов и подтверждение человеком.
+    "contract_pin_status", "contract_pin_approve",
+    # Парный прогон по фиксированным кейсам (X4, блоки 4+7): та же возможность
+    # `quality-loop`, отдельная операция — чтобы вердикт по кейсам не смешивался
+    # с `quality_diff`, который между ревизиями вердикт не выносит.
+    "quality_pair",
+    # Трасса подтверждённого сбоя (X7): запись, список и повтор с вердиктом.
+    # Возможность `quality-loop` (Pro): журнал сбоев — часть контура.
+    "quality_trace",
     # Документный слой (этап «документы», фаза A): адрес, структура, статус.
     "doc_search", "doc_get", "doc_status", "doc_validate", "doc_ocr",
+    # Провенанс документов и выводов (X1): редакция на дату и зависимые факты.
+    # Обе объявлены возможностью `provenance` (издание Pro), поэтому на Community
+    # отвечают отказом с названием издания, а не отсутствуют.
+    "doc_asof", "dependents",
+    # Каскад устаревания (X7): что пересчитать, если изменился набор
+    # входов. Возможность `provenance` (Pro): отчёт и пометки идут парой.
+    "stale_cascade",
     # Документный граф (этап 3 плана «Агентские интеграции»): две операции
     # чтения. Обе объявлены возможностью `doc-graph` (издание Pro), поэтому на
     # Community отвечают отказом с причиной, а не отсутствуют: «не положено» и
@@ -187,6 +208,13 @@ def _print_human(data: dict) -> None:
     if isinstance(res, dict) and res.get("markdown") and op == "task_stats":
         print()
         print(res["markdown"])
+        return
+    # Сверка замысла и кода по FQN: готовый текст отчёта с адресами находок.
+    # Текст строит модуль возможности (contracts.render), а не CLI: второй
+    # редактор отчёта разошёлся бы с машинным ответом.
+    if op == "contract_drift" and isinstance(res, dict) and res.get("report"):
+        print()
+        print(res["report"])
         return
     if op == "index_status":
         r = res.get("rev") or {}
@@ -383,9 +411,30 @@ def _print_human(data: dict) -> None:
 
 
 def cmd_index(args: argparse.Namespace, cfg: ProjectConfig) -> int:
+    from .catalog import Catalog
+    from .indexer import Indexer
+    from .watch import category_for
+
+    category = category_for(cfg)
+    # Замок ПО КОРПУСУ на всю индексацию. Проверка 06.11.2026: без него два
+    # одновременных `index` одного корпуса работали параллельно и оба брали
+    # один и тот же `rev-0001`, то есть писали одну ревизию вдвоём.
+    with Catalog().corpus_lock(category) as got:
+        if not got:
+            print(f"  · индексация корпуса «{category}» уже выполняется другим "
+                  "процессом: результат не получен, прежний индекс не тронут")
+            return 1
+        return _run_index_locked(args, cfg, category)
+
+
+def _run_index_locked(args: argparse.Namespace, cfg: ProjectConfig,
+                      category: str) -> int:
+    """Тело `index` под взятым замком корпуса."""
+    from .catalog import Catalog
     from .indexer import Indexer
 
-    idx = Indexer(cfg)
+    catalog = Catalog()
+    idx = Indexer(cfg, heartbeat=lambda: catalog.touch_corpus_lock(category))
     try:
         report = idx.run(with_vectors=not args.no_vectors,
                          limit_files=args.limit_files,
@@ -440,10 +489,28 @@ def _record_index_run(cfg: ProjectConfig, report) -> None:
 
 def cmd_reindex(args: argparse.Namespace, cfg: ProjectConfig) -> int:
     """Переиндексация: новый снимок + архивация журнала расхождений (ФТ-32..ФТ-34)."""
+    from .catalog import Catalog
+    from .watch import category_for
+
+    category = category_for(cfg)
+    # Тот же замок, что у `index`: это второй путь CLI, запускающий индексатор.
+    with Catalog().corpus_lock(category) as got:
+        if not got:
+            print(f"  · индексация корпуса «{category}» уже выполняется другим "
+                  "процессом: переиндексация не запущена")
+            return 1
+        return _run_reindex_locked(args, cfg, category)
+
+
+def _run_reindex_locked(args: argparse.Namespace, cfg: ProjectConfig,
+                        category: str) -> int:
+    """Тело `reindex` под взятым замком корпуса."""
+    from .catalog import Catalog
     from .drift import archive_and_reset
     from .indexer import Indexer
 
-    idx = Indexer(cfg)
+    catalog = Catalog()
+    idx = Indexer(cfg, heartbeat=lambda: catalog.touch_corpus_lock(category))
     try:
         report = idx.run(with_vectors=not args.no_vectors,
                          limit_files=args.limit_files,
@@ -499,12 +566,90 @@ def cmd_drift(args: argparse.Namespace, cfg: ProjectConfig) -> int:
     return EXIT_OK
 
 
+def _note_pin_break(cfg: ProjectConfig, name: str, *,
+                    reason: str = "unknown_name",
+                    detail: str = "имени нет в описании операций") -> None:
+    """Отметить неуспешный вызов после расхождения описания.
+
+    Зачем не всегда: до расхождения такая ошибка — обычная ошибка вызова, и
+    шуметь о ней в журнале контракта нечего (пин ещё ничего не обещал). Запись
+    связывается с последним событием расхождения, чтобы причина читалась вместе
+    со следствием. Сбой записи не влияет на код возврата: журнал вспомогателен.
+
+    Причин две и обе из закрытого списка `pin.BREAK_REASONS`: имени нет
+    (`unknown_name`) и аргументы не разобраны (`bad_arguments`). Второй случай
+    раньше не писался вовсе, хотя объявлен: клиент, живущий по старому
+    контракту, чаще падает именно на аргументах, а не на имени.
+    """
+    conn = None
+    try:
+        from . import pin as pin_mod
+        from . import store as store_mod
+
+        conn = store_mod.connect(cfg.control_db)
+        pin_mod.note_break(conn, name, reason=reason, detail=detail)
+    except Exception:  # noqa: BLE001 — журнал не имеет права ломать вызов
+        return
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:  # noqa: BLE001 — закрытие уже закрытого
+                pass
+
+
+def _attempted_op(argv: list[str]) -> str:
+    """Имя операции из аргументов, даже если разбор не удался.
+
+    Нужно журналу контракта: ошибка аргументов сама по себе не говорит, ЧЕЙ
+    контракт нарушен. Берётся второе слово после `query`; для прочих команд —
+    первое. Служебные слова (`--help`) операцией не считаются.
+    """
+    words = [item for item in argv if item and not item.startswith("-")]
+    if not words:
+        return ""
+    if words[0] == "query":
+        return words[1] if len(words) > 1 else ""
+    return words[0]
+
+
+def _config_from_argv(argv: list[str]) -> str | None:
+    """Путь конфига из argv: разбор не удался, а журнал найти где-то надо."""
+    for index, item in enumerate(argv):
+        if item in ("-p", "--project", "--config") and index + 1 < len(argv):
+            return argv[index + 1]
+        for prefix in ("--project=", "--config="):
+            if item.startswith(prefix):
+                return item.split("=", 1)[1]
+    return None
+
+
+def _note_bad_arguments(argv: list[str]) -> None:
+    """Отметить `pin_break(bad_arguments)` после расхождения описания.
+
+    Место одно — разбор командной строки: здесь вызов уже отклонён по
+    аргументам, и имя операции ещё можно достать из argv. Внутри операции
+    такой отказ неотличим от её собственного «вход неверен», а это разные
+    вещи: одно — разошедшийся контракт, другое — ошибка в данных.
+    """
+    name = _attempted_op(argv)
+    if not name:
+        return
+    try:
+        cfg = load_config(_config_from_argv(argv))
+    except Exception:  # noqa: BLE001 — без конфига журнала нет, вызов не ломаем
+        return
+    _note_pin_break(cfg, name, reason="bad_arguments",
+                    detail="аргументы вызова не разобраны")
+
+
 def cmd_query(args: argparse.Namespace, cfg: ProjectConfig) -> int:
     from .facade import Facade
 
     op = args.op
     if op not in OPS:
         print(f"неизвестная операция: {op}. Доступно: {', '.join(OPS)}", file=sys.stderr)
+        _note_pin_break(cfg, op)
         return EXIT_USAGE
     # ФТ-15: свободный язык запросов не принимается.
     if args.op in {"cypher", "cpgql", "gremlin", "sql"} or (args.text and _looks_like_graph_query(args.text)):
@@ -527,6 +672,18 @@ def cmd_query(args: argparse.Namespace, cfg: ProjectConfig) -> int:
         fc.close()
     _print(data, args.json)
     return _exit_code(op, data)
+
+
+def _index_not_built(exc: Exception) -> int:
+    """Ответ на несобранный индекс: назвать состояние и что сделать.
+
+    Код возврата — `EXIT_UNAVAILABLE` (отказ слоя), а не 1: индекс можно собрать,
+    и вызывающий должен это видеть. До 04.11.2026 исключение вылетало из
+    `Facade.__init__`, то есть до выбора кода, и команда кончалась ошибкой 1.
+    """
+    print(f"{exc}. Соберите индекс: python tools/ragraf.py -p <конфиг> index "
+          f"(либо python tools/ragraf.py ensure <каталог проекта>)", file=sys.stderr)
+    return EXIT_UNAVAILABLE
 
 
 def _exit_code(op: str, data: dict) -> int:
@@ -631,9 +788,31 @@ def dispatch_op(fc, args: argparse.Namespace) -> dict:
     if op == "doc_search":
         return fc.op_doc_search(args.text or "", limit=args.limit,
                                 kind=getattr(args, "kind", None),
-                                doc=getattr(args, "doc", None))
+                                doc=getattr(args, "doc", None),
+                                asof=getattr(args, "asof", None),
+                                include_superseded=bool(
+                                    getattr(args, "include_superseded", False)))
+    if op == "doc_asof":
+        return fc.op_doc_asof(args.text or "", getattr(args, "date", None) or "",
+                              limit=args.limit, kind=getattr(args, "kind", None))
+    if op == "dependents":
+        return fc.op_dependents(fact=getattr(args, "fact", None) or "",
+                                locator=getattr(args, "locator", None) or args.text or "",
+                                depth=int(getattr(args, "depth", 3) or 3),
+                                include_stated=bool(
+                                    getattr(args, "include_stated", True)))
+    if op == "stale_cascade":
+        return fc.op_stale_cascade(changed=getattr(args, "changed", None)
+                                   or args.text or "",
+                                   depth=int(getattr(args, "depth", 3) or 3),
+                                   apply=bool(getattr(args, "apply",
+                                                      False)),
+                                   clear=bool(getattr(args, "clear_marks",
+                                                      False)),
+                                   limit=int(getattr(args, "limit", 50) or 50))
     if op == "doc_get":
-        return fc.op_doc_get(getattr(args, "locator", None) or args.text or "")
+        return fc.op_doc_get(getattr(args, "locator", None) or args.text or "",
+                             asof=getattr(args, "asof", None))
     if op == "doc_status":
         return fc.op_doc_status(getattr(args, "doc", None))
     if op == "doc_validate":
@@ -645,11 +824,13 @@ def dispatch_op(fc, args: argparse.Namespace) -> dict:
         return fc.op_entity_neighbors(getattr(args, "name", None) or args.text or "",
                                       depth=int(getattr(args, "depth", 1) or 1),
                                       kind=str(getattr(args, "kind", None) or "entity"),
-                                      limit=int(args.limit or 50))
+                                      limit=int(args.limit or 50),
+                                      asof=getattr(args, "asof", None))
     if op == "doc_relations":
         return fc.op_doc_relations(doc=getattr(args, "doc", None),
                                    entity=getattr(args, "name", None),
-                                   limit=int(args.limit or 50))
+                                   limit=int(args.limit or 50),
+                                   asof=getattr(args, "asof", None))
     if op == "themes":
         return fc.op_themes(scope=getattr(args, "scope", None),
                             limit=int(args.limit or 20))
@@ -666,17 +847,19 @@ def dispatch_op(fc, args: argparse.Namespace) -> dict:
         return fc.op_references(args.fqn or args.name or args.text or "", limit=args.limit,
                                 min_confidence=getattr(args, "min_confidence", None))
     if op == "callers":
-        return fc.op_callers(args.fqn or args.name or args.text or "", depth=args.depth,
+        return fc.op_callers(args.fqn or args.name or args.text or "",
+                             depth=int(args.depth or 1),
                              hard_only=args.hard, limit=args.limit, answer=answer,
                              min_confidence=getattr(args, "min_confidence", None))
     if op == "callees":
-        return fc.op_callees(args.fqn or args.name or args.text or "", depth=args.depth,
+        return fc.op_callees(args.fqn or args.name or args.text or "",
+                             depth=int(args.depth or 1),
                              hard_only=args.hard, limit=args.limit,
                              min_confidence=getattr(args, "min_confidence", None))
     if op == "impact":
         return fc.op_impact(args.target or args.name or args.text or "",
                             mode=resolve_mode(op, args.mode),
-                            depth=args.depth, limit=args.limit, answer=answer,
+                            depth=int(args.depth or 1), limit=args.limit, answer=answer,
                             min_confidence=getattr(args, "min_confidence", None))
     if op == "slice":
         return fc.op_slice(args.fqn or args.name or args.text or "", direction=args.direction,
@@ -804,7 +987,7 @@ def dispatch_op(fc, args: argparse.Namespace) -> dict:
     # каждой операции из OPS, а не чтением.
     if op == "policy_trace":
         return fc.op_policy_trace(args.name or args.text or "",
-                                  action=args.action, depth=args.depth,
+                                  action=args.action, depth=int(args.depth or 1),
                                   limit=args.limit,
                                   min_confidence=getattr(args, "min_confidence", None))
     # ---------------- слой живых баз данных ----------------
@@ -820,6 +1003,13 @@ def dispatch_op(fc, args: argparse.Namespace) -> dict:
         return fc.op_db_drift(previous_rev=getattr(args, "previous_rev", None))
     if op == "db_cross":
         return fc.op_db_cross()
+    if op == "contract_drift":
+        # Замысел против кода: манифест пишет проект, операция только читает.
+        # Нет манифеста — found=false и код 0: это состояние проекта, не сбой.
+        # С X3 второй вход — якоря в комментариях (`--source anchors|both`).
+        return fc.op_contract_drift(manifest_path=getattr(args, "manifest", None),
+                                    source=str(getattr(args, "source", None)
+                                               or "manifest"))
     if op == "class_usage":
         return fc.op_class_usage(name=args.name, limit=args.limit,
                                  mode=resolve_mode(op, args.mode))
@@ -866,16 +1056,45 @@ def dispatch_op(fc, args: argparse.Namespace) -> dict:
             sign=bool(getattr(args, "sign", True)),
         )
     # ---------------- контур качества (ПРОМТ-И9) ----------------
+    if op == "contract_pin_status":
+        return fc.op_contract_pin_status(limit=int(getattr(args, "limit", 0) or 50))
+    if op == "contract_pin_approve":
+        return fc.op_contract_pin_approve(
+            op=str(getattr(args, "op_name", "") or ""),
+            everything=bool(getattr(args, "all_ops", False)),
+            by=str(getattr(args, "approved_by", "") or ""),
+            note=str(getattr(args, "pin_note", "") or ""),
+        )
+    if op == "preflight":
+        # Ничего не создаёт: осмотр каталога до индексации (X5).
+        return fc.op_preflight(root=str(getattr(args, "root", "") or ""),
+                               sample=int(getattr(args, "sample", 0) or 50))
     if op == "quality_suite":
         return fc.op_quality_suite(
             label=getattr(args, "label", "") or "",
             record=not bool(getattr(args, "no_record", False)),
+            session=str(getattr(args, "session", "") or ""),
         )
     if op == "quality_diff":
         return fc.op_quality_diff(
             from_run=int(getattr(args, "from_run", 0) or 0),
             to_run=int(getattr(args, "to_run", 0) or 0),
         )
+    if op == "quality_pair":
+        # Парный прогон по ФИКСИРОВАННЫМ кейсам (X4). От `quality_diff` отличается
+        # предметом: там показатели индекса и отказ от вердикта между ревизиями,
+        # здесь те же вопросы дважды и вердикт по кейсам.
+        return fc.op_quality_pair(
+            from_run=int(getattr(args, "from_run", 0) or 0),
+            to_run=int(getattr(args, "to_run", 0) or 0),
+        )
+    if op == "quality_trace":
+        return fc.op_quality_trace(
+            action=getattr(args, "trace_action", None) or "list",
+            case_id=getattr(args, "case_id", None) or "",
+            trace_id=int(getattr(args, "trace_id", 0) or 0),
+            session=getattr(args, "session", None) or "",
+            label=getattr(args, "label", None) or "")
     if op == "quality_prune":
         # Умолчание — сухой прогон: удаление журнала необратимо, и «нажал
         # enter» не должно его выполнять. Удаляет только вместе с --confirm.
@@ -1006,7 +1225,8 @@ def cmd_db(args: argparse.Namespace, cfg: ProjectConfig) -> int:
               "не увидит изменения структуры")
     if not args.json:
         print("подсказка: структура смотрится операциями db_schema, db_table, "
-              "db_relations, db_sample, db_drift, db_cross")
+              "db_relations, db_sample, db_drift, db_cross; замысел — "
+              "query contract_drift")
     return EXIT_OK
 
 
@@ -1322,6 +1542,115 @@ def cmd_catalog(args: argparse.Namespace, cfg: ProjectConfig | None = None) -> i
             print("    конфигурация изменилась: ревизия несопоставима")
         print(f"    прогонов записано: {row['runs']}")
     return 0
+
+
+def cmd_locks(args: argparse.Namespace) -> int:
+    """Замки индексации и реестра: состояние, уборка брошенных.
+
+    Зачем отдельная команда. Брошенный замок проявляется как «индексация уже
+    выполняется другим процессом» у живого, но чужого держателя, и искать его
+    глазами в `catalog/locks/` — работа без признака: имя файла — это имя
+    корпуса, а не вердикт. Здесь вердикт называется: `alive` (держится живым),
+    `silent` (процесс жив, но молчит дольше порога — обычно завис),
+    `dead` (процесса нет), `unknown` (файл не читается).
+
+    Уборка без `--force` трогает только `dead` и `unknown`: снять замок
+    работающего прогона значит запустить вторую индексацию того же корпуса.
+    """
+    from . import catalog as catalog_mod
+
+    cat = catalog_mod.Catalog()
+    report = cat.lock_report()
+    removed: list[dict] = []
+    if args.clear:
+        if args.force and not (args.reason or "").strip():
+            print("[locks] --force требует --reason: принудительное снятие замка "
+                  "работающего прогона — это вторжение, а не уборка", file=sys.stderr)
+            return EXIT_USAGE
+        removed = cat.clear_abandoned_locks(force=bool(args.force),
+                                            older_than=args.older_than)
+        if removed:
+            left = [row for row in report if row["path"] not in {r["path"] for r in removed}]
+            report = left
+
+    if args.json:
+        _print({"locks": report, "removed": removed}, True)
+    else:
+        if not report and not removed:
+            print("[locks] замков нет: ни индексация, ни запись реестра не идут")
+        for row in report:
+            idle = row.get("idle_seconds")
+            print(f"  {row['kind']:<8} {row['category']:<24} {row['verdict']:<7} "
+                  f"pid={row['pid'] or '—'} "
+                  f"молчит={'—' if idle is None else f'{idle:.0f} с'}")
+            if row["verdict"] != "alive":
+                print(f"    {row['reason']}")
+        for row in removed:
+            mark = "принудительно" if row.get("forced") else "брошенный"
+            print(f"  снят ({mark}): {row['file']} — {row['reason']}")
+        if args.clear and not removed:
+            print("[locks] брошенных замков нет: снимать нечего")
+        if any(row["verdict"] in ("silent",) for row in report):
+            print("  · живой, но молчащий замок не снимается сам: проверьте процесс "
+                  "и при необходимости снимите вручную с причиной (--force --reason)")
+    return EXIT_OK
+
+
+def cmd_server(args: argparse.Namespace, cfg: ProjectConfig) -> int:
+    """Живые MCP-серверы: статус и штатный перезапуск после правки кода.
+
+    Зачем команда. Сервер — долгоживущий процесс, и правка исходников его не
+    меняет: ответ несёт `code_stale`, но без способа перезапуска это отказ без
+    выхода. Здесь штатный способ — по реестру, который сервер пишет при старте
+    (`server_control.register`): `status` называет расхождение сборки с диском,
+    `restart` завершает процесс, а клиент (AutoClaw, HARNESS) поднимает сервер
+    заново. Сервер не перезапускает себя: его stdout — протокол MCP.
+    """
+    from . import server_control
+
+    action = getattr(args, "server_action", "status") or "status"
+    as_json = bool(getattr(args, "json", False))
+    if action == "restart":
+        result = server_control.restart(cfg, reason=getattr(args, "reason", "") or "")
+        if as_json:
+            _print({"op": "server", "action": "restart", **result}, True)
+        else:
+            killed = result["killed"]
+            failed = result["failed"]
+            print(f"[server] перезапуск: завершено {len(killed)}, ошибок {len(failed)}")
+            for entry in killed:
+                print(f"  завершён pid={entry['pid']} "
+                      f"build={str(entry.get('build') or '')[:12]} "
+                      f"corpus={entry.get('corpus')}")
+            for entry in failed:
+                print(f"  НЕ завершён pid={entry['pid']}: нет прав? "
+                      f"повторите в консоли администратора")
+            print(f"  {result['note']}")
+        return EXIT_OK
+
+    entries = server_control.scan(cfg)
+    if as_json:
+        _print({"op": "server", "action": "status", "servers": entries}, True)
+        return EXIT_OK
+    if not entries:
+        print("[server] живых MCP-серверов RAGRAF не зарегистрировано.")
+        print("  Если сервер запущен сборкой без реестра — перезапустите клиент "
+              "(AutoClaw / HARNESS) один раз; дальше работает ragraf server restart.")
+        return EXIT_OK
+    stale = 0
+    print(f"[server] реестр: {server_control.state_dir(cfg)}")
+    for entry in entries:
+        state = "жив" if entry["alive"] else "брошен"
+        tail = "  ← код на диске новее: нужен перезапуск" if entry.get("stale") else ""
+        if entry.get("stale"):
+            stale += 1
+        print(f"  pid={entry['pid']} {state} "
+              f"build={str(entry.get('build') or '')[:12]} "
+              f"corpus={entry.get('corpus')}{tail}")
+    if stale:
+        print("  штатный перезапуск: ragraf server restart  "
+              "(клиент поднимет сервер заново на новом коде)")
+    return EXIT_OK
 
 
 def cmd_sources(args: argparse.Namespace) -> int:
@@ -2224,8 +2553,15 @@ def build_parser() -> argparse.ArgumentParser:
     pq.add_argument("--locator", default=None,
                     help="doc_get: адрес чанка документа (path:12, path#anchor, …)")
     pq.add_argument("--table")
+    pq.add_argument("--manifest", default=None,
+                    help="contract_drift: путь к YAML-манифесту замысла "
+                         "(по умолчанию contracts.yaml в корне корпуса)")
+    pq.add_argument("--declared-source", dest="source", default=None,
+                    choices=["manifest", "anchors", "both"],
+                    help="contract_drift: откуда берётся замысел — манифест, "
+                         "якоря в комментариях или оба (манифест главнее)")
     pq.add_argument("--scope")
-    pq.add_argument("--depth", type=int, default=1)
+    pq.add_argument("--depth", type=int, default=None)
     # Допустимые значения --mode зависят от операции (MODE_CHOICES). Общий
     # фиксированный список не годился: `table_usage --mode write` и
     # `class_usage --mode missing` из инструкции проекта отклонялись
@@ -2252,6 +2588,26 @@ def build_parser() -> argparse.ArgumentParser:
     pq.add_argument("--since", type=int, default=None)
     pq.add_argument("--since-rev", default=None,
                     help="diff: ревизия, с которой сравнивать (по умолчанию предыдущая)")
+    pq.add_argument("--date", default=None,
+                    help="doc_asof: дата действия (ГГГГ-ММ-ДД или ДД.ММ.ГГГГ)")
+    pq.add_argument("--asof", default=None,
+                    help="doc_search/doc_get/entity_neighbors/doc_relations: "
+                         "редакция на дату (ГГГГ-ММ-ДД или ДД.ММ.ГГГГ)")
+    pq.add_argument("--fact", default=None, help="dependents: идентификатор факта")
+    pq.add_argument("--changed", default=None,
+                    help="stale_cascade: что изменилось — факты или адреса "
+                         "через запятую")
+    pq.add_argument("--apply", action="store_true",
+                    help="stale_cascade: поставить пометки "
+                         "(по умолчанию только отчёт)")
+    pq.add_argument("--clear-marks", dest="clear_marks", action="store_true",
+                    help="stale_cascade: закрыть пометки после пересчёта")
+    pq.add_argument("--include-superseded", dest="include_superseded",
+                    action="store_true",
+                    help="doc_search: показать заменённые редакции")
+    pq.add_argument("--no-stated", dest="include_stated", action="store_false",
+                    default=True,
+                    help="dependents: только выводы (derived), без утверждений человека")
     pq.add_argument("--tags", default="", help="note: метки через запятую")
     pq.add_argument("--task", default=None, help="note/notes: метка задачи")
     # P2-2: готовый ответ вместо структурного результата. Оболочка (op, ревизия,
@@ -2304,13 +2660,35 @@ def build_parser() -> argparse.ArgumentParser:
                     help="attest_bundle: не подписывать манифест")
     # Контур качества (ПРОМТ-И9). `--no-record` нужен затем, чтобы прогон
     # можно было повторить, не засоряя журнал: сравнение идёт по `digest`.
+    pq.add_argument("--op-name", dest="op_name", default="",
+                    help="contract_pin_approve: какую операцию подтвердить")
+    pq.add_argument("--all-ops", dest="all_ops", action="store_true",
+                    help="contract_pin_approve: подтвердить описание всех операций")
+    pq.add_argument("--approved-by", dest="approved_by", default="",
+                    help="contract_pin_approve: кто подтверждает (обязательно)")
+    pq.add_argument("--pin-note", dest="pin_note", default="",
+                    help="contract_pin_approve: пометка к пину "
+                         "(имя отличается от --note других подкоманд)")
+    pq.add_argument("--root", default="",
+                    help="preflight: каталог для осмотра (по умолчанию корень корпуса)")
+    pq.add_argument("--sample", type=int, default=50,
+                    help="preflight: сколько файлов разобрать для замера времени")
     pq.add_argument("--label", default="", help="quality_suite: пометка прогона")
     pq.add_argument("--no-record", dest="no_record", action="store_true",
                     help="quality_suite: измерить, но не записывать прогон")
+    pq.add_argument("--session", default="",
+                    help="quality_suite/quality_trace: сеанс, чьи кейсы поведения проверяются")
+    pq.add_argument("--trace-action", dest="trace_action", default="list",
+                    choices=["save", "list", "replay"],
+                    help="quality_trace: что сделать с трассой сбоя")
+    pq.add_argument("--case-id", dest="case_id", default="",
+                    help="quality_trace: кейс, чей сбой записывается")
+    pq.add_argument("--trace-id", dest="trace_id", type=int, default=0,
+                    help="quality_trace: трасса для повтора")
     pq.add_argument("--from-run", dest="from_run", type=int, default=0,
-                    help="quality_diff: номер прогона «от»")
+                    help="quality_diff/quality_pair: номер прогона «от»")
     pq.add_argument("--to-run", dest="to_run", type=int, default=0,
-                    help="quality_diff: номер прогона «до»")
+                    help="quality_diff/quality_pair: номер прогона «до»")
     # Прореживание журнала прогонов (ПРОМТ-И10). Три аргумента, и все три
     # названы явно: `--keep`, `--dry-run` (по умолчанию включён), `--confirm`.
     # Отдельный `--no-dry-run` нужен потому, что argparse не умеет «флаг,
@@ -2509,6 +2887,38 @@ def build_parser() -> argparse.ArgumentParser:
     pcat = sub.add_parser("catalog", help="реестр разработок: что индексировано и с какими суммами")
     pcat.set_defaults(func=cmd_catalog, needs_config=False)
 
+    # Замки: состояние и уборка брошенных. Существует потому, что брошенный
+    # замок — невидимый в работе сбой: корпус просто отвечает «уже идёт»,
+    # и без отдельной команды это ищется глазами в `catalog/locks/`.
+    plocks = sub.add_parser("locks", help="замки индексации и реестра: кто держит, что брошено")
+    plocks.add_argument("--clear", action="store_true",
+                        help="снять брошенные замки (держатель мёртв или замок не читается)")
+    plocks.add_argument("--force", action="store_true",
+                        help="снять и те, чей процесс жив, но молчит: нужна причина (--reason)")
+    plocks.add_argument("--reason", default="", help="причина принудительного снятия")
+    plocks.add_argument("--older-than", type=float, default=None,
+                        help="порог молчания в секундах для --force (по умолчанию любой)")
+    plocks.add_argument("--json", action="store_true", help="машиночитаемый вывод")
+    plocks.set_defaults(func=cmd_locks, needs_config=False)
+
+    # --- живые MCP-серверы: штатный перезапуск после правки кода ---
+    psrv = sub.add_parser(
+        "server",
+        help="живые MCP-серверы: статус и перезапуск после правки кода")
+    ssub = psrv.add_subparsers(dest="server_action")
+    sst = ssub.add_parser(
+        "status",
+        help="живые серверы, их отпечаток сборки и расхождение с диском")
+    sst.add_argument("--json", action="store_true", help="машиночитаемый вывод")
+    sst.set_defaults(func=cmd_server)
+    srs = ssub.add_parser(
+        "restart",
+        help="завершить серверы: клиент поднимет их на новом коде")
+    srs.add_argument("--reason", default="", help="причина перезапуска (в отчёт)")
+    srs.add_argument("--json", action="store_true", help="машиночитаемый вывод")
+    srs.set_defaults(func=cmd_server)
+    psrv.set_defaults(func=cmd_server, server_action="status")
+
     # --- «Я это ты»: разрешённые корни и карта метаданных (G0) ---
     psrc = sub.add_parser("sources", help="разрешённые корни для карты метаданных")
     psrc.add_argument("action", choices=["list", "add", "remove", "enable", "disable",
@@ -2659,6 +3069,8 @@ def _run_without_config(args: argparse.Namespace, func, on_success=None) -> int:
     except KeyboardInterrupt:
         print("прервано", file=sys.stderr)
         return EXIT_ERROR
+    except IndexNotBuilt as exc:
+        return _index_not_built(exc)
     except Exception as exc:
         print(f"ошибка выполнения: {type(exc).__name__}: {exc}", file=sys.stderr)
         if os.environ.get("RAGRAF_DEBUG"):
@@ -2738,7 +3150,13 @@ def main(argv: list[str] | None = None) -> int:
     _force_utf8_output()
 
     parser = build_parser()
-    args = parser.parse_args(argv)
+    try:
+        args = parser.parse_args(argv)
+    except SystemExit as exc:
+        # Код 0 — это `--help`: вызов не отклонён, и шуметь не о чем.
+        if int(getattr(exc, "code", 0) or 0) != 0:
+            _note_bad_arguments(list(sys.argv[1:] if argv is None else argv))
+        raise
 
     # Команды, которым конфигурация корпуса не нужна, выполняются без неё:
     # у `init` её ещё нет, `catalog` и `selftest` работают с реестром и
@@ -2786,6 +3204,8 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         print("прервано", file=sys.stderr)
         return EXIT_ERROR
+    except IndexNotBuilt as exc:
+        return _index_not_built(exc)
     except Exception as exc:
         print(f"ошибка выполнения: {type(exc).__name__}: {exc}", file=sys.stderr)
         if os.environ.get("RAGRAF_DEBUG"):

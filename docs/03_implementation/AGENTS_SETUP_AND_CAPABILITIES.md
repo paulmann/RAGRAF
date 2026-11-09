@@ -3,7 +3,7 @@
 Дата: 19.10.2026, числа обновлены 25.10.2026. Проект: `RAGRAF`.
 Документ отвечает на два вопроса: **что умеет продукт** и **как включить его
 в DeepSeek Harness и AutoClaw**. Числа сверяются с кодом проверкой
-`Test-DocumentedNumbers`: 74 инструмента MCP, 67 операций фасада, 24 подкоманды
+`Test-DocumentedNumbers`: 83 инструмента MCP, 76 операций фасада, 26 подкоманд
 CLI, 29 языков разбора деревом и 40 текстовых (включая `document`).
 
 ## 1. Что нового (G0–G7)
@@ -207,7 +207,7 @@ python tools/install_harness_gate.py --remove  # убрать
 | Живые базы | `db_schema`, `db_table`, `db_relations`, `db_sample`, `db_drift`, `db_cross` |
 | Знания и статистика | `note`, `notes`, `task`, `task_stats`, `usage` |
 
-## 6. Подкоманды CLI (19)
+## 6. Подкоманды CLI (26)
 
 `index`, `reindex`, `drift`, `query`, `status`, `drop`, `selftest`, `usage`,
 `feedback`, `analytics`, `db`, `register`, `init`, `check`, `ensure`, `catalog`,

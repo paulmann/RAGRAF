@@ -25,6 +25,12 @@ permissions:
 jobs:
   analyze:
     name: Analyze Python
+    # Code scanning доступен не везде: публичный репозиторий получает его
+    # бесплатно, приватный — только с GitHub Advanced Security. Без этого
+    # условия на приватном репозитории шаг upload падал «Code scanning is not
+    # enabled», и работа не выполнялась вовсе: красная джоба без результата.
+    # Пропуск назван явно, а не спрятан в настройках репозитория.
+    if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:

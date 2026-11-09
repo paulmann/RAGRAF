@@ -20,6 +20,7 @@ import sqlite3
 import sys
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from . import analysis, db_marks, edition as edition_mod, evidence as evidence_mod
@@ -30,6 +31,24 @@ from .embeddings import Embedder
 from .lexvec import LexVecStore
 from .revisions import ControlStore
 from .telemetry import CHARS_PER_LINE, CHARS_PER_UNIT, CallRecord, Telemetry, normalize_arg
+
+
+class IndexNotBuilt(sqlite3.OperationalError):
+    """Индекс корпуса ещё не собран — это СОСТОЯНИЕ, а не сбой чтения.
+
+    ПОЧЕМУ ОТДЕЛЬНЫЙ ТИП. `store.connect(readonly=True)` на отсутствующем файле
+    базы бросает `sqlite3.OperationalError` с текстом `<путь> не существует`, и
+    исключение вылетало прямо из `Facade.__init__` — то есть ДО ветки «индекс не
+    создан» в `op_index_status`. Замер 04.11.2026 на корпусе без `.ragraf`:
+    `ragraf status` падал кодом 1, а MCP-инструменты отвечали голым именем
+    класса (`OperationalError`), потому что общий перехватчик MCP отдавал только
+    имя типа. По такому ответу нельзя ни понять, что индекса нет, ни собрать его
+    повторно: агент начинал чинить несуществующую поломку.
+
+    ПОЧЕМУ НАСЛЕДНИК `OperationalError`. Существующие обработчики ловят именно
+    его (панель, поиск соседей, хранилища). Новый тип, не связанный с прежним,
+    сломая бы их молча.
+    """
 
 
 def watch_hashes(cfg: ProjectConfig) -> tuple[str, str, int, dict[str, str]]:
@@ -794,6 +813,18 @@ class Facade:
         # Корень корпуса нужен разбору DEFAULT в миграциях — запоминается на модуль.
         global _CURRENT_ROOT
         _CURRENT_ROOT = str(cfg.root)
+        # Проверка стоит ДО открытия хранилищ: иначе исключение уходит раньше,
+        # чем операция успевает назвать причину (см. `IndexNotBuilt`).
+        _absent = [str(p) for p in (cfg.graph_db, cfg.lexvec_db)
+                   if not os.path.exists(p)]
+        if _absent:
+            # Одна команда в самом исключении: перехвативший его агент не должен
+            # угадывать путь к конфигу — он уже известен здесь.
+            _advice = util.next_action(
+                "index", util.to_posix(getattr(cfg, "config_path", "")),
+                kind="no_index", detail="нет файла " + ", ".join(_absent))
+            raise IndexNotBuilt("индекс не создан: " + str(
+                _advice.get("action") or "запустите индексацию корпуса"))
         self.control = ControlStore(cfg)
         self.graph = store.connect(cfg.graph_db, readonly=True)
         self.lexvec = LexVecStore(cfg)
@@ -882,26 +913,72 @@ class Facade:
         self._graph_cache = result
         return result
 
-    def graph_compute_state(self) -> dict[str, Any]:
+    def graph_compute_state(self, compute: bool = False) -> dict[str, Any]:
         """Состояние графового вычислителя — для `index_status`, не для правки.
 
         Показывает, где считаются графовые алгоритмы и почему (карта, порог
-        окупаемости, отсутствие torch), плюс время и объём графа. Без этого
-        настройка `graph_gpu` оставалась бы значением без наблюдаемого эффекта.
+        окупаемости, отсутствие torch), плюс время и объём графа.
+
+        `compute=False` (по умолчанию) НЕ СЧИТАЕТ PageRank и не поднимает torch.
+        Причина измерена 06.11.2026: первое вычисление на карте стоит 15–17 с
+        (инициализация CUDA-контекста), и эта цена падала на ПЕРВЫЙ вызов
+        `index_status` в каждом процессе сервера — ответ 20,3 с там, где
+        требуется секунды. Статус обязан называть ПОЛИТИКУ (где будет считаться
+        и почему) и ОБЪЁМ, а не результат алгоритма: оценки центральности
+        считает `repo_map`, и если они уже есть в этом процессе, они и
+        названы (`files_ranked`, `ranked_in_process: true`).
         """
         rev = self.current_rev()
         if not rev:
             return {}
-        data = self._centrality(rev)
-        out: dict[str, Any] = {
-            "nodes": data.get("nodes", 0),
-            "edges": data.get("edges", 0),
-            "files_ranked": len(data.get("scores") or {}),
+        cached = self._graph_cache
+        have_scores = bool(cached is not None and cached.get("rev") == rev)
+        if compute or have_scores:
+            data = self._centrality(rev)
+            out: dict[str, Any] = {
+                "nodes": data.get("nodes", 0),
+                "edges": data.get("edges", 0),
+                "files_ranked": len(data.get("scores") or {}),
+                "ranked_in_process": True,
+            }
+            if data.get("status"):
+                out.update(data["status"])
+            if data.get("error"):
+                out["error"] = data["error"]
+            return out
+
+        # Дешёвый путь: только объёмы из хранилища и политика из настроек.
+        # Счётчики — SQL по индексу `(rev_id)`, без загрузки графа в память.
+        try:
+            nodes = int(self.graph.execute(
+                "SELECT count(*) FROM node WHERE rev_id = ?", (rev,)).fetchone()[0])
+            edges = int(self.graph.execute(
+                "SELECT count(*) FROM edge WHERE rev_id = ?", (rev,)).fetchone()[0])
+        except Exception:  # noqa: BLE001 — статус не должен падать из-за счётчиков
+            nodes = edges = 0
+        threshold = int(getattr(self.cfg.index, "graph_gpu_min_nodes", 5000) or 5000)
+        enabled = bool(getattr(self.cfg.index, "graph_gpu", False))
+        if not enabled:
+            planned, notes = "torch-cpu", ["графовый анализ на карте выключен в настройках"]
+        elif nodes < threshold:
+            planned = "torch-cpu"
+            notes = [f"узлов {nodes} меньше порога окупаемости {threshold}: "
+                     "считается на процессоре"]
+        else:
+            planned = "torch-gpu"
+            notes = ["узлов не меньше порога: карта будет выбрана при первом вычислении"]
+        out = {
+            "nodes": nodes,
+            "edges": edges,
+            "files_ranked": 0,
+            "ranked_in_process": False,
+            "backend": planned,
+            "device": "cuda:0" if planned == "torch-gpu" else "cpu",
+            "nodes_threshold": threshold,
+            "notes": notes,
+            "reason": "оценки центральности в этом процессе не считались: "
+                      "их считает repo_map при необходимости",
         }
-        if data.get("status"):
-            out.update(data["status"])
-        if data.get("error"):
-            out["error"] = data["error"]
         return out
 
     def _install_telemetry(self) -> None:
@@ -1076,6 +1153,8 @@ class Facade:
             "error": type(error).__name__,
             "edition": self.edition_state().effective,
             "suggest": "какие возможности есть в сборке: python tools/ragraf.py edition",
+            "next_action": util.next_action(operation, self._config_hint(),
+                                            kind="feature", detail=f"модуля «{module}.py» нет"),
         }
         payload = env.to_dict()
         self._record(operation, 0.0, payload, env.error, (), {})
@@ -1102,6 +1181,12 @@ class Facade:
             "requires_edition": decision.get("requires_edition"),
             "edition": self.edition_state().effective,
             "suggest": "какое издание действует: python tools/ragraf.py edition",
+            # Вид отказа различает «издание не то» и «лицензия недействительна»:
+            # советы у них разные, и сводить их к одному значит давать неверный.
+            "next_action": util.next_action(
+                op, self._config_hint(),
+                kind="license" if str(decision.get("license") or "") else "edition",
+                detail=reason),
         }
         payload = env.to_dict()
         self._record(name, 0.0, payload, env.error, (), {})
@@ -1229,6 +1314,11 @@ class Facade:
                         "suggest": f"активная ревизия {active}, ответ по {answered}",
                     })
             missed = bool(data) and not bool(data.get("found")) and not error
+            # X6: хеш описания операции, которым сделан вызов. Считается из
+            # `surface` (кэш по времени правки facade.py), поэтому вызов не
+            # платит разбором AST. Пустая строка — «объявление недоступно»,
+            # и это отличается от «хеш совпал».
+            observed = self._observed_hash(name)
             self.telemetry.record(
                 CallRecord(
                     op=name[3:] if name.startswith("op_") else name,
@@ -1246,10 +1336,30 @@ class Facade:
                     missed=missed,
                     arg_digest=arg_digest,
                     replaces_chars=saved_chars,
+                    observed_hash=observed,
                 )
             )
+            if observed:
+                from . import pin as pin_mod
+
+                pin_mod.observe(self.control.conn, name[3:] if name.startswith("op_")
+                                else name, observed, root=self.cfg.root)
         except Exception:
             pass
+
+    def _observed_hash(self, name: str) -> str:
+        """Хеш объявления операции. Пусто — объявление не прочиталось.
+
+        Исключение здесь не поднимается: журнал вспомогателен, и его сбой не
+        имеет права ломать ответ операции (то же правило, что у телеметрии).
+        """
+        try:
+            from . import pin as pin_mod
+
+            op = name[3:] if name.startswith("op_") else name
+            return pin_mod.hash_of(self.cfg.root, op)
+        except Exception:  # noqa: BLE001 — причина видна в поле «пусто»
+            return ""
 
     def _saved_chars(self, data: dict, limit: int = 200) -> int:
         """Сколько символов агент не прочитал благодаря этому ответу (шаг 0.6).
@@ -1497,6 +1607,258 @@ class Facade:
             env.limits.append(live["note"])
         env.extra["migrations_only"] = len(live["only_in_migrations"])
         env.extra["live_only"] = len(live["only_live"])
+        return env.to_dict()
+
+    def op_contract_drift(self, manifest_path: str | None = None,
+                          source: str = "manifest") -> dict:
+        """29. Сверка замысла и кода по FQN: модули, зависимости, контракты.
+
+        Замысел живёт ВНЕ кода — во внешнем YAML-манифесте проекта, — и здесь
+        сверяется с вычисленным графом. Операция только читает: манифест пишет
+        проект, RAGRAF его не создаёт и не правит. Причина такого разделения
+        измерена: замысел, размазанный комментариями внутри кода, нельзя ни
+        проверить, ни потребовать; манифест можно.
+
+        С этапа X3 есть второй вход — ЯКОРЯ в комментариях (`source=anchors` или
+        `both`). Якоря не отменяют решение выше, а подчинены ему: манифест
+        главнее, расхождение — находка `anchor_conflict` с двумя адресами, и
+        якоря проверяются (закрытый список ключей, парность, `MODULE_MAP` против
+        экспортов). В режиме `manifest` (по умолчанию) код читается по-прежнему
+        только из индекса: поведение не меняется ни на бит.
+
+        Ответ:
+          * `binds` — сколько контрактов привязано к узлам: `resolved` (полное
+            fqn, факт), `derived` (пара файл+имя, вывод), `unresolved` (отказ);
+          * `drift` — находки с `path:line`: `unbound_fqn`, `stale_crosslink`,
+            `contract_violation` и остальные виды из закрытого списка;
+          * `comparison` — полные счётчики рядом с усечёнными списками.
+
+        Нет манифеста — `found=false` с причиной `no manifest` и кодом 0: это
+        нормальное состояние проекта, а не ошибка вызова. Модуль возможности
+        берётся через `_feature_module`: в сборке без него ответ — отказ с
+        названной причиной, а не трассировка.
+        """
+        env = self.make_env("contract_drift")
+        rev = self.current_rev()
+        if not rev:
+            return self._no_index(env)
+        contracts_mod, refusal = self._feature_module(
+            "contract_drift", "contracts", "contract-drift")
+        if refusal is not None:
+            return refusal
+        source = str(source or "manifest").strip().lower()
+        if source not in ("manifest", "anchors", "both"):
+            env.found = False
+            env.error = (f"source={source!r} не поддерживается: ожидается "
+                         "manifest, anchors или both")
+            env.extra["suggest"] = ["contract_drift --source manifest"]
+            return env.to_dict()
+        anchors = None
+        if source in ("anchors", "both"):
+            from . import anchors as anchors_mod
+
+            anchors = anchors_mod.load(self.cfg.root, self.graph, rev)
+        manifest: dict | None = None
+        target = Path(manifest_path) if manifest_path else \
+            contracts_mod.default_manifest_path(self.cfg.root)
+        if source in ("manifest", "both"):
+            if target.is_file():
+                try:
+                    manifest = contracts_mod.load_manifest(target)
+                except contracts_mod.ManifestError as exc:
+                    # Ошибка входа, а не сбой сборки: ответ называет её и не
+                    # роняет вызывающего трассировкой.
+                    env.found = False
+                    env.error = f"ManifestError: {exc}"
+                    env.extra["manifest"] = util.to_posix(target)
+                    env.extra["reason"] = "invalid manifest"
+                    return env.to_dict()
+            elif source == "manifest":
+                env.found = False
+                env.extra["manifest"] = util.to_posix(target)
+                env.extra["reason"] = "no manifest"
+                env.extra["note"] = (
+                    "манифест не найден: сверять замысел не с чем. Это не ошибка — "
+                    "манифест пишет проект, RAGRAF его не выдумывает. Якоря в коде "
+                    "можно проверить отдельно: `--source anchors`")
+                env.extra["suggest"] = (
+                    "укажите путь: query contract_drift --manifest <path> "
+                    f"(по умолчанию {contracts_mod.MANIFEST_NAME} в корне корпуса)")
+                return env.to_dict()
+            else:
+                env.limits.append(
+                    "манифест не найден: сверка идёт только по якорям (source=both)")
+        if manifest is None:
+            manifest = {"schema": contracts_mod.SCHEMA, "modules": [],
+                        "contracts": [], "strict_code_coverage": False,
+                        "path": "", "lines": {"modules": [], "contracts": []}}
+        if source != "manifest" and target.is_file() and source == "anchors":
+            env.limits.append(
+                "манифест не читался: source=anchors, замысел берётся только из якорей")
+        if source == "anchors" and not (anchors or {}).get("modules"):
+            env.found = False
+            env.extra["anchors"] = (anchors or {}).get("stats") or {}
+            env.extra["reason"] = "no anchors"
+            env.extra["note"] = (
+                "якорей не найдено: в комментариях файлов нет ни одного "
+                "START_MODULE_CONTRACT. Это не ошибка — якоря ставит проект")
+            env.extra["suggest"] = [
+                "добавьте якорь в файл или используйте --source manifest"]
+            return env.to_dict()
+        data = contracts_mod.analyze(self.graph, rev, manifest,
+                                     capability=self.capability(),
+                                     source=source, anchors=anchors)
+        env.result = data
+        env.found = bool(data.get("compared"))
+        if not data.get("compared"):
+            env.extra["note"] = data.get("note") or "сверка не выполнена"
+        env.extra["manifest"] = data["manifest"]["path"]
+        env.extra["source"] = source
+        env.extra["binds"] = data["binds"]
+        env.extra["declared"] = data.get("declared") or {}
+        if data.get("anchors") is not None:
+            env.extra["anchors"] = data["anchors"]
+        env.extra["drift_total"] = data["drift"]["total"]
+        for item in data.get("limits") or []:
+            env.limits.append(item)
+        return env.to_dict()
+
+    def op_preflight(self, root: str = "", sample: int = 50) -> dict:
+        """51. Цена и границы ДО индексации: что будет стоить и что не покроется.
+
+        Зачем до, а не после. Время индексации узнавали по факту, а слепые зоны
+        (динамические вызовы вроде `$obj->$method()` и `getattr`) — по кривым
+        ответам уже после сборки. Здесь ответ даётся до того, как что-либо
+        создано, и операция НИЧЕГО не создаёт: ни `.ragraf`, ни каталога, ни
+        файла. Это проверяется свойством набора, а не обещанием в тексте.
+
+        `root` по умолчанию — корень корпуса фасада; исключения берутся из его
+        конфига. При осмотре ДРУГОГО каталога правила исключения не применяются
+        (у чужого каталога свой конфиг или его нет), и это названо в ответе.
+
+        Итог всегда содержит `timing.available`: «время не оценено» и «время
+        ноль» — разные состояния, и смешивать их значило бы обещать мгновенную
+        сборку там, где парсер недоступен.
+        """
+        env = self.make_env("preflight", provenance="live")
+        preflight_mod, refusal = self._feature_module(
+            "preflight", "preflight", "preflight")
+        if refusal is not None:
+            return refusal
+        target = str(root or self.cfg.root)
+        same_corpus = util.to_posix(Path(target).resolve()) == util.to_posix(
+            Path(self.cfg.root).resolve())
+        skip = tuple(self.cfg.exclude or ()) if same_corpus else ()
+        try:
+            data = preflight_mod.scan(target, sample=int(sample or 50),
+                                      skip_globs=skip)
+        except Exception as exc:  # noqa: BLE001 — причина названа, а не спрятана
+            data = {"exists": False, "root": util.to_posix(target),
+                    "reason": f"осмотр не выполнен: {type(exc).__name__}: {exc}"}
+        env.result = data
+        env.found = bool(data.get("exists"))
+        if not same_corpus:
+            env.limits.append(
+                "осмотрен каталог вне корпуса фасада: правила исключения его "
+                "конфига не применялись")
+        if not env.found:
+            advice = util.next_action("preflight", self._config_hint(),
+                                      kind="bad_input",
+                                      detail=str(data.get("reason") or "каталог не найден"))
+            env.error = f"PreflightRefusal: {advice['problem']}"
+            env.extra["next_action"] = advice
+            env.extra["suggest"] = ["index_status", "edition"]
+            return env.to_dict()
+        files = data.get("files") or {}
+        timing = data.get("timing") or {}
+        dynamic = data.get("dynamic") or {}
+        env.extra["files"] = int(files.get("total") or 0)
+        env.extra["code_files"] = int(files.get("code_files") or 0)
+        env.extra["generated_share_promille"] = int(
+            (data.get("generated") or {}).get("share_promille") or 0)
+        env.extra["estimated_total_ms"] = timing.get("estimated_total_ms")
+        env.extra["timing_available"] = bool(timing.get("available"))
+        env.extra["dynamic_spots"] = int(dynamic.get("count") or 0)
+        for item in data.get("limits") or []:
+            env.limits.append(str(item))
+        if not timing.get("available"):
+            env.limits.append("время разбора не оценено: " + str(timing.get("reason") or ""))
+        return env.to_dict()
+
+    def op_contract_pin_status(self, limit: int = 50) -> dict:
+        """52. Пиннинг подписи операций: что подтверждено, что разошлось.
+
+        Зачем. Поверхность продукта описывается данными (`surface`), но никто не
+        следил, что клиент вызывает то описание, на которое рассчитывал: правка
+        умолчания параметра или исчезнувший ключ ответа выглядели как «индекс
+        врёт», а не как «изменился контракт». Здесь видно расхождение и его
+        возраст.
+
+        Ничего не меняет: подтверждение — отдельная операция и отдельное решение
+        человека. Автоподтверждения нет: самоподпись скрывала бы ровно то, ради
+        чего пин нужен.
+        """
+        env = self.make_env("contract_pin_status", provenance="journal")
+        pin_mod, refusal = self._feature_module(
+            "contract_pin_status", "pin", "contract-pin")
+        if refusal is not None:
+            return refusal
+        try:
+            pin_mod.ensure_schema(self.control.conn)
+            data = pin_mod.status(self.control.conn, self.cfg.root,
+                                  limit=int(limit or 50))
+        except Exception as exc:  # noqa: BLE001 — причина названа
+            env.found = False
+            env.error = f"PinRefusal: {type(exc).__name__}: {exc}"
+            env.extra["next_action"] = util.next_action(
+                "contract_pin_status", self._config_hint(), kind="no_data",
+                detail="пин не прочитан")
+            return env.to_dict()
+        env.result = data
+        totals = data.get("totals") or {}
+        env.extra["pinned"] = int(totals.get("pinned") or 0)
+        env.extra["mismatches"] = int(totals.get("mismatches") or 0)
+        env.extra["unpinned"] = int(totals.get("unpinned") or 0)
+        env.extra["breaks"] = int(totals.get("breaks") or 0)
+        env.found = bool(totals.get("pinned"))
+        for item in data.get("limits") or []:
+            env.limits.append(str(item))
+        if not env.found:
+            env.limits.append(
+                "ни один пин не поставлен: подтверждать нечего — "
+                "`contract_pin_approve` ставит пин на текущее описание")
+        return env.to_dict()
+
+    def op_contract_pin_approve(self, op: str = "", everything: bool = False,
+                                by: str = "", note: str = "") -> dict:
+        """53. Подтвердить текущее описание операции (или всех) человеком.
+
+        Автор обязателен: пин без автора неотличим от самоподписи, а весь смысл
+        пина — в том, что кто-то сказал «это описание я принимаю».
+        """
+        env = self.make_env("contract_pin_approve", provenance="journal")
+        pin_mod, refusal = self._feature_module(
+            "contract_pin_approve", "pin", "contract-pin")
+        if refusal is not None:
+            return refusal
+        try:
+            data = pin_mod.approve(self.control.conn, self.cfg.root, op=str(op or ""),
+                                   everything=bool(everything), by=str(by or ""),
+                                   note=str(note or ""))
+        except pin_mod.PinRefusal as exc:
+            env.found = False
+            env.error = f"PinRefusal: {exc}"
+            env.extra["next_action"] = util.next_action(
+                "contract_pin_approve", self._config_hint(), kind="bad_input",
+                detail=str(exc))
+            env.extra["suggest"] = ["contract_pin_status"]
+            return env.to_dict()
+        except Exception as exc:  # noqa: BLE001 — причина названа
+            env.found = False
+            env.error = f"PinRefusal: {type(exc).__name__}: {exc}"
+            return env.to_dict()
+        env.result = data
+        env.extra["approved"] = int(data.get("total") or 0)
         return env.to_dict()
 
     def op_db_cross(self) -> dict:
@@ -3360,6 +3722,9 @@ class Facade:
                 if not self.capability_joern_used()
                 else f"экспорт графа свойств кода не удался (режим {cap})"
             )
+            env.extra["next_action"] = util.next_action(
+                "slice", self._config_hint(), kind="degraded",
+                detail=f"режим {cap}")
             return env.to_dict()
 
         roots = [r["node_id"] for r in rows]
@@ -5200,7 +5565,7 @@ class Facade:
         return self.lexvec.conn, None
 
     def op_entity_neighbors(self, entity: str, depth: int = 1, kind: str = "entity",
-                            limit: int = 50) -> dict:
+                            limit: int = 50, asof: str | None = None) -> dict:
         """Соседи сущности по документному графу: каждый с адресом цитаты.
 
         Возможность объявлена изданием Pro (`doc-graph`), поэтому на Community
@@ -5212,11 +5577,32 @@ class Facade:
         conn, refusal = self._docgraph_layer(env)
         if refusal is not None:
             return refusal
-        from . import docgraph_ops
+        from . import docgraph_ops, provenance
 
         rev = str(self.current_rev())
+        day, problem = provenance.parse_date(asof) if asof else ("", "")
+        if asof and not day:
+            env.found = False
+            env.error = problem or f"дата не разобрана: {asof!r}"
+            env.extra["suggest"] = ["doc_asof", "doc_search"]
+            return env.to_dict()
         data = docgraph_ops.entity_neighbors(conn, rev, entity, depth=depth,
                                             kind=kind, limit=limit)
+        if day:
+            versions = provenance.path_index(conn, rev)
+            kept, dropped = [], 0
+            for item in data.get("neighbors") or []:
+                citations = [cite for cite in item.get("citations") or []
+                             if provenance.keep(cite, versions.get(str(cite.get("path") or "")),
+                                                asof=day)]
+                if not citations:
+                    dropped += 1
+                    continue
+                item["citations"] = citations
+                item["validity"] = "current"
+                kept.append(item)
+            data["neighbors"] = kept
+            data["filtered_by_asof"] = dropped
         env.result = data
         env.found = bool(data.get("neighbors"))
         if not env.found:
@@ -5229,7 +5615,7 @@ class Facade:
         return env.to_dict()
 
     def op_doc_relations(self, doc: str | None = None, entity: str | None = None,
-                         limit: int = 50) -> dict:
+                         limit: int = 50, asof: str | None = None) -> dict:
         """Связи документов через общие сущности: адреса с обеих сторон.
 
         Нужен ровно один вход (`doc` или `entity`). Оба сразу — ошибка вызова, а
@@ -5239,11 +5625,32 @@ class Facade:
         conn, refusal = self._docgraph_layer(env)
         if refusal is not None:
             return refusal
-        from . import docgraph_ops
+        from . import docgraph_ops, provenance
 
         rev = str(self.current_rev())
+        day, problem = provenance.parse_date(asof) if asof else ("", "")
+        if asof and not day:
+            env.found = False
+            env.error = problem or f"дата не разобрана: {asof!r}"
+            env.extra["suggest"] = ["doc_asof", "doc_search"]
+            return env.to_dict()
         data = docgraph_ops.doc_relations(conn, rev, doc=doc, entity=entity,
                                          limit=limit)
+        if day:
+            versions = provenance.path_index(conn, rev)
+            kept, dropped = [], 0
+            for pair in data.get("pairs") or []:
+                first = versions.get(str(pair.get("from") or ""))
+                second = versions.get(str(pair.get("to") or ""))
+                if not (provenance.keep(pair, first, asof=day)
+                        and provenance.keep(pair, second, asof=day)):
+                    dropped += 1
+                    continue
+                pair["validity"] = {"from": provenance.state_of(first, day),
+                                   "to": provenance.state_of(second, day)}
+                kept.append(pair)
+            data["pairs"] = kept
+            data["filtered_by_asof"] = dropped
         env.result = data
         env.found = bool(data.get("pairs"))
         if not env.found:
@@ -5353,7 +5760,8 @@ class Facade:
 
     def op_doc_search(self, query: str, limit: int = 20, kind: str | None = None,
                       doc: str | None = None, with_text: bool = True,
-                      text_width: int = 240) -> dict:
+                      text_width: int = 240, asof: str | None = None,
+                      include_superseded: bool = False) -> dict:
         """Поиск по документным чанкам: факт, адрес, провенанс.
 
         Почему не просто `search --kind doc`: тот ищет по всем чанкам, а адрес
@@ -5367,7 +5775,18 @@ class Facade:
         conn = self._doc_conn()
         if conn is None:
             return self._doc_not_built(env)
-        from . import docindex
+        from . import docindex, provenance
+
+        day = ""
+        if asof:
+            day, problem = provenance.parse_date(asof)
+            if not day:
+                env.found = False
+                env.error = problem or f"дата не разобрана: {asof!r}"
+                env.extra["suggest"] = ["doc_search", "doc_asof"]
+                return env.to_dict()
+        versions = provenance.version_index(conn, rev)
+        filtered_superseded = 0
 
         vector = None
         if self.embedder.available():
@@ -5384,6 +5803,13 @@ class Facade:
         for hit in hits:
             row = rows.get(hit.chunk_id)
             if not row:
+                continue
+            version = versions.get(str(row.get("doc_id") or ""))
+            # Провенанс решает ДО накопления выдачи: иначе `limit` считал бы
+            # отброшенные строки и ответ был бы короче запрошенного без причины.
+            if not provenance.keep(row, version, asof=day or None,
+                                   include_superseded=include_superseded):
+                filtered_superseded += 1
                 continue
             if kind and str(row.get("kind") or "") != str(kind):
                 continue
@@ -5411,6 +5837,7 @@ class Facade:
                     item["snippet_truncated"] = True
             if str(row.get("path") or "") in stale:
                 item["stale"] = True
+            provenance.annotate(item, version, day or None)
             out.append(item)
             if len(out) >= max(1, int(limit)):
                 break
@@ -5420,7 +5847,15 @@ class Facade:
             "hits": out,
             "count": len(out),
             "doc_hits_before_filter": len(hits),
+            "asof": day or None,
+            "include_superseded": bool(include_superseded),
+            "filtered_by_validity": filtered_superseded,
         }
+        if filtered_superseded:
+            env.limits.append(
+                f"скрыто заменённых редакций: {filtered_superseded}; "
+                "показать их можно `include_superseded=true`, а редакцию на дату — "
+                "операцией `doc_asof(query, date)`")
         if not out:
             env.limits.append(
                 "совпадений в документах нет; чанки документов появляются только "
@@ -5437,7 +5872,157 @@ class Facade:
         }
         return env.to_dict()
 
-    def op_doc_get(self, locator: str, with_provenance: bool = True) -> dict:
+    def op_doc_asof(self, query: str, date: str, limit: int = 20,
+                   kind: str | None = None, with_text: bool = True,
+                   text_width: int = 240) -> dict:
+        """Поиск по документам, действительным на дату (интервал действия).
+
+        Почему через `doc_search`, а не вторым поиском. Фильтр по дате — это
+        тот же отбор чанков плюс одно условие на версию документа. Второй
+        поисковый путь разошёлся бы с первым на первой правке (ранжирование,
+        обрезка, форма выдачи), и «две операции ищут по-разному» стало бы
+        дефектом, который виден только сравнением. Поэтому здесь одна
+        реализация, а `doc_asof` добавляет к ней ДАТУ и меняет имя операции.
+
+        Границы: дата — только действительность документа; состояние индекса
+        называется отдельно (`index_rev`). Документы без объявленного
+        интервала не выбрасываются: они возвращаются с `validity="unknown"`.
+        """
+        env = self.make_env("doc_asof", provenance="document")
+        rev = self.current_rev()
+        if not rev:
+            return self._no_index(env)
+        from . import provenance
+
+        day, problem = provenance.parse_date(date)
+        if not day:
+            env.found = False
+            env.error = problem or f"дата не разобрана: {date!r}"
+            env.extra["suggest"] = ["doc_search", "doc_status"]
+            return env.to_dict()
+        data = self.op_doc_search(query, limit=limit, kind=kind, with_text=with_text,
+                                  text_width=text_width, asof=day,
+                                  include_superseded=False)
+        data["op"] = "doc_asof"
+        data["asof"] = day
+        result = data.get("result")
+        if isinstance(result, dict):
+            result["asof"] = day
+            result["index_rev"] = rev
+        return data
+
+    def op_dependents(self, fact: str = "", locator: str = "", depth: int = 3,
+                      include_stated: bool = True) -> dict:
+        """Что опиралось на факт: прямые и транзитивные зависимости по рёбрам.
+
+        Вход — идентификатор факта или его адрес (`path:строки`). Обход в ширину
+        до `depth` (по умолчанию 3). Разделение обязательно и названо в каждой
+        строке: `derived` пересчитывается автоматически, `stated` — решение
+        человека, а не вычисление.
+
+        За глубиной факты не теряются: они считаются в `outside_cap`. Молчаливая
+        обрезка читалась бы как «ничего не зависит».
+        """
+        env = self.make_env("dependents", provenance="document")
+        rev = self.current_rev()
+        if not rev:
+            return self._no_index(env)
+        conn = self._doc_conn()
+        if conn is None:
+            return self._doc_not_built(env)
+        from . import provenance
+
+        if not provenance.tables_present(conn):
+            env.found = False
+            env.error = (
+                "слой провенанса не построен в этой ревизии: таблиц "
+                "`fact_assertion` нет. Выполните reindex — слой строится вместе "
+                "с документным слоем, отдельной настройки нет")
+            env.extra["suggest"] = ["ensure", "index_status"]
+            return env.to_dict()
+        ref = str(fact or locator or "").strip()
+        if not ref:
+            env.found = False
+            env.error = "нужен факт: `fact` (идентификатор) или `locator` (path:строки)"
+            env.extra["suggest"] = ["doc_asof", "doc_search"]
+            return env.to_dict()
+        data = provenance.dependents(conn, rev, ref, depth=depth,
+                                     include_stated=include_stated)
+        env.result = data
+        env.found = data.get("fact") is not None
+        if not env.found:
+            env.limits.append(str(data.get("reason") or "факт не найден"))
+        elif not data.get("dependents"):
+            env.limits.append(
+                "зависимых фактов нет: на этот факт не опирается ни один вывод "
+                "(это ответ, а не отсутствие данных)")
+        env.extra["counts"] = {
+            "direct": data.get("direct", 0), "total": data.get("total", 0),
+            "outside_cap": data.get("outside_cap", 0),
+            "classified": data.get("classified"),
+        }
+        return env.to_dict()
+
+    def op_stale_cascade(self, changed: str = "", depth: int = 3,
+                         apply: bool = False, clear: bool = False,
+                         limit: int = 50) -> dict:
+        """Что пересчитать после изменения входов: каскад по рёбрам факт → факт.
+
+        Отличие от `dependents` — в вопросе, а не в обходе: там «что зависит от
+        одного факта», здесь «что пересчитать, если изменился этот набор», с
+        пометками и закрытием. Видов вызова три и на вызов — один: `apply` пишет
+        пометки, `clear` закрывает их после пересчёта, пустой `changed` без них
+        читает уже поставленное.
+
+        Пометка относится к ревизии: после переиндексации она не «висит вечно»
+        и не выдаётся за текущее состояние. Факт без адреса не выдаётся.
+        """
+        env = self.make_env("stale_cascade", provenance="document")
+        rev = self.current_rev()
+        if not rev:
+            return self._no_index(env)
+        conn = self._doc_conn()
+        if conn is None:
+            return self._doc_not_built(env)
+        from . import provenance
+
+        if not provenance.tables_present(conn):
+            env.found = False
+            env.error = (
+                "слой провенанса не построен в этой ревизии: таблиц "
+                "`fact_assertion` нет. Выполните reindex — слой строится вместе "
+                "с документным слоем, отдельной настройки нет")
+            env.extra["suggest"] = ["ensure", "index_status"]
+            return env.to_dict()
+        try:
+            data = provenance.cascade(conn, rev, changed, depth=depth,
+                                      apply=bool(apply), clear=bool(clear),
+                                      reason="cascade", limit=limit)
+        except ValueError as exc:
+            advice = util.next_action("stale_cascade", self._config_hint(),
+                                      kind="bad_input", detail=str(exc))
+            env.found = False
+            env.error = f"StaleCascadeRefusal: {exc}"
+            env.extra["next_action"] = advice
+            env.extra["suggest"] = ["dependents", "doc_asof"]
+            return env.to_dict()
+        env.result = data
+        plan = list(data.get("plan") or [])
+        env.found = bool(plan or data.get("cleared") or data.get("seeds"))
+        if data.get("reason"):
+            env.limits.append(str(data["reason"]))
+        if not plan and not data.get("reason"):
+            env.limits.append(
+                "пересчитывать нечего: от изменённых входов ни один вывод не "
+                "зависит (это ответ, а не отсутствие данных)")
+        if data.get("unresolved"):
+            env.limits.append("ссылки не разрешены: "
+                              + ", ".join(str(item) for item in data["unresolved"]))
+        env.extra["counts"] = dict(data.get("counts") or {})
+        return env.to_dict()
+
+    def op_doc_get(self, locator: str, with_provenance: bool = True,
+                   asof: str | None = None) -> dict:
         """Текст по адресу документа и провенанс: из индекса или с диска.
 
         Порядок важен. Сначала индекс: он отвечает быстро и относится к той же
@@ -5449,7 +6034,16 @@ class Facade:
         rev = self.current_rev()
         if not rev:
             return self._no_index(env)
-        from . import docindex, docnode, docread
+        from . import docindex, docnode, docread, provenance
+
+        day = ""
+        if asof:
+            day, problem = provenance.parse_date(asof)
+            if not day:
+                env.found = False
+                env.error = problem or f"дата не разобрана: {asof!r}"
+                env.extra["suggest"] = ["doc_search", "doc_asof"]
+                return env.to_dict()
 
         conn = self._doc_conn()
         if conn is not None:
@@ -5471,6 +6065,13 @@ class Facade:
                 if with_provenance:
                     env.result["provenance"] = first.get("provenance") or {}
                     env.result["structure"] = first.get("structure") or {}
+                versions = provenance.version_index(conn, rev)
+                provenance.annotate(env.result, versions.get(str(first.get("doc_id") or "")),
+                                   day or None)
+                if env.result.get("validity") == "out_of_interval":
+                    env.limits.append(
+                        f"адрес относится к редакции за пределами даты {day}: текст "
+                        "выдан, но это не редакция на запрошенную дату")
                 env.extra["evidence"] = {
                     "applies_to_calls": False,
                     "note": ("вид доказательства связи к тексту документа не "
@@ -6957,9 +7558,29 @@ class Facade:
             unresolved.append(ident)
         return spans, unresolved, via_node, via_chunk
 
+    def _config_hint(self) -> str:
+        """Подсказка пути к конфигу для текста отказа: он есть у фасада всегда.
+
+        Нужна, чтобы совет в отказе был ГОТОВОЙ командой, а не «сделайте что-то
+        подходящее»: агент не обязан угадывать путь к конфигу корпуса.
+        """
+        path = getattr(self.cfg, "config_path", None)
+        return util.to_posix(path) if path else ""
+
     def _no_index(self, env: Envelope) -> dict:
+        """Отказ «индекса нет» — с одной командой и признаком возможности.
+
+        Формулировка одна на весь продукт (`util.next_action`): прежде текст был
+        зашит здесь, и другой отказ того же вида говорил иначе.
+        """
         env.found = False
-        env.error = "индекс не создан: выполните ragraf index --project <config>"
+        advice = util.next_action(env.op, self._config_hint(), kind="no_index")
+        # Совет читается через `.get`: неполный совет не имеет права превратить
+        # отказ в трассировку (это ловится подсадкой в наборе).
+        action = str(advice.get("action") or "")
+        env.error = ("индекс не создан: " + action if action
+                     else "индекс не создан: у корпуса нет действующей ревизии")
+        env.extra["next_action"] = advice
         return env.to_dict()
 
     def _coverage(self, rev: str) -> dict:
@@ -7787,7 +8408,164 @@ class Facade:
 
     # ---------------- контур качества (ПРОМТ-И9) ----------------
 
-    def op_quality_suite(self, label: str = "", record: bool = True) -> dict:
+    def op_quality_trace(self, action: str = "list", case_id: str = "",
+                         trace_id: int = 0, session: str = "",
+                         label: str = "") -> dict:
+        """Трасса подтверждённого сбоя: записать, показать, повторить.
+
+        Зачем рядом с `quality_suite`. Прогон отвечает «падает или нет» и не
+        хранит, ЧЕМ падал: журнал шагов живёт своей жизнью, объявление кейса
+        правится. Здесь сбой сохраняется так, чтобы его можно было повторить
+        через неделю: объявление кейса целиком, шаги, решения гейта, ревизия.
+
+        Три вида вызова и один на вызов: `save` (нужны `case_id` и `session`),
+        `list` (можно с `case_id`), `replay` (нужен `trace_id`). Вердикт повтора
+        на другой ревизии называется `other_rev`, а не «исправлено».
+        """
+        env = self.make_env("quality_trace", provenance="journal")
+        quality_mod, refusal = self._feature_module(
+            "quality_trace", "quality_loop", "quality-loop")
+        if refusal is not None:
+            return refusal
+        traces_mod, refusal = self._feature_module(
+            "quality_trace", "quality_traces", "quality-loop")
+        if refusal is not None:
+            return refusal
+        rev = self.current_rev()
+        if not rev:
+            return self._no_index(env)
+        chosen = str(action or "list").strip().lower()
+        if chosen not in traces_mod.ACTIONS:
+            advice = util.next_action("quality_trace", self._config_hint(),
+                                      kind="bad_input",
+                                      detail=f"вид вызова {action!r} вне списка")
+            env.found = False
+            env.error = ("QualityTraceRefusal: вид вызова "
+                         f"{chosen!r} вне списка: "
+                         + ", ".join(traces_mod.ACTIONS))
+            env.extra["next_action"] = advice
+            env.extra["suggest"] = ["quality_suite", "quality_pair"]
+            return env.to_dict()
+        from . import quality_cases as cases_mod
+
+        conn = self.control.conn
+        if chosen == "list":
+            data = traces_mod.traces(conn, case_id=str(case_id or ""), limit=50)
+            env.result = data
+            env.found = bool(data.get("traces"))
+            if not env.found:
+                env.limits.append(
+                    "трасс нет: подтверждённых сбоев в журнале не записано "
+                    "(это ответ, а не отсутствие данных)")
+            env.extra["counts"] = {"traces": int(data.get("total") or 0)}
+            return env.to_dict()
+
+        from . import gate as gate_mod
+
+        gate_state = None
+        try:
+            gate_state = gate_mod.state()
+        except Exception:  # noqa: BLE001 — без журнала гейта трасса беднее, но жива
+            gate_state = None
+
+        if chosen == "replay":
+            if not int(trace_id or 0):
+                advice = util.next_action("quality_trace", self._config_hint(),
+                                          kind="bad_input",
+                                          detail="не назван trace_id")
+                env.found = False
+                env.error = "QualityTraceRefusal: для replay нужен trace_id"
+                env.extra["next_action"] = advice
+                env.extra["suggest"] = ["quality_trace --action list"]
+                return env.to_dict()
+            sources = quality_mod.Sources.from_facade(self)
+
+            def evaluate(case: dict, stored_session: str) -> dict:
+                return cases_mod.evaluate_one(
+                    case, graph=sources.graph, control=sources.control.conn,
+                    rev=rev, session=stored_session, gate_state=gate_state)
+
+            data = traces_mod.replay(conn, int(trace_id), rev=rev,
+                                     evaluator=evaluate)
+            env.result = data
+            env.found = bool(data.get("found"))
+            if not env.found:
+                env.error = ("QualityTraceRefusal: "
+                             + str(data.get("reason") or "трассы нет"))
+                env.extra["suggest"] = ["quality_trace --action list"]
+            else:
+                env.extra["verdict"] = data.get("verdict")
+                if not data.get("same_rev"):
+                    env.limits.append(
+                        "трасса снята на другой ревизии: «прошло» называется "
+                        "`other_rev`, а не исправлением")
+            return env.to_dict()
+
+        # save
+        if not str(case_id or "").strip():
+            advice = util.next_action("quality_trace", self._config_hint(),
+                                      kind="bad_input",
+                                      detail="не назван case_id")
+            env.found = False
+            env.error = "QualityTraceRefusal: для save нужен case_id"
+            env.extra["next_action"] = advice
+            env.extra["suggest"] = ["quality_suite", "quality_trace --action list"]
+            return env.to_dict()
+        if not str(session or "").strip():
+            advice = util.next_action("quality_trace", self._config_hint(),
+                                      kind="bad_input",
+                                      detail="не назван session")
+            env.found = False
+            env.error = ("QualityTraceRefusal: для save нужен session — без сеанса "
+                         "шаги взять неоткуда")
+            env.extra["next_action"] = advice
+            env.extra["suggest"] = ["quality_suite --session <id>"]
+            return env.to_dict()
+        root = str(getattr(self.cfg, "root", "") or "")
+        declared = cases_mod.load_cases(root)
+        bench = cases_mod.load_bench(root)
+        pool = list(declared.get("cases") or []) + list(bench.get("cases") or [])
+        case = next((item for item in pool
+                     if str(item.get("id")) == str(case_id)), None)
+        if case is None:
+            advice = util.next_action("quality_trace", self._config_hint(),
+                                      kind="bad_input",
+                                      detail=f"кейса {case_id!r} нет в объявлениях")
+            env.found = False
+            env.error = ("QualityTraceRefusal: кейса с таким id нет ни в "
+                         "quality-cases.yaml, ни в bench/tasks.yaml")
+            env.extra["next_action"] = advice
+            env.extra["suggest"] = ["quality_suite"]
+            return env.to_dict()
+        sources = quality_mod.Sources.from_facade(self)
+        result = cases_mod.evaluate_one(case, graph=sources.graph,
+                                        control=sources.control.conn, rev=rev,
+                                        session=session, gate_state=gate_state)
+        steps = cases_mod.session_ops(sources.control.conn, session)
+        rows = cases_mod.gate_decisions(gate_state, session)
+        try:
+            data = traces_mod.save(conn, case=case, result=result, steps=steps,
+                                   gate_rows=rows, rev=rev, session=session,
+                                   label=label,
+                                   case_source=str(declared.get("path") or ""))
+        except traces_mod.TraceRefusal as exc:
+            advice = util.next_action("quality_trace", self._config_hint(),
+                                      kind="bad_input", detail=str(exc))
+            env.found = False
+            env.error = f"QualityTraceRefusal: {exc}"
+            env.extra["next_action"] = advice
+            env.extra["suggest"] = ["quality_suite", "quality_cases"]
+            return env.to_dict()
+        env.result = data
+        env.found = bool(data.get("saved") or data.get("id"))
+        if not data.get("saved"):
+            env.limits.append(str(data.get("reason") or "тот же сбой уже записан"))
+        env.extra["trace_id"] = int(data.get("id") or 0)
+        env.extra["saved"] = bool(data.get("saved"))
+        return env.to_dict()
+
+    def op_quality_suite(self, label: str = "", record: bool = True,
+                         session: str = "") -> dict:
         """47. Набор проверок индекса: размер чанков, сигнатуры, вектор, режим, разбор.
 
         Что это отвечает. На вопрос «можно ли доверять этому индексу» до сих пор
@@ -7818,6 +8596,7 @@ class Facade:
                 capability=self.capability(),
                 label=str(label or ""),
                 do_record=bool(record),
+                session=str(session or ""),
             )
         except Exception as exc:  # noqa: BLE001 — причина названа, а не спрятана
             data = {"ok": False, "suite": None, "run": None,
@@ -7832,6 +8611,12 @@ class Facade:
             totals = suite.get("totals") or {}
             env.extra["checks"] = int(totals.get("checks") or 0)
             env.extra["findings"] = int(len(suite.get("findings") or []))
+            cases_block = suite.get("cases") or {}
+            env.extra["cases"] = {
+                "declared": int(cases_block.get("declared") or 0),
+                "totals": dict(cases_block.get("totals") or {}),
+                "reason": str(cases_block.get("reason") or ""),
+            }
             for limit in suite.get("limits") or []:
                 env.limits.append(str(limit))
         self._record_external(
@@ -7874,6 +8659,55 @@ class Facade:
                 env.limits.append(str(limit))
         self._record_external(
             "quality_diff",
+            {**data, "reason": data.get("reason") or "сравнение выполнено"},
+        )
+        return env.to_dict()
+
+    def op_quality_pair(self, from_run: int = 0, to_run: int = 0) -> dict:
+        """50. Парный прогон: те же фиксированные кейсы, два прогона, вердикт по кейсам.
+
+        Зачем отдельная операция, а не ветка `quality_diff`. `quality_diff`
+        сравнивает ПОКАЗАТЕЛИ ИНДЕКСА и намеренно не выносит вердикт между
+        ревизиями: правка кода законно меняет числа (см. docstring выше). Здесь
+        вопрос другой и вердикт обязателен: «тот же набор вопросов отвечается
+        хуже или лучше». Поэтому рядом живут два ответа, и различие названо в
+        самом ответе полем `differs_from_quality_diff`, а не только в документах.
+
+        Блокирующее правило: если хотя бы один ранее проходивший кейс упал, общий
+        вердикт НЕ может быть «не хуже». Среднее скрыло бы ровно тот случай, ради
+        которого парный прогон и делается.
+
+        Ничего не пишется: прогоны уже записаны `quality_suite`, здесь только
+        чтение журнала и сравнение блоков `cases`.
+        """
+        env = self.make_env("quality_pair", provenance="journal")
+        quality_mod, refusal = self._feature_module(
+            "quality_pair", "quality_loop", "quality-loop")
+        if refusal is not None:
+            return refusal
+        try:
+            data = quality_mod.pair_runs(
+                quality_mod.Sources.from_facade(self),
+                from_run=int(from_run or 0),
+                to_run=int(to_run or 0),
+            )
+        except quality_mod.QualityRefusal as exc:
+            data = {"ok": False, "reason": str(exc)}
+        except Exception as exc:  # noqa: BLE001 — причина названа
+            data = {"ok": False,
+                    "reason": f"сравнение не выполнено: {type(exc).__name__}: {exc}"}
+        env.result = data
+        env.found = bool(data.get("ok"))
+        if not env.found:
+            env.error = f"QualityPairRefusal: {data.get('reason') or 'сравнение не выполнено'}"
+            env.extra["suggest"] = ["quality_suite", "quality_diff"]
+        else:
+            env.extra["verdict"] = data.get("verdict")
+            env.extra["pair_basis"] = data.get("pair_basis")
+            env.extra["regressions"] = list(data.get("regressions") or [])
+            env.extra["same_state"] = bool(data.get("same_state"))
+        self._record_external(
+            "quality_pair",
             {**data, "reason": data.get("reason") or "сравнение выполнено"},
         )
         return env.to_dict()

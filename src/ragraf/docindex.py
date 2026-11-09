@@ -56,6 +56,16 @@ class Document:
     nodes: list[DocumentNode] = field(default_factory=list)
     chunks: list[DocChunk] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
+    #: Интервал действия редакции (провенанс). Берётся только из явных метаданных
+    #: документа (`provenance.parse_interval`); пусто — интервал неизвестен, и это
+    #: отличается от «действует всегда». Поля заполняет индексатор до записи:
+    #: решение о текущей редакции принимается по данным, а не по имени файла.
+    valid_from: str | None = None
+    valid_to: str | None = None
+    superseded_by: str = ""
+    logical_id: str = ""
+    validity_source: str = "unknown"
+    validity_warnings: list[str] = field(default_factory=list)
 
     @property
     def doc_id(self) -> str:
@@ -78,6 +88,14 @@ class Document:
             "lines": self.lines,
             "sha256": self.sha256,
             "warnings": list(self.warnings),
+            "validity": {
+                "valid_from": self.valid_from,
+                "valid_to": self.valid_to,
+                "superseded_by": self.superseded_by,
+                "logical_id": self.logical_id,
+                "source": self.validity_source,
+                "warnings": list(self.validity_warnings),
+            },
         }
 
 

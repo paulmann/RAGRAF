@@ -750,13 +750,21 @@ def reindex_project(category: str) -> dict[str, Any]:
         return {"category": category, "ok": False,
                 "error": "indexing is disabled for this development"}
     try:
+        from ragraf.catalog import Catalog
         from ragraf.indexer import Indexer
+        from ragraf.watch import category_for
 
-        idx = Indexer(cfg)
-        try:
-            report = idx.run(with_vectors=True)
-        finally:
-            idx.close()
+        lock_catalog = Catalog()
+        with lock_catalog.corpus_lock(category or category_for(cfg)) as got:
+            if not got:
+                return {"category": category, "ok": False,
+                        "error": "indexing of this development is already running"}
+            idx = Indexer(cfg, heartbeat=lambda: lock_catalog.touch_corpus_lock(
+                category or category_for(cfg)))
+            try:
+                report = idx.run(with_vectors=True)
+            finally:
+                idx.close()
         data = report.to_dict() if hasattr(report, "to_dict") else {}
         if getattr(report, "ok", False):
             # Реестр обязан получить результат прогона: путь, запускающий

@@ -30,6 +30,11 @@ concurrency:
 jobs:
   build:
     name: Build (mkdocs)
+    # GitHub Pages включается в настройках репозитория, а не в рабочем дереве:
+    # на приватном репозитории без включённого Pages шаг configure-pages падает
+    # «Not Found», и красная джоба ничего не проверяет. Условие делает пропуск
+    # явным; сборка документации отдельно проверяется в чекере проекта.
+    if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

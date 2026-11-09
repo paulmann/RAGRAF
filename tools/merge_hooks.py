@@ -146,8 +146,15 @@ def main(argv: list[str]) -> int:
         return 0 if same else 1
     shared.parent.mkdir(parents=True, exist_ok=True)
     if shared.exists():
-        backup = shared.with_name(
-            shared.name + ".bak-" + str(int(shared.stat().st_mtime)))
+        # Копия — В `.ragraf/hooks-backup/`, а не рядом с рабочим файлом.
+        # Замер 03.11.2026: копии `harness/all-hooks.json.bak-<метка>` копились
+        # рядом с файлом, попадали в индекс (шаблон `**/*.bak` не ловит дефис
+        # после `.bak`) и давали предупреждение доктрины «новая копия рядом с
+        # рабочим файлом». Правило 29 AGENTS.md: резервные копии — в `.ragraf/`
+        # или вне корпуса, где они не меняют вход индексатора.
+        backup_dir = REPO / ".ragraf" / "hooks-backup"
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        backup = backup_dir / (shared.name + ".bak-" + str(int(shared.stat().st_mtime)))
         if not backup.exists():
             backup.write_text(shared.read_text(encoding="utf-8"), encoding="utf-8",
                               newline="\n")

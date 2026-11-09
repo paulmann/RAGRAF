@@ -2,7 +2,7 @@
   "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
   "name": "ragraf",
   "displayName": "RAGRAF Community",
-  "version": "0.5.6",
+  "version": "0.10.0",
   "description": "Local, offline code index for Claude Code: a call graph, full-text search and vectors in one index, with path:line evidence for every answer. Community edition — code never leaves the machine.",
   "author": {
     "name": "Mikhail Deynekin",

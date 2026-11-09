@@ -12,7 +12,7 @@ title: "RAGRAF: a graph-and-vector knowledge base of code for LLM agents"
 abstract: >-
   RAGRAF indexes a repository into three SQLite stores inside the indexed project — a
   symbol/call graph, an FTS5 lexicon with vectors, and a revision and drift ledger — and
-  answers an agent's questions through a fixed set of 54 operations (61 tools over MCP):
+  answers an agent's questions through a fixed set of 68 operations (75 tools over MCP):
   where a symbol is defined, who calls it, what a change affects, what is in a database
   table and who writes it, which files are copies, and whether a write matches the schema.
   Every fact carries a path:line reference and its provenance (stated or derived); an
@@ -32,8 +32,8 @@ authors:
 repository-code: "https://github.com/paulmann/RAGRAF"
 url: "https://ragraf.ru"
 license: BUSL-1.1
-version: "0.5.6"
-date-released: "2026-10-30"
+version: "0.10.0"
+date-released: "2026-11-07"
 
 keywords:
   - code knowledge base

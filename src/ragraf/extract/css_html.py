@@ -79,8 +79,16 @@ AT_RULE_RE = re.compile(r"@(?:media|supports|container|layer)\b[^{]*", re.IGNORE
 CLASS_NAME_RE = re.compile(r"-?[A-Za-z_][A-Za-z0-9_-]*")
 
 
-def _line_of(text: str, pos: int) -> int:
-    return text.count("\n", 0, pos) + 1
+class LineIndex:
+    """Номер строки по смещению — общий для проекта (`util.LineIndex`).
+
+    Почему не своя копия. Тот же счётчик строк был и в `php_ast`; две копии
+    разошлись бы по семантике молча. Замер и разбор причины — в `util.LineIndex`
+    (на файле 17,6 МБ разбор занимал 477,4 с).
+    """
+
+    def __new__(cls, text: str) -> "util.LineIndex":
+        return util.LineIndex(text)
 
 
 def class_node_id(name: str) -> str:
@@ -98,6 +106,7 @@ class CssExtractor:
 
     def extract(self, path: str, data: bytes) -> FileExtraction:
         text, enc = textdec.decode(data, path)
+        lines = LineIndex(text)
         res = FileExtraction(
             path=path,
             lines=textdec.line_count(data, text, enc),
@@ -133,7 +142,7 @@ class CssExtractor:
             head = m.group(1).strip()
             if not head or head.startswith("@"):
                 continue
-            line = _line_of(text, m.start())
+            line = lines.line_of(m.start())
             context = context_of(m.start())
             for cm in CLASS_TOKEN_RE.finditer(head):
                 name = cm.group(1)
@@ -168,8 +177,8 @@ class CssExtractor:
                 SymbolRec(
                     node_id=util.stable_id(VAR_KIND, name, path), kind=VAR_KIND,
                     name=name, fqn=f"{path}:{name}",
-                    start_line=_line_of(text, m.start()),
-                    end_line=_line_of(text, m.start()), start_byte=0, end_byte=0,
+                    start_line=lines.line_of(m.start()),
+                    end_line=lines.line_of(m.start()), start_byte=0, end_byte=0,
                     signature=name, parent_fqn=None, props={"declared": True},
                 )
             )
@@ -184,15 +193,15 @@ class CssExtractor:
                     SymbolRec(
                         node_id=node_id, kind=VAR_KIND, name=name,
                         fqn=f"{path}:{name}",
-                        start_line=_line_of(text, m.start()),
-                        end_line=_line_of(text, m.start()), start_byte=0, end_byte=0,
+                        start_line=lines.line_of(m.start()),
+                        end_line=lines.line_of(m.start()), start_byte=0, end_byte=0,
                         signature=name, parent_fqn=None, props={"declared": False},
                     )
                 )
             res.edges.append(
                 EdgeRec(
                     src=file_id, dst=node_id, kind="uses_var", provenance="stated",
-                    evidence_line=_line_of(text, m.start()), confidence=1.0,
+                    evidence_line=lines.line_of(m.start()), confidence=1.0,
                 )
             )
         return res
@@ -206,15 +215,19 @@ class CssExtractor:
         """
         text = textdec.decode(data, res.path)[0]
         lines = text.splitlines()
+        # Отдельное имя: `lines` здесь — список строк для нарезки чанков, а нужен
+        # ещё индекс смещений. Совмещение двух ролей дало `AttributeError:
+        # 'list' object has no attribute 'line_of'` при индексации корпуса.
+        line_index = LineIndex(text)
         clean = CSS_COMMENT_RE.sub(" ", text)
         out: list[ChunkRec] = []
         for m in RULE_HEAD_RE.finditer(clean):
             head = m.group(1).strip()
             if not head or head.startswith("@"):
                 continue
-            start = _line_of(text, m.start())
+            start = line_index.line_of(m.start())
             close = clean.find("}", m.end())
-            end = _line_of(text, close if close > 0 else m.end())
+            end = line_index.line_of(close if close > 0 else m.end())
             body = "\n".join(lines[max(0, start - 1): max(start, end)])
             payload = f"{head} {{ {body} }}"
             out.append(
@@ -243,6 +256,7 @@ class HtmlExtractor:
 
     def extract(self, path: str, data: bytes) -> FileExtraction:
         text, enc = textdec.decode(data, path)
+        lines = LineIndex(text)
         res = FileExtraction(
             path=path,
             lines=textdec.line_count(data, text, enc),
@@ -263,7 +277,7 @@ class HtmlExtractor:
         seen: set[str] = set()
         dynamic: set[str] = set()
         for m in CLASS_ATTR_RE.finditer(text):
-            line = _line_of(text, m.start())
+            line = lines.line_of(m.start())
             for name in m.group(1).split():
                 if not CLASS_NAME_RE.fullmatch(name):
                     continue
@@ -317,7 +331,7 @@ class HtmlExtractor:
                 target = m.group(1).strip()
                 if not target:
                     continue
-                line = text.count("\n", 0, m.start()) + 1
+                line = lines.line_of(m.start())
                 res.edges.append(
                     EdgeRec(src=file_id, dst=f"{FILE_PREFIX}{target}", kind="imports",
                             provenance="derived", evidence_line=line, confidence=0.9,

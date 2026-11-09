@@ -286,6 +286,11 @@ def _yaml_load(text: str) -> None:
         "tag:yaml.org,2002:python/name:", lambda loader, suffix, node: suffix
     )
     Tolerant.add_multi_constructor("!", lambda loader, suffix, node: None)
+    # `!!js` (js-yaml): подстановка JavaScript в профиле DeepSeek Harness.
+    # Тег живёт в пространстве yaml.org, поэтому префиксом `!` не ловится, а
+    # файл исправен: его читает клиент, а не этот проверяльщик.
+    Tolerant.add_multi_constructor("tag:yaml.org,2002:js",
+                                   lambda loader, suffix, node: None)
     yaml.load(text, Loader=Tolerant)  # noqa: S506 - за основу взят SafeLoader
 
 def check_syntax(ctx: "Context") -> list[str]:

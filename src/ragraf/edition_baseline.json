@@ -43,6 +43,17 @@
       ]
     },
     {
+      "name": "provenance",
+      "title": "провенанс документов и выводов: редакции с интервалом действия, рёбра деривации и зависимые факты",
+      "edition": "pro",
+      "status": "shipped",
+      "operations": [
+        "doc_asof",
+        "dependents",
+        "stale_cascade"
+      ]
+    },
+    {
       "name": "doc-graph",
       "title": "документный граф: извлечение сущностей и отношений из документов через LLM, соседи сущности и связи документов с адресами",
       "edition": "pro",
@@ -175,7 +186,28 @@
       "operations": [
         "quality_suite",
         "quality_diff",
-        "quality_prune"
+        "quality_prune",
+        "quality_pair",
+        "quality_trace"
+      ]
+    },
+    {
+      "name": "preflight",
+      "title": "цена и границы до старта: распределение файлов, доля сгенерированного кода, миграции, ожидаемое время разбора с погрешностью, слепые зоны динамики с адресами, готовность векторов и Joern",
+      "edition": "pro",
+      "status": "shipped",
+      "operations": [
+        "preflight"
+      ]
+    },
+    {
+      "name": "contract-pin",
+      "title": "пиннинг подписи операций: хеш описания (параметры с умолчаниями и ключи ответа) подтверждается человеком, расхождение и поломка клиента видны в журнале",
+      "edition": "enterprise",
+      "status": "shipped",
+      "operations": [
+        "contract_pin_status",
+        "contract_pin_approve"
       ]
     },
     {
@@ -214,6 +246,15 @@
       "status": "shipped",
       "operations": [
         "attest_bundle"
+      ]
+    },
+    {
+      "name": "contract-drift",
+      "title": "сверка замысла и кода по FQN: модули, контракты, детектор дрейфа",
+      "edition": "enterprise",
+      "status": "shipped",
+      "operations": [
+        "contract_drift"
       ]
     }
   ],

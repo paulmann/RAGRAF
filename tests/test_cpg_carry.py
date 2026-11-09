@@ -73,8 +73,13 @@ print(f"  рёбер от Joern: {before['cpg']}, вида calls: {before['calls
       f"всего {before['total']}, capability {before['capability']}")
 
 print("\n=== Выполняется БЫСТРАЯ переиндексация ===")
+# ЯВНЫЙ БЮДЖЕТ. Проверка измеряет СВОЙСТВО (переносятся ли связи CPG при
+# быстром прогоне), а не то, уложился ли прогон в бюджет корпуса. Замер
+# 06.11.2026: быстрый прогон этого корпуса (1 121 файл) занимает 129 с при
+# бюджете 120 — тест падал на часах, а не на дефекте, и при этом не измерял
+# ничего: прерванный прогон не закрепляет ревизию.
 ok, rev_after, secs, note = watch.run_reindex(
-    cfg, category, trigger="test", mode="fast"
+    cfg, category, trigger="test", mode="fast", budget_seconds=900
 )
 print(f"  успех: {ok}, ревизия {rev_after}, {secs:.1f} с")
 check(ok, "быстрая реиндексация выполнена", note)

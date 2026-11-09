@@ -39,7 +39,11 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
+import os
+import re
+import secrets
 import shutil
 import time
 from dataclasses import asdict, dataclass, field
@@ -50,6 +54,12 @@ from . import paths
 from . import registry_facts
 from . import util
 from .config import ProjectConfig
+
+#: Сколько секунд без обновления признака живости (`ts` в файле замка) считается
+#: «держатель молчит». Живой прогон обновляет `ts` на каждой стадии индексора
+#: (`Indexer._stage` → `Catalog.touch_corpus_lock`), поэтому порог в 15 минут
+#: переживается только действительно зависшим процессом.
+LOCK_HEARTBEAT_SEC = 900.0
 
 # Версия формата реестра. Нужна, чтобы при чтении старого файла было понятно,
 # какие поля появились позже и требуют досчёта.
@@ -150,6 +160,33 @@ class Entry:
         return Entry(**clean)   # type: ignore[arg-type]
 
 
+class _CorpusLock:
+    """Контекст замка корпуса: вход в `with` берёт, выход снимает.
+
+    Отдельный объект, а не `@contextlib.contextmanager` на методе: так в
+    `enter` видно, ВЗЯТ ли замок, и вызывающий код обязан это проверить —
+    иначе «не взяли» превратилось бы в «проиндексировали без защиты».
+    """
+
+    def __init__(self, catalog: "Catalog", category: str,
+                 timeout_sec: float, poll: float) -> None:
+        self.catalog = catalog
+        self.category = category
+        self.timeout_sec = timeout_sec
+        self.poll = poll
+        self.acquired = False
+
+    def __enter__(self) -> bool:
+        self.acquired = self.catalog.acquire_corpus_lock(
+            self.category, timeout_sec=self.timeout_sec, poll=self.poll)
+        return self.acquired
+
+    def __exit__(self, exc_type, exc, tb) -> bool:
+        if self.acquired:
+            self.catalog.release_corpus_lock(self.category)
+        return False
+
+
 class Catalog:
     """Сводный реестр разработок. Один файл JSON, блокировка — файловая.
 
@@ -166,6 +203,17 @@ class Catalog:
         self.path = Path(path) if path else paths.state_file("catalog.json")
         self.lock_path = self.path.with_suffix(".lock")
         self._data: dict[str, Any] | None = None
+        # Какие записи ЭТОТ экземпляр менял: только они идут в файл поверх
+        # свежего содержимого (см. `_save_unlocked`).
+        self._dirty: set[str] = set()
+        # Держит ли ЭТОТ экземпляр замок реестра: нужно, чтобы `save()` не
+        # пытался взять его повторно (второй захват того же файла тем же
+        # процессом ждал бы самого себя все 30 секунд).
+        self._holds_lock = False
+        # Метки взятых замков (путь → token). Нужны, чтобы СНЯТЬ и обновить
+        # только свой замок: без метки снятие чужого замка стало бы способом
+        # обойти защиту, а не освободить ресурс.
+        self._tokens: dict[str, str] = {}
 
     # ---------------- низкий уровень ----------------
 
@@ -195,9 +243,78 @@ class Catalog:
         (такого состояния не было). Файл лежит вне корпуса индексации
         (`**/catalog/**` исключён в config/ragraf.yaml), поэтому его рост не
         сдвигает контрольную сумму корпуса и не зацикливает сторожа.
+        Запись реестра берёт СВОЙ короткий замок. Без него две параллельные
+        индексации разных корпусов читали один файл, дополняли его каждая по
+        своему и вторая затирала запись первой (потерянная запись прогона).
+        Замок берётся на время `read → write`, а не на всю индексацию.
         """
+        held_before = self._holds_lock
+        retries = 0
+        if not held_before:
+            # ЗАМОК — НЕ ПОВОД МОЛЧА ПОТЕРЯТЬ ЗАПИСЬ. Раньше здесь стояло
+            # `return`: если замок не удавалось взять за 30 с, запись прогона
+            # просто не происходила, и реестр тихо отставал от графа (замер
+            # 06.11.2026: ревизии rev-1442 и rev-1443 в графе есть, в реестре
+            # нет). Теперь несколько попыток, и если не вышло — исключение:
+            # вызывающий код обязан сказать «реестр не обновлён», а не выдать
+            # старый ревизию за текущую.
+            for _attempt in range(3):
+                retries = _attempt
+                if self.acquire_lock(timeout_sec=10.0):
+                    break
+            else:
+                self._trace("save_lock_failed", dirty=sorted(self._dirty),
+                            attempts=3)
+                raise RuntimeError(
+                    "реестр занят другим процессом: запись прогона не выполнена")
+        if retries:
+            self._trace("save_lock_waited", dirty=sorted(self._dirty),
+                        attempts=retries + 1)
+        written = sorted(self._dirty)
+        try:
+            self._save_unlocked()
+            self._trace("save_ok", dirty=written, lock_held=held_before)
+        finally:
+            if not held_before:
+                self.release_lock()
+
+    def _trace(self, event: str, **fields: Any) -> None:
+        """Трассировка записи реестра: та же переменная, что у сторожа.
+
+        Живёт здесь, потому что потеря записи происходит именно в момент
+        `read → merge → write`, а не в вызывающей функции: без отметки "что
+        писалось и поверх чего" гипотезы («не тот путь», «не тот файл»,
+        "потерянная запись") неразличимы.
+        """
+        try:
+            from .watch import trace_registry
+
+            trace_registry(event, catalog_path=str(self.path),
+                           entries=len(self.entries()), **fields)
+        except Exception:  # noqa: BLE001 — трассировка вспомогательная
+            pass
+
+    def _save_unlocked(self) -> None:
         data = self.load()
         data["version"] = CATALOG_VERSION
+        # СВЕЖЕЕ ЧТЕНИЕ ПОД ЗАМКОМ: пока шла индексация, другой процесс мог
+        # записать свою разработку. Своё — из памяти, чужое — с диска, иначе
+        # запись соседа будет молча затёрта копией, прочитанной до его работы.
+        on_disk = util.read_json(self.path, default=None)
+        if isinstance(on_disk, dict) and isinstance(on_disk.get("entries"), dict):
+            merged = dict(on_disk["entries"])
+            for category in self._dirty:
+                mine = data["entries"].get(category)
+                if mine is not None:
+                    merged[category] = mine
+            data["entries"] = merged
+        else:
+            # Файл не прочитался (или прочитался не тем, чем надо), и запись
+            # идёт в память-снимок. Тогда чужие разработки теряются молча —
+            # это тот же класс дефекта, что «потерянная запись», и он обязан
+            # быть виден: раньше эта ветка была беззвучной.
+            self._trace("save_merge_skipped", dirty=sorted(self._dirty),
+                        on_disk=type(on_disk).__name__)
         data["updated_at"] = util.now_iso()
         registry_facts.record_state(
             self.path,
@@ -205,9 +322,21 @@ class Catalog:
             data["updated_at"],
         )
         util.write_json(self.path, data, indent=2)
+        self._trace("save_written", dirty=sorted(self._dirty),
+                    entries_written=len(data.get("entries") or {}),
+                    entries_on_disk=(len(on_disk.get("entries") or {})
+                                     if isinstance(on_disk, dict) else None))
+        self._dirty.clear()
 
     def acquire_lock(self, timeout_sec: float = 120.0, poll: float = 0.2) -> bool:
-        """Взять блокировку на индексацию. False — не удалось за отведённое время.
+        """Взять блокировку ЗАПИСИ РЕЕСТРА (файл `catalog.json`).
+
+        Это не то же самое, что индексация. Замер 06.11.2026 показал, чем плохо
+        одно замка на всё: сервер HARNESS завис на разборе одного файла и держал
+        `catalog.lock` часами, а вместе с ним ждали все остальные корпуса —
+        любая операция получала таймаут. Теперь индекс блокируется ПО КОРПУСУ
+        (`acquire_corpus_lock`), а этот замок — короткий, на запись реестра,
+        и без него две параллельные индексации потеряли бы записи друг друга.
 
         Блокировка содержит pid и время. Проверок ДВЕ, и обе нужны:
 
@@ -224,36 +353,208 @@ class Catalog:
         Проверка живости безобидна, если платформа не умеет опрашивать процесс:
         исключение гасится, и решение остаётся за возрастом.
         """
-        self.lock_path.parent.mkdir(parents=True, exist_ok=True)
-        deadline = time.time() + timeout_sec
-        stale_after = 900.0   # 15 минут: индексация дольше считается зависшей
-        while time.time() < deadline:
-            if self.lock_path.exists():
-                held_pid = 0
-                try:
-                    info = json.loads(self.lock_path.read_text(encoding="utf-8"))
-                    started = float(info.get("ts", 0))
-                    held_pid = int(info.get("pid", 0) or 0)
-                except Exception:
-                    started = 0.0
-                fresh = bool(started) and (time.time() - started) < stale_after
-                if fresh and held_pid and _pid_alive(held_pid):
-                    time.sleep(poll)
-                    continue
-                # Замок мёртв по возрасту или по живности процесса — перезаписываем.
-            try:
-                util.write_json(self.lock_path, {"ts": time.time(), "pid": _pid()})
-                return True
-            except Exception:
-                time.sleep(poll)
-        return False
+        if self._holds_lock:
+            return True
+        got = self._acquire_path(self.lock_path, timeout_sec, poll,
+                                 category="<registry>")
+        self._holds_lock = got
+        return got
 
     def release_lock(self) -> None:
+        self._release_path(self.lock_path)
+        self._holds_lock = False
+
+    # ---------------- замок по корпусу ----------------
+    def corpus_lock_path(self, category: str) -> Path:
+        """Файл замка индексации КОНКРЕТНОГО корпуса.
+
+        Имя корпуса становится именем файла, поэтому всё, что не буква, цифра,
+        точка, дефис и подчёркивание, заменяется на `_`: имя вида
+        `13-vpn-199.195.197.95` допустимо и без замены, а произвольное — нет.
+        """
+        safe = re.sub(r"[^0-9A-Za-z._-]+", "_", str(category or "corpus"))[:80]
+        return self.lock_path.parent / "locks" / f"{safe or 'corpus'}.lock"
+
+    def corpus_lock(self, category: str, timeout_sec: float = 120.0,
+                    poll: float = 0.2):
+        """Контекст: замок индексации корпуса с гарантированным снятием.
+
+        Зачем контекст, а не пара вызовов. Замок нужен НА КАЖДОМ пути,
+        запускающем индексатор (AGENTS.md, инвариант 11), а таких путей четыре:
+        `index` и `reindex` из CLI, `ensure` и кнопка в панели. Проверка
+        06.11.2026: два одновременных `index` одного корпуса шли ПАРАЛЛЕЛЬНО и
+        оба взяли `rev-0001` — то есть писали одну ревизию вдвоём; спасало
+        только совпадение содержимого. Пара «взял/снял» в четырёх местах
+        разошлась бы при первой же правке, поэтому здесь один контекст.
+
+        Пример: `with Catalog().corpus_lock(cat) as got: if not got: ...`.
+        """
+        return _CorpusLock(self, category, timeout_sec, poll)
+
+    def acquire_corpus_lock(self, category: str, timeout_sec: float = 120.0,
+                            poll: float = 0.2) -> bool:
+        """Взять замок индексации этого корпуса. False — занят дольше срока.
+
+        Другой корпус при этом НЕ блокируется: именно этого не хватало, когда
+        один тяжёлый корпус останавливал работу всех остальных.
+        """
+        return self._acquire_path(self.corpus_lock_path(category), timeout_sec, poll,
+                                  category=category)
+
+    def release_corpus_lock(self, category: str) -> None:
+        self._release_path(self.corpus_lock_path(category))
+
+    def _acquire_path(self, path: Path, timeout_sec: float, poll: float,
+                      *, category: str = "") -> bool:
+        """Занять файл-замок: атомарное создание, решение по ЖИВОСТИ держателя.
+
+        Что было не так (замерено 06.11.2026, два дефекта сразу):
+
+          1. **Проверка и запись — два шага.** `path.exists()` → `write_json`
+             не атомарны: два процесса одновременно видели «файла нет», оба
+             записывали свой и ОБА считали замок взятым. Защита замком в этом
+             случае была только на бумаге.
+          2. **Возраст старше 15 минут считался смертью владельца.** Полный
+             прогон этого корпуса идёт 700 с, а зависший HARNESS держал замок
+             8,3 ч; в обоих случаях второй процесс ЗАХВАТЫВАЛ живой замок и
+             начинал вторую индексацию того же корпуса.
+
+        Теперь: создание через `O_CREAT|O_EXCL` (ядерная атомарность), а
+        захват чужого замка — только когда держатель МЁРТВ или его признак
+        живости (`ts`) старше `LOCK_HEARTBEAT_SEC`. Возраст сам по себе ничего
+        не решает: живой прогон обновляет `ts` на каждой стадии.
+        """
+        path.parent.mkdir(parents=True, exist_ok=True)
+        deadline = time.time() + timeout_sec
+        while time.time() < deadline:
+            try:
+                handle = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            except FileExistsError:
+                info = _read_lock(path)
+                verdict, why = lock_verdict(info, path)
+                if verdict == "alive":
+                    time.sleep(poll)
+                    continue
+                # ЗАХВАТ: снимаем только тот замок, который сейчас же и прочли.
+                # Перечитанная запись с другим pid или меткой означает, что
+                # замок уже перешёл другому — тогда его не трогаем.
+                if not _remove_if_same(path, info):
+                    time.sleep(poll)
+                    continue
+                self._trace("lock_taken_over", path=str(path), verdict=verdict,
+                            reason=why, holder=info.get("pid"))
+                continue
+            else:
+                token = secrets.token_hex(8)
+                payload = {"pid": _pid(), "ts": time.time(), "token": token,
+                           "category": category or "", "started": time.time()}
+                try:
+                    with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as fh:
+                        json.dump(payload, fh, ensure_ascii=False)
+                except Exception:
+                    _remove_if_same(path, payload)
+                    time.sleep(poll)
+                    continue
+                self._tokens[str(path)] = token
+                return True
+        return False
+
+    def _release_path(self, path: Path) -> None:
+        """Снять СВОЙ замок. Чужой не снимается никогда.
+
+        Свой — это либо тот, что взял ЭТОТ экземпляр (метка совпадает), либо тот,
+        чей pid — текущий процесс: замок мог взять другой экземпляр `Catalog`
+        того же процесса (так делают CLI и панель).
+        """
+        token = self._tokens.pop(str(path), "")
+        info = _read_lock(path)
+        if not info:
+            return
+        mine = bool(token and info.get("token") == token) or \
+            int(info.get("pid") or 0) == _pid()
+        if not mine:
+            return
         try:
-            if self.lock_path.exists():
-                self.lock_path.unlink()
+            path.unlink()
         except Exception:
             pass
+
+    def touch_lock(self, path: Path) -> bool:
+        """Обновить признак живости СВОЕГО замка. False — замок уже не наш."""
+        token = self._tokens.get(str(path))
+        info = _read_lock(path)
+        if not info:
+            return False
+        if not (bool(token and info.get("token") == token)
+                or int(info.get("pid") or 0) == _pid()):
+            return False
+        payload = dict(info)
+        payload["ts"] = time.time()
+        try:
+            util.write_json(path, payload)
+        except Exception:
+            return False
+        return True
+
+    def touch_corpus_lock(self, category: str) -> bool:
+        """Признак живости замка индексации корпуса (зовётся из индексатора)."""
+        return self.touch_lock(self.corpus_lock_path(category))
+
+    def lock_report(self) -> list[dict[str, Any]]:
+        """Состояние всех файлов-замков: кто держит, жив ли, сколько молчит.
+
+        Нужно периодической проверке: брошенные замки нельзя искать глазами в
+        каталоге, потому что имя файла — это имя корпуса, а не вердикт.
+        """
+        base = self.lock_path.parent
+        items: list[dict[str, Any]] = []
+        for path in sorted(list(base.glob("*.lock")) + list((base / "locks").glob("*.lock"))):
+            info = _read_lock(path)
+            verdict, why = lock_verdict(info, path)
+            heartbeat = float(info.get("ts") or 0.0)
+            items.append({
+                "path": str(path),
+                "file": path.name,
+                "kind": "registry" if path.parent == base else "corpus",
+                "category": str(info.get("category") or path.stem),
+                "pid": int(info.get("pid") or 0),
+                "alive": _pid_alive(int(info.get("pid") or 0)),
+                "idle_seconds": round(time.time() - heartbeat, 1) if heartbeat else None,
+                "verdict": verdict,
+                "reason": why,
+            })
+        return items
+
+    def clear_abandoned_locks(self, *, force: bool = False,
+                              older_than: float | None = None) -> list[dict[str, Any]]:
+        """Снять БРОШЕННЫЕ замки. Возвращает снятые с причиной.
+
+        Правило без `--force`: снимается только замок, чей держатель МЁРТВ, или
+        замок, который не читается вовсе (битый файл ничего не защищает).
+        Живой, но молчащий дольше `older_than` — это отдельное решение
+        человека: `--force` и причина в журнале, а не молчание.
+        """
+        removed: list[dict[str, Any]] = []
+        for item in self.lock_report():
+            path = Path(item["path"])
+            verdict = item["verdict"]
+            idle = item["idle_seconds"]
+            take = verdict in ("dead", "unknown")
+            if not take and force:
+                limit = older_than if older_than is not None else 0.0
+                take = idle is None or idle >= limit
+            if not take:
+                continue
+            info = _read_lock(path)
+            if not _remove_if_same(path, info):
+                continue
+            item = dict(item)
+            item["removed"] = True
+            item["forced"] = bool(force and verdict == "silent")
+            removed.append(item)
+            self._trace("lock_cleared", path=str(path), verdict=verdict,
+                        forced=bool(item["forced"]))
+        return removed
 
     # ---------------- операции с записями ----------------
 
@@ -267,6 +568,7 @@ class Catalog:
     def put(self, entry: Entry) -> None:
         data = self.load()
         data["entries"][entry.category] = entry.to_dict()
+        self._dirty.add(entry.category)
         self.save()
 
     def register(self, category: str, cfg: ProjectConfig, config_path: str | Path) -> Entry:
@@ -382,6 +684,28 @@ class Catalog:
                 entry.indexed_at = util.now_iso()
             entry.state = "indexed" if entry.rev_id else "registered"
         self.put(entry)
+        # ПОДТВЕРЖДЕНИЕ ЗАПИСИ ЧТЕНИЕМ С ДИСКА.
+        #
+        # Замер 06.11.2026: ревизии rev-1442/1443/1446/1448/1449 были
+        # закреплены в графе, а в реестре оставался прежний номер: запись
+        # уходила в ЧУЖОЙ каталог состояния (песочница с RAGRAF_CATALOG_DIR)
+        # и исчезала вместе с ним, а вызывающий код считал запись успешной.
+        # Сверка с собственным снимком в памяти этого не ловит: она всегда
+        # сходится. Поэтому перечитывается ФАЙЛ, и только из него берётся
+        # ответ «записано/не записано».
+        if rev_built and completed:
+            confirmed = ""
+            try:
+                fresh = Catalog(self.path).get(category)
+                confirmed = str(getattr(fresh, "rev_id", "") or "") if fresh else ""
+            except Exception as exc:  # noqa: BLE001 — непрочитанный файл и есть отказ
+                confirmed = f"<не прочитан: {type(exc).__name__}>"
+            self._trace("record_verify", category=category, rev_id=rev_id,
+                        confirmed=confirmed)
+            if confirmed != str(rev_id):
+                raise RuntimeError(
+                    "запись не подтвердилась чтением: в реестре "
+                    f"{confirmed or 'нет записи'}, ожидался {rev_id}")
         return entry
 
     def category_for_root(self, root: str | Path) -> str | None:
@@ -524,6 +848,77 @@ def _pid() -> int:
         return os.getpid()
     except Exception:
         return 0
+
+
+def _read_lock(path: Path) -> dict[str, Any]:
+    """Прочесть файл замка. Пустой словарь — файла нет или он битый."""
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    try:
+        out = {
+            "pid": int(raw.get("pid") or 0),
+            "ts": float(raw.get("ts") or 0.0),
+            "token": str(raw.get("token") or ""),
+            "category": str(raw.get("category") or ""),
+        }
+        if raw.get("started"):
+            out["started"] = float(raw.get("started"))
+    except (TypeError, ValueError):
+        return {}
+    return out
+
+
+def lock_verdict(info: dict[str, Any], path: Path) -> tuple[str, str]:
+    """Решение о чужом замке: `alive` | `silent` | `dead` | `unknown`.
+
+    Три состояния, а не два, потому что «живой» и «работающий» — разное.
+    Живой, но молчащий дольше `LOCK_HEARTBEAT_SEC` — это зависший процесс: его
+    замок ЗАХВАТЫВАЕТСЯ (иначе один зависший корпус простоит вечно), но факт
+    захвата пишется в трассировку, а периодическая проверка называет его отдельно.
+    """
+    if not path.exists():
+        return "dead", "файла нет"
+    if not info or not info.get("pid"):
+        # Битый или чужой формат: такой замок ничего не защищает, но и не
+        # доказывает, что владелец жив.
+        return "unknown", "файл не читается или в нём нет pid"
+    pid = int(info.get("pid") or 0)
+    if not _pid_alive(pid):
+        return "dead", f"процесс {pid} не жив"
+    heartbeat = float(info.get("ts") or 0.0)
+    idle = time.time() - heartbeat if heartbeat else None
+    if idle is not None and idle >= LOCK_HEARTBEAT_SEC:
+        return "silent", (f"процесс {pid} жив, но признак живости не обновлялся "
+                           f"{int(idle)} с (порог {int(LOCK_HEARTBEAT_SEC)} с)")
+    return "alive", f"держит процесс {pid}, молчит {0 if idle is None else int(idle)} с"
+
+
+def _remove_if_same(path: Path, info: dict[str, Any]) -> bool:
+    """Снять замок, только если на диске всё ещё ТА ЖЕ запись.
+
+    Между чтением и удалением замок мог перейти другому процессу; без сверки
+    удалялся бы уже чужой замок, и два прогона пошли бы параллельно.
+    """
+    current = _read_lock(path)
+    if info and current != info:
+        return False
+    if not info and not current:
+        # Файл есть, но не читается (битый или чужого формата): защищать ему
+        # нечего, поэтому он и снимается — иначе такая «защита» запрещала бы
+        # уборку сама собой.
+        if not path.exists():
+            return False
+    try:
+        path.unlink()
+        return True
+    except FileNotFoundError:
+        return True
+    except Exception:
+        return False
 
 
 def _pid_alive(pid: int) -> bool:

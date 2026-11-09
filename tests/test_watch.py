@@ -330,6 +330,36 @@ def main() -> int:
         check(got3, "после снятия блокировка снова берётся")
         cat_lock2.release_lock()
 
+        # ---------------- 7б. Замок ПО КОРПУСУ ----------------
+        # Ради этого замок и разделён: замер 06.11.2026 — зависшая индексация
+        # корпуса `default-workspace` держала общий `catalog.lock` часами, и
+        # любая операция любого другого корпуса получала таймаут. Инвариант:
+        # занятый корпус A не мешает корпусу B.
+        print("\n=== 7б. Индексация одного корпуса не блокирует другой ===")
+        holder = catalog_mod.Catalog()
+        holder.path = tmp / "catalog" / "catalog.json"
+        other = catalog_mod.Catalog()
+        other.path = tmp / "catalog" / "catalog.json"
+        got_a = holder.acquire_corpus_lock("corpusA", timeout_sec=0.1)
+        got_a2 = other.acquire_corpus_lock("corpusA", timeout_sec=0.3, poll=0.05)
+        got_b = other.acquire_corpus_lock("corpusB", timeout_sec=0.3, poll=0.05)
+        check(got_a and not got_a2 and got_b,
+              "тот же корпус ждёт, другой корпус не ждёт",
+              f"A={got_a} A2={got_a2} B={got_b}")
+        # Замок реестра при этом свободен: индексация его больше не занимает.
+        reg = catalog_mod.Catalog()
+        reg.path = tmp / "catalog" / "catalog.json"
+        got_reg = reg.acquire_lock(timeout_sec=0.3, poll=0.05)
+        check(bool(got_reg), "во время индексации замок записи реестра свободен",
+              f"registry_lock={got_reg}")
+        reg.release_lock()
+        other.release_corpus_lock("corpusB")
+        holder.release_corpus_lock("corpusA")
+        # Имя корпуса с недопустимыми для файла символами не ломает путь.
+        weird = holder.corpus_lock_path("13-vpn 199.195/../x")
+        check(weird.name.endswith(".lock") and "/" not in weird.name and "\\" not in weird.name,
+              "имя корпуса не выводит замок из каталога locks", str(weird.name))
+
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

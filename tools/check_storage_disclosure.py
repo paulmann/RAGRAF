@@ -47,7 +47,12 @@ def main() -> int:
         print("NOT-IMPLEMENTED: нет config/ragraf.yaml")
         return 1
     cfg = (getattr(config_mod, "load", None) or getattr(config_mod, "load_config"))(cfg_path)
-    facade = Facade(cfg)
+    # watch=False: ПРОВЕРКА НЕ МЕНЯЕТ ИНДЕКС. Замер 06.11.2026: прогон
+    # доктрины через эти два инструмента пересобирал ЖИВОЙ корпус (guard:fast,
+    # ~30 с) и добавлял ревизию — то есть проверка меняла то, на чём сама же
+    # проверяет. Свойство здесь — согласованность ответа с базой на ОДНОЙ
+    # ревизии, а не актуальность; актуальность сторожит отдельная проверка.
+    facade = Facade(cfg, watch=False)
     result = facade.op_index_status().get("result") or {}
     storage = result.get("storage") or {}
     problems: list[str] = []

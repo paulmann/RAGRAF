@@ -152,15 +152,16 @@ SBOM (`src/ragraf/signing.py`).
 **База безопасности не платная.** Исключение секретоносных путей, аудит доступа,
 хранилище секретов, вход в панель — в Community и остаются там.
 
-**Платные возможности: семь написаны, объявленных и не написанных нет** (этап
-И18, 26.10.2026). Написаны и включаются лицензией: уровень Pro — `quality-loop`,
-`shared-index` (общий индекс команды, `src/ragraf/shared_index.py`) и
-`secret-broker` (брокер секретов, `src/ragraf/broker.py`); уровень Enterprise —
-`sso`, `siem-export`, `offline-license`, `attestation`. Статус `shipped` в
-`edition_baseline.json`, файлы перечислены в `enterprise/inventory.toml`,
-поведение проверяют 27–29-я проверки чекера. Сняты в `roadmap` с причиной и
-датой: `connectors`, `fleet` — у них нет ни контракта запуска, ни парка
-установок, на которых поведение можно доказать.
+**Платные возможности: одиннадцать написаны, объявленных и не написанных нет**
+(этап И18, 26.10.2026; `contract-drift` добавлен 07.11.2026). Написаны и
+включаются лицензией: уровень Pro — `quality-loop`, `shared-index` (общий индекс
+команды, `src/ragraf/shared_index.py`), `secret-broker` (брокер секретов,
+`src/ragraf/broker.py`), `exclude-management`, `doc-ocr`, `doc-graph`; уровень
+Enterprise — `sso`, `siem-export`, `offline-license`, `attestation` и
+`contract-drift`. Статус `shipped` в `edition_baseline.json`, файлы перечислены
+в `enterprise/inventory.toml`, поведение проверяют 27–29-я проверки чекера. Сняты
+в `roadmap` с причиной и датой: `connectors`, `fleet` — у них нет ни контракта
+запуска, ни парка установок, на которых поведение можно доказать.
 
 Прежняя редакция этого раздела утверждала, что не написаны ВСЕ девять платных
 возможностей. Замер 25.10.2026 показал обратное по пяти: код есть, он собран,

@@ -24,7 +24,7 @@ REPO = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
 from ragraf.config import DEFAULT_EXCLUDES, load as load_config  # noqa: E402
-from ragraf import corpus  # noqa: E402
+from ragraf import corpus, util  # noqa: E402
 
 CORPORA = [
     ("z-batteryservice.yaml", "z.batteryservice.ru"),
@@ -184,6 +184,41 @@ if ragraf_cfg.exists():
     # Отрицательный контроль: без него проверка выше проходит и на пустом скане.
     check(any(p.endswith(".py") for p in paths) and len(paths) > 100,
           "корпус RAGRAF: скан не пуст — отрицательный контроль осмыслен",
+          f"файлов в скане: {len(paths)}")
+else:
+    print("  корпуса RAGRAF нет: проверка относится к этому проекту, пропущено")
+
+print()
+print("=" * 78)
+print("6. КОНФИГУРАЦИИ КОРПУСОВ НЕ ВХОДЯТ В КОРПУС")
+print("=" * 78)
+# Решение владельца 05.11.2026. `config/*.yaml` — настройки, а не код (тот же
+# довод, что у `catalog/**`). Замер: из 979 файлов корпуса 52 были
+# конфигурациями корпусов (5,3 %), а `ensure` пишет конфиг НОВОГО корпуса именно
+# сюда (`paths.config_dir()` = `REPO/config`) — то есть регистрация любого
+# проекта агентом сдвигала сумму ЭТОГО корпуса и вызывала пересборку. Именно так
+# 04.11.2026 файлов стало 979 вместо 978 (`config/default-workspace.yaml`).
+# После исключения — 927 файлов, и ни один файл вне `config/` из индекса не ушёл
+# (сверка списков файлов rev-1393 → rev-1394).
+if ragraf_cfg.exists():
+    cfg = load_config(ragraf_cfg)
+    check("**/config/*.yaml" in cfg.exclude,
+          "корпус RAGRAF: конфигурации корпусов исключены правилом",
+          f"правила нет среди {len(cfg.exclude)} правил")
+    scan = corpus.scan(cfg)
+    paths = [str(getattr(f, "path", f)).replace("\\", "/") for f in scan.files]
+    configs = [p for p in paths if "/config/" in f"/{p}"]
+    check(not configs, "корпус RAGRAF: ни одна конфигурация корпуса не проиндексирована",
+          f"попало: {configs[:3]}")
+    # Отрицательный контроль: правило не должно задевать код с похожим именем —
+    # иначе следующая правка расширит шаблон и выбросит рабочие файлы молча.
+    check(util.glob_match("config/ragraf.yaml", "**/config/*.yaml")
+          and not util.glob_match("src/ragraf/config.py", "**/config/*.yaml")
+          and not util.glob_match("config/sub/deep.yaml", "**/config/*.yaml"),
+          "корпус RAGRAF: шаблон ловит конфиг и не трогает код и подкаталоги",
+          "шаблон шире или уже заявленного")
+    check(len(paths) > 100 and any(p.startswith("src/ragraf/") for p in paths),
+          "корпус RAGRAF: скан после исключения не опустел",
           f"файлов в скане: {len(paths)}")
 else:
     print("  корпуса RAGRAF нет: проверка относится к этому проекту, пропущено")

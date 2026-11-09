@@ -7,11 +7,11 @@
 [![License](https://img.shields.io/badge/license-BUSL--1.1-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.13%2B-informational)](pyproject.toml)
 
-![RAGRAF — graph-and-vector knowledge base over source code for LLM agents: 74 MCP tools, verifiable facts as file:line, fully local](assets/social-preview.png)
+![RAGRAF — graph-and-vector knowledge base over source code for LLM agents: 83 MCP tools, verifiable facts as file:line, fully local](assets/social-preview.png)
 
 [**Quick start**](#first-steps) · [**Documentation**](#documentation) · [**Wiki**](https://github.com/paulmann/RAGRAF/wiki) · [**Changelog**](CHANGELOG.md) · [**Русская версия**](README.ru.md)
 
-> **Documentation status.** Every number below was measured on 03.11.2026 against version 0.5.6; the sizes of the RAGRAF index are compared with the active revision record by `Test-DocumentedNumbers`, and a figure that belongs to a past revision fails the release gate rather than passing as today's measurement.
+> **Documentation status.** Every number below was measured on 07.11.2026 against version 0.6.0; the sizes of the RAGRAF index are compared with the active revision record by `Test-DocumentedNumbers`, and a figure that belongs to a past revision fails the release gate rather than passing as today's measurement.
 
 An assistant that answers an agent's questions about a codebase — *where is it, who calls it, what breaks if I change it, how is it done elsewhere* — with verifiable facts (`file:line`) instead of blind `rg` and full-file reads. Python 3.13+, SQLite (graph + FTS5 + vectors in one place), tree-sitter, local embeddings without torch. An optional property-graph layer (Java + Joern) unlocks slicing; without it the product still works and says so.
 
@@ -58,7 +58,7 @@ One caveat is usually left out: **the 2–3× gain applies to localisation tasks
 
 ## Capabilities
 
-**67 operations** over a repository — a fixed set, with no graph query language:
+<!-- surface:ops_heading -->**76 operations** over a repository<!-- /surface:ops_heading --> — a fixed set, with no graph query language:
 
 | Operation | Answers the question |
 |---|---|
@@ -107,7 +107,7 @@ The same two levels as one answer are `doc_search_levels`: local facts and the g
 
 **Themes and the graph map.** `themes` returns the clusters of the document graph — deterministic, so the same layer always yields the same `theme_id` — with a citation address for every member and a summary over citations when a model was available; without a model the theme stays and `summary=null` names the reason. `global_overview` answers «what is in here at all»: documents, entities, relations, themes, summaries and the top themes with addresses. Both read the document graph and are refused without the `doc-graph` capability; the clusters themselves are built without a model (`ragraf docgraph themes`).
 
-The same operations are exposed as **74 MCP tools** (`ragraf_*`) — for attachment to an agent as a server — and through the CLI. One group of tools is the live database layer: `ragraf_db_schema`, `ragraf_db_table`, `ragraf_db_relations`, `ragraf_db_sample`, `ragraf_db_drift`, `ragraf_db_cross`. Two operations of the closed tier (enterprise edition) are declared as tools: `ragraf_license_offline` (offline licence: request, issue, acceptance, transfer) and `ragraf_attest_bundle` (delivery attestation: a signed evidence bundle and its verification). The quality loop (pro edition) is `ragraf_quality_suite` (an index check suite plus a run record), `ragraf_quality_diff` (divergences between two runs) and `ragraf_quality_prune` (thinning the run journal: a dry run by default, deletion only with confirmation and after a copy of the journal). Three operations of the shared index (also pro) are outside the MCP set: they manage publication and the network channel rather than index reads, and run as `python -m ragraf.shared_index` (see `docs/03_implementation/SHARED-INDEX.md`). The secret broker (pro) is represented by two tools — `ragraf_broker_issue` (lease: term, custodian, reason, one-time redemption) and `ragraf_broker_rotate` (plan state, scheduling, rotation with lease revocation); lease state lives in `catalog/broker.json`, and the storage schema does not change.
+The same operations are exposed as <!-- surface:tools_mcp -->**83 MCP tools** (`ragraf_*`)<!-- /surface:tools_mcp --> — for attachment to an agent as a server — and through the CLI. One group of tools is the live database layer: `ragraf_db_schema`, `ragraf_db_table`, `ragraf_db_relations`, `ragraf_db_sample`, `ragraf_db_drift`, `ragraf_db_cross`. One operation of the closed tier (enterprise edition) compares the declared design with the computed graph by FQN — `contract_drift` (modules, dependencies, contracts; every code-side divergence carries `file:line`) — and is declared as the tool `ragraf_contract_drift` (capability `contract-drift`). Two operations of the closed tier (enterprise edition) are declared as tools: `ragraf_license_offline` (offline licence: request, issue, acceptance, transfer) and `ragraf_attest_bundle` (delivery attestation: a signed evidence bundle and its verification). The quality loop (pro edition) is `ragraf_quality_suite` (an index check suite plus a run record), `ragraf_quality_diff` (divergences between two runs) and `ragraf_quality_prune` (thinning the run journal: a dry run by default, deletion only with confirmation and after a copy of the journal). Provenance (pro) adds two tools — `ragraf_doc_asof` (the edition in force on a date, with its validity interval and version id) and `ragraf_dependents` (what rested on a fact: the transitive walk, `outside_cap`, and the split between recomputing a derivation and a human decision). Three operations of the shared index (also pro) are outside the MCP set: they manage publication and the network channel rather than index reads, and run as `python -m ragraf.shared_index` (see `docs/03_implementation/SHARED-INDEX.md`). The secret broker (pro) is represented by two tools — `ragraf_broker_issue` (lease: term, custodian, reason, one-time redemption) and `ragraf_broker_rotate` (plan state, scheduling, rotation with lease revocation); lease state lives in `catalog/broker.json`, and the storage schema does not change.
 The twenty-fourth one is `use_project`: choosing a corpus when one server serves several projects. `context` answers which corpus is selected and on what grounds — without it, answers about a foreign project were indistinguishable from answers about your own.
 
 **Twenty-nine languages** are parsed into a syntax tree (graph nodes and edges). Sixteen have their node map described by a profile: PHP, Python, JavaScript, TypeScript, Java, C#, C, C++, Ruby, Lua, Go, Perl, bash, PowerShell, CSS, HTML. The remaining thirteen (Rust, Kotlin, Swift, Scala, Dart, R, F#, OCaml, Solidity, Fortran, MATLAB, Elm, Lisp) take it from the grammar's own tags query: their node names do not match the familiar ones, and a profile per language would mean inventing names. Every language is checked on a sample file — at least one symbol found (`tests/test_new_languages.py`).
@@ -187,7 +187,7 @@ mkdir -p python && tar xzf py.tar.gz -C python --strip-components=1
 # 2. Install and check:
 ./python/bin/python3 -m venv .venv
 . .venv/bin/activate
-pip install ragraf-0.5.6-py3-none-any.whl    # or: pip install -e .   (from a checkout)
+pip install ragraf-0.6.0-py3-none-any.whl    # or: pip install -e .   (from a checkout)
 ragraf --version
 
 # 3. First corpus without downloading the embedding model:
@@ -402,11 +402,11 @@ The project is built for concrete tasks, so architecture proposals get a hearing
 
 ## The project in numbers and the measured test bed
 
-Published figures (checked on 03.11.2026; index sizes from the active revision record): **67 operations** on the facade, **74 MCP tools**, **24** CLI subcommands, **29** tree-parsed languages and **40** text-attached ones (including `document`), **84** data formats in the registry (61 languages, 9 document families, 10 data kinds, 4 without a parser); the RAGRAF index itself — 1 037 files, 6 524 nodes and 90 844 edges (the snapshot is compared with the active revision record by `Test-DocumentedNumbers`: figures from a past revision raise a warning naming its `rev_id` and date, and at publication that is a refusal — `tools/release/gate_release.py`; the live figures come from `python tools/ragraf.py -p config/ragraf.yaml status`).
+Published figures (checked on 07.11.2026; index sizes from the active revision record): <!-- surface:figures -->**76 operations** on the facade, **83 MCP tools**, **26** CLI subcommands, **29** tree-parsed languages and **40** text-attached ones (including `document`), **84** data formats in the registry (61 languages, 9 document families, 10 data kinds, 4 without a parser)<!-- /surface:figures -->; the RAGRAF index itself — 984 files, 7 079 nodes and 99 267 edges (the snapshot is compared with the active revision record by `Test-DocumentedNumbers`: figures from a past revision raise a warning naming its `rev_id` and date, and at publication that is a refusal — `tools/release/gate_release.py`; the live figures come from `python tools/ragraf.py -p config/ragraf.yaml status`).
 
-**The test bed, depersonalised** (project names, paths and domains removed). The figures in this section are a **snapshot of 16.10.2026**, not the current state: at that moment the registry held **28 corpora, 25 indexed** — 10 with the CPG layer, 15 in `degraded` mode. For 16 of them the revision record was read the same day: **7 527 files, 94 528 symbols, 791 871 edges, 86 790 chunks**.
+**The test bed, depersonalised** (project names, paths and domains removed). The figures in this section are a **snapshot of 16.10.2026**, not the current state: at that moment the registry held **28 corpora, 25 indexed** — 10 with the CPG layer, 15 in `degraded` mode. For 16 of them the revision record was read the same day: **7 527 files, 94 528 symbols, 791 844 edges, 86 790 chunks**.
 
-The current registry size is kept apart from the snapshot on purpose: it changes with every attached project, and putting it into the table below would pass yesterday's measurement off as today's. It is named in its own line and compared with `catalog/catalog.json` — **by the registry on 03.11.2026: 45 corpora, 37 indexed**. A checker watches this figure: if it diverges from the registry, that is a finding, not a stale line.
+The current registry size is kept apart from the snapshot on purpose: it changes with every attached project, and putting it into the table below would pass yesterday's measurement off as today's. It is named in its own line and compared with `catalog/catalog.json` — **by the registry on 10.11.2026: 56 corpora, 43 indexed**. A checker watches this figure: if it diverges from the registry, that is a finding, not a stale line.
 
 | Corpus | Kind | Files | Symbols | Edges | Mode |
 |---|---|---|---|---|---|

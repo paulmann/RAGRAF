@@ -115,6 +115,10 @@ class CallRecord:
     # вопрос «кто и по какому праву», а не только «какой агент».
     token_id: str = ""
     token_label: str = ""
+    # X6: хеш ОПИСАНИЯ операции, которым был сделан вызов. Пусто — не наблюдался
+    # (операция без объявления, старая запись журнала): «не наблюдалось» и
+    # «совпало» — разные состояния, и первое не должно выглядеть вторым.
+    observed_hash: str = ""
 
     @property
     def est_tokens(self) -> int:
@@ -336,6 +340,13 @@ class Telemetry:
         # Шаг 0.6: измеренная экономия символов рядом с прежним флагом.
         # Догоняющая миграция: старые журналы не требуют удаления, у прежних
         # записей значение NULL и в сводке считается как «не измерялось».
+        # X6: наблюдаемый хеш описания. Колонка добавляется к существующим
+        # журналам; у старых записей NULL — «не наблюдалось», и это названо.
+        try:
+            self.control.conn.execute(
+                "ALTER TABLE usage_call ADD COLUMN observed_hash TEXT")
+        except Exception:
+            pass   # колонка уже есть: это норма при повторном запуске
         for column in ("stale", "missed", "replaces_chars"):
             try:
                 self.control.conn.execute(
@@ -435,8 +446,8 @@ class Telemetry:
                        found, fact_count, facts_with_span, result_chars, est_tokens,
                        replaces, replaces_chars, error, tool, agent, agent_kind, task,
                        arg_hash, arg_digest, token_id, token_label,
-                       stale, missed)
-                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                       stale, missed, observed_hash)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 self.session_id,
                 time.time(),
@@ -468,6 +479,7 @@ class Telemetry:
                 rec.token_label or self.token_label,
                 1 if rec.stale else 0,
                 1 if rec.missed else 0,
+                rec.observed_hash or None,
             ),
         )
 

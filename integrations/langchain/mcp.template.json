@@ -1,0 +1,22 @@
+{
+  "_comment": "Шаблон MCP-подключения RAGRAF для клиентов LangChain (langchain.mcp) и любых MCP-клиентов. Значений секретов нет: путь к корпусу и интерпретатор берутся из окружения.",
+  "mcpServers": {
+    "ragraf": {
+      "command": "${RAGRAF_PYTHON}",
+      "args": [
+        "integrations/langchain/ragraf_mcp.py",
+        "-p",
+        "${RAGRAF_CONFIG}",
+        "--agent",
+        "langchain",
+        "--agent-kind",
+        "external"
+      ],
+      "env": {
+        "RAGRAF_PROJECT": "${RAGRAF_CONFIG}",
+        "RAGRAF_AGENT": "langchain",
+        "RAGRAF_AGENT_KIND": "external"
+      }
+    }
+  }
+}

@@ -145,6 +145,10 @@ class JoernServer:
 
     joern_script: pathlib.Path
     workdir: pathlib.Path
+    # Временный каталог JVM. Задаётся вызывающим кодом (`cpg.joern_tmp`),
+    # потому что он обязан быть ASCII в ДЛИННОЙ форме: zstd-jni канонизирует
+    # `java.io.tmpdir`, и кириллица в пути даёт `Can't find dependent libraries`.
+    tmp_dir: pathlib.Path | None = None
     java_home: pathlib.Path | None = None
     heap: str = "8g"
     preferred_port: int = 9500
@@ -161,9 +165,14 @@ class JoernServer:
         # Тот же личный временный каталог, что у построения CPG (см.
         # `cpg.joern_tmp`): zstd-jni распаковывает нативную библиотеку при
         # старте КАЖДОЙ JVM, и общий `%TEMP%` уже отказывал в записи.
-        tmpdir = self.workdir / "tmp"
+        tmpdir = self.tmp_dir or (self.workdir / "tmp")
         tmpdir.mkdir(parents=True, exist_ok=True)
-        flag = f"-Djava.io.tmpdir={tmpdir}"
+        # Короткое имя 8.3: тот же временный каталог, но в форме, которую JVM
+        # прочитает. Без этого кириллица в пути даёт
+        # `WARNING: java.io.tmpdir directory does not exist` — JVM уходит во
+        # временный каталог системы, а тот на этой машине уже отказывал в записи
+        # (zstd-jni). См. `util.ascii_path`.
+        flag = f"-Djava.io.tmpdir={util.ascii_path(tmpdir)}"
         existing = env.get("JAVA_TOOL_OPTIONS", "").strip()
         env["JAVA_TOOL_OPTIONS"] = f"{existing} {flag}".strip()
         return env

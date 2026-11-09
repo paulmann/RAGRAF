@@ -50,6 +50,10 @@ pro_only = [
     # Хранилище (`vault.py`) остаётся в Community — платное здесь служба.
     "src/ragraf/broker.py",
     "tests/test_broker.py",
+    # Сверка замысла и кода по FQN (contract-drift): слой манифеста живёт
+    # отдельным модулем. Граница издания — отсутствие файла в Community.
+    "src/ragraf/contracts.py",
+    "tests/test_contracts.py",
 ]
 
 # Закрытые материалы поставки: документ, инвентарь прав, уровень Pro.

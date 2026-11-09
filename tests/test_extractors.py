@@ -244,6 +244,37 @@ with tempfile.TemporaryDirectory(prefix="ragraf-docs-") as tmp:
 
 print()
 print("=" * 78)
+print("ИНДЕКС СТРОК: НОМЕР СТРОКИ БЕЗ ПРОХОДА ПО ВСЕМУ ТЕКСТУ")
+print("=" * 78)
+# Замер 06.11.2026 (корпус default-workspace): `text.count("\\n", 0, pos)` на
+# каждом совпадении разбирал файл 17,6 МБ **477,4 с**, и ещё 8 670 вызовов в
+# `php_ast` — 52,8 с. Корпус не доходил до второй стадии часами, держал замок
+# реестра, и любая операция ждала его до таймаута. Проверяется две вещи:
+# совпадение семантики с прежним счётом и отсутствие старого приёма в коде.
+from ragraf import util as _util  # noqa: E402
+from ragraf.extract import css_html as _css_html, php_ast as _php_ast  # noqa: E402
+
+sample = "первая\nвторая\n\nтретья" + "x" * 50 + "\nпятая"
+index = _util.LineIndex(sample)
+mismatches = [pos for pos in range(len(sample) + 1)
+              if index.line_of(pos) != sample.count("\n", 0, pos) + 1]
+check(not mismatches,
+      "LineIndex совпадает с прежним счётом на каждом смещении",
+      f"расхождений {len(mismatches)}")
+check(_util.LineIndex("").line_of(0) == 1,
+      "пустой текст: первая строка, а не ноль")
+
+quadratic = []
+for module in (_css_html, _php_ast):
+    source = pathlib.Path(module.__file__).read_text(encoding="utf-8")
+    if 'count("\\n", 0, m.start())' in source:
+        quadratic.append(module.__name__)
+check(not quadratic,
+      "в извлекателях нет счёта строки по всему тексту на каждое совпадение",
+      f"остался в {quadratic}")
+
+print()
+print("=" * 78)
 print(f"ИТОГ: пройдено {PASS}, провалено {FAIL}")
 print("=" * 78)
 raise SystemExit(0 if FAIL == 0 else 1)

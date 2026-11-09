@@ -64,6 +64,33 @@ def _shell_cmd(cmd: list[str], script: Path) -> str | list[str]:
     return util.cmd_command(cmd)
 
 
+def _console_failure(text: str | None) -> str | None:
+    """Первая строка отказа консоли Joern или None, если ответ нормальный.
+
+    Сервер отвечает ТЕКСТОМ, и отказ приходит как обычная строка вывода:
+    `io.joern.console.ConsoleException: …`, `io.joern.console.Error: …`,
+    `java.lang.NullPointerException: …`. Проверять только префикс
+    «ОШИБКА ЗАПРОСА» недостаточно: именно из-за этого `build_via_server`
+    объявлял успех при отказе `importCode` (замер 06.11.2026).
+    """
+    if not text:
+        return None
+    for line in str(text).splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if line.startswith("ОШИБКА ЗАПРОСА"):
+            return line
+        if "io.joern.console." in line and (
+                "Exception" in line or "Error" in line):
+            return line
+        if line.startswith("java.lang.") and "Exception" in line:
+            return line
+        # Первая содержательная строка без ошибки — ответ полезен.
+        break
+    return None
+
+
 def _stderr_digest(text: str | None, head: int = 900, tail: int = 700) -> str | None:
     """Начало и конец вывода Joern — причина отказа и след.
 
@@ -249,7 +276,7 @@ def _extract_script_body(script_text: str, cpg_file: str = "",
 
 
 def joern_tmp(cfg: ProjectConfig) -> Path:
-    """Личный временный каталог JVM для Joern.
+    """Личный временный каталог JVM для Joern — с ASCII-путём в ОБЕИХ формах.
 
     Зачем не общий `%TEMP%`. Зависимость Joern `zstd-jni` распаковывает нативную
     библиотеку в `java.io.tmpdir` при КАЖДОМ запуске JVM и не убирает её за
@@ -262,10 +289,53 @@ def joern_tmp(cfg: ProjectConfig) -> Path:
     Каталог живёт внутри `.ragraf` (он исключён из индексации базовым списком),
     поэтому мусор не попадает ни в корпус, ни в общий temp, а права и
     содержимое предсказуемы.
+
+    ПОЧЕМУ НЕ ВСЕГДА ВНУТРИ `.ragraf`. Замер 06.11.2026 на корпусе с кириллицей
+    в пути: короткое имя 8.3 хватает для входного каталога и для `-o`, но НЕ
+    для `java.io.tmpdir` — `zstd-jni` канонизирует его обратно в длинное имя
+    и передаёт `System.load`, который на Windows кодирует путь ANSI-страницей:
+    `libzstd-jni-…dll: Can't find dependent libraries`, следом
+    `Unsupported OS/arch`. Поэтому берётся ПЕРВЫЙ кандидат, длинный путь
+    которого чистый ASCII; последний прибежище — каталог на системном диске.
     """
-    directory = cfg.ragraf_dir / "tmp" / "joern"
-    directory.mkdir(parents=True, exist_ok=True)
-    return directory
+    for candidate in _joern_tmp_candidates(cfg):
+        try:
+            real = str(Path(candidate).resolve())
+        except Exception:
+            continue
+        if real.isascii():
+            candidate.mkdir(parents=True, exist_ok=True)
+            return candidate
+    # Ни одного ASCII-кандидата нет: дальше строить CPG нельзя, и вызывающий
+    # код обязан назвать причину (см. `JoernRunner.build`).
+    fallback = _joern_tmp_candidates(cfg)[0]
+    fallback.mkdir(parents=True, exist_ok=True)
+    return fallback
+
+
+def _joern_tmp_candidates(cfg: ProjectConfig) -> list[Path]:
+    """Где может жить временный каталог JVM, в порядке предпочтения."""
+    tag = util.short_hash(str(cfg.root))
+    out = [cfg.ragraf_dir / "tmp" / "joern"]
+    try:
+        import tempfile
+
+        out.append(Path(tempfile.gettempdir()) / f"ragraf-joern-{tag}")
+    except Exception:
+        pass
+    drive = os.environ.get("SystemDrive", "").strip() or "C:"
+    if drive.endswith(":"):
+        drive += "\\"
+    out.append(Path(drive) / "ragraf-tmp" / f"joern-{tag}")
+    return out
+
+
+def joern_tmp_ascii(cfg: ProjectConfig) -> bool:
+    """True, если у временного каталога JVM чистый ASCII в длинной форме."""
+    try:
+        return str(joern_tmp(cfg).resolve()).isascii()
+    except Exception:
+        return False
 
 
 def prune_joern_tmp(cfg: ProjectConfig) -> int:
@@ -296,7 +366,7 @@ def java_env(cfg: ProjectConfig) -> dict[str, str]:
     # `JAVA_TOOL_OPTIONS` действует на КАЖДУЮ JVM, включая те, которые поднимают
     # bat-скрипты Joern (joern-parse, joern-export): их командную строку мы не
     # контролируем, а переменную они наследуют. Прежнее значение не затирается.
-    flag = f"-Djava.io.tmpdir={joern_tmp(cfg)}"
+    flag = f"-Djava.io.tmpdir={util.ascii_path(joern_tmp(cfg))}"
     existing = env.get("JAVA_TOOL_OPTIONS", "").strip()
     env["JAVA_TOOL_OPTIONS"] = f"{existing} {flag}".strip()
     return env
@@ -470,6 +540,17 @@ class JoernRunner:
             return CpgResult(False, None, 0.0, note=status.reason)
 
         self.workdir.mkdir(parents=True, exist_ok=True)
+        # Отказ по пути — ДО запуска JVM и с причиной. Без этой проверки
+        # не-ASCII путь в длинной форме даёт `UnsatisfiedLinkError` внутри
+        # zstd-jni, что читается как поломка инструмента, а не как
+        # «временный каталог JVM негоден для этого корпуса».
+        if os.name == "nt" and not joern_tmp_ascii(self.cfg):
+            return CpgResult(
+                False, None, round(time.perf_counter() - started, 3),
+                note=("путь корпуса содержит не-ASCII символы, а временный каталог "
+                      f"JVM не удалось сделать ASCII: {joern_tmp(self.cfg)} — "
+                      "CPG не строится, связи calls остаются от разбора деревом"),
+            )
         # Уборка распакованных библиотек прошлых запусков: они занимают место и
         # в общем временном каталоге уже привели к отказу распаковки.
         prune_joern_tmp(self.cfg)
@@ -510,9 +591,12 @@ class JoernRunner:
         cmd = [
             str(script),
             *([_heap_arg(self.cfg)] if _heap_arg(self.cfg) else []),
-            str(self.cfg.root),
+            # Путь к корню и к CPG — в форме, которую JVM прочитает без
+            # искажения: иначе кириллица в пути даёт `Illegal char <?>`
+            # (см. `util.ascii_path`, замер 06.11.2026).
+            util.ascii_path(self.cfg.root),
             "-o",
-            str(cpg_path),
+            util.ascii_path(cpg_path),
         ]
         # `--language` принимает только общий joern-parse: у специализированных
         # парсеров (php2cpg, pysrc2cpg) язык зашит в самом скрипте.
@@ -584,6 +668,14 @@ class JoernRunner:
             note=f"CPG построена: {size_mb} МБ",
             stderr_tail=tail,
         )
+
+    def corpus_language(self) -> str | None:
+        """Язык, которым Joern будет разбирать этот корпус (PHP/PYTHON/None).
+
+        Публичная обёртка над `_joern_language`: вызывающему коду (индексатору)
+        нужно решить, ПРИМЕНИМ ли серверный путь, до его запуска.
+        """
+        return self._joern_language()
 
     def _joern_language(self) -> str | None:
         """Какой язык подать в Joern: выбирается по составу корпуса.
@@ -719,11 +811,11 @@ class JoernRunner:
         cmd = [
             str(script),
             *([_heap_arg(self.cfg)] if _heap_arg(self.cfg) else []),
-            str(cpg_path),
+            util.ascii_path(cpg_path),
             "--repr=all",
             f"--format={fmt}",
             "-o",
-            str(out_dir),
+            util.ascii_path(out_dir),
         ]
         try:
             proc = subprocess.run(
@@ -808,7 +900,8 @@ class JoernRunner:
         if out_file.exists():
             out_file.unlink()
 
-        body = _extract_script_body(script_text, str(cpg_path), str(out_file))
+        body = _extract_script_body(script_text, util.ascii_path(cpg_path),
+                                    util.ascii_path(out_file))
         if body is None:
             # Скрипт не разобран: это не ошибка, а повод работать по-старому.
             return False, "СЕРВЕР НЕДОСТУПЕН: скрипт не разобран для серверного режима", None
@@ -822,7 +915,7 @@ class JoernRunner:
             # Граф загружается один раз: загрузка крупного графа занимает время.
             if self._loaded_rev != rev_id:
                 server.query(
-                    f'importCpg("{cpg_path.as_posix()}")',
+                    f'importCpg("{util.ascii_path(cpg_path).replace(chr(92), "/")}")',
                     timeout=min(timeout, 900),
                 )
                 self._loaded_rev = rev_id
@@ -871,6 +964,10 @@ class JoernRunner:
         server = JoernServer(
             joern_script=script,
             workdir=self.workdir,
+            # Не `workdir/tmp`: у корпуса с не-ASCII путём это ломает загрузку
+            # zstd-jni в серверной JVM (замер 06.11.2026). `joern_tmp` выбирает
+            # каталог с ASCII в длинной форме.
+            tmp_dir=joern_tmp(self.cfg),
             java_home=java_home,
             heap=str(self.cfg.index.joern_heap_gb or 8) + "g",
             preferred_port=int(self.cfg.index.joern_server_port or 9500),
@@ -961,6 +1058,17 @@ class JoernRunner:
         if out.startswith("ОШИБКА ЗАПРОСА"):
             return CpgResult(False, None, round(time.perf_counter() - started, 3),
                              note=out[:300])
+        # ОТКАЗ КОНСОЛИ — ТОЖЕ ОТКАЗ. Замер 06.11.2026 на корпусе с
+        # не-ASCII путём: `importCode` ответил `ConsoleException: Error creating
+        # project … CPG generator does not exist at …py2cpg.sh`, а метод
+        # объявил успех (проверялся только префикс «ОШИБКА ЗАПРОСА»). Следом
+        # запрос вызовов отвечал «No CPG loaded for project» и терял время
+        # второго прохода. Теперь причина названа, и вызывающий сразу идёт
+        # обычным путём.
+        failed = _console_failure(out)
+        if failed:
+            return CpgResult(False, None, round(time.perf_counter() - started, 3),
+                             note=f"сервер не построил граф: {failed}")
 
         self._built_via_server = True
         self._server_rev = rev_id
@@ -986,7 +1094,7 @@ class JoernRunner:
         if out_file.exists():
             out_file.unlink()
 
-        body = _extract_script_body(QUERY_CALLS, "unused", str(out_file))
+        body = _extract_script_body(QUERY_CALLS, "unused", util.ascii_path(out_file))
         if body is None:
             return False, [], "скрипт запроса не разобран"
 
@@ -998,6 +1106,11 @@ class JoernRunner:
 
         if out.startswith("ОШИБКА ЗАПРОСА"):
             return False, [], out[:300]
+        failed = _console_failure(out)
+        if failed:
+            # Причина сервера важнее нашей догадки о файле: «No CPG loaded
+            # for project …» объясняет, почему результата нет.
+            return False, [], failed[:300]
         if not out_file.exists():
             return False, [], "сервер не создал файл результата"
         try:
@@ -1013,7 +1126,7 @@ class JoernRunner:
         out_file = self.workdir / f"server_methods_{rev_id}.json"
         if out_file.exists():
             out_file.unlink()
-        body = _extract_script_body(QUERY_METHODS, "unused", str(out_file))
+        body = _extract_script_body(QUERY_METHODS, "unused", util.ascii_path(out_file))
         if body is None:
             return False, [], "скрипт запроса не разобран"
         try:
@@ -1053,11 +1166,11 @@ class JoernRunner:
         cmd = [
             str(script),
             "--script",
-            str(script_file),
+            util.ascii_path(script_file),
             "--param",
-            f"cpgFile={cpg_path}",
+            f"cpgFile={util.ascii_path(cpg_path)}",
             "--param",
-            f"outFile={out_file}",
+            f"outFile={util.ascii_path(out_file)}",
         ]
         try:
             # ВАЖНО: вызов идёт через _shell_cmd. Без него .bat-скрипт Joern

@@ -12,7 +12,7 @@
 [![License](https://img.shields.io/badge/license-BUSL--1.1-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.13%2B-informational)](pyproject.toml)
 
-![RAGRAF — graph- und vektorbasierte Wissensdatenbank über Quellcode für LLM-Agenten: 74 MCP-Werkzeuge, überprüfbare Fakten mit der Angabe Datei:Zeile, vollständig lokal](assets/social-preview.png)
+![RAGRAF — graph- und vektorbasierte Wissensdatenbank über Quellcode für LLM-Agenten: 83 MCP-Werkzeuge, überprüfbare Fakten mit der Angabe Datei:Zeile, vollständig lokal](assets/social-preview.png)
 
 [**Schnellstart**](#erste-schritte) · [**Dokumentation**](#dokumentation) · [**Wiki**](https://github.com/paulmann/RAGRAF/wiki) · [**Änderungen**](CHANGELOG.md) · [**English version**](README.md)
 
@@ -63,7 +63,7 @@ Ein wichtiger Vorbehalt, der meist weggelassen wird: **der Gewinn um den Faktor 
 
 ## Funktionen
 
-**67 Operationen** auf dem Repository — ein fester Satz, ohne Abfragesprache für den Graphen:
+<!-- surface:ops_heading -->**76 Operationen** auf dem Repository<!-- /surface:ops_heading --> — ein fester Satz, ohne Abfragesprache für den Graphen:
 
 | Operation | Beantwortet die Frage |
 |---|---|
@@ -122,7 +122,7 @@ entartet zur reinen Lexik, statt vorzugeben, es sei nichts gefunden worden.
 
 **Themen und die Karte des Graphen.** `themes` liefert die Cluster des Dokumentgraphen — deterministisch, derselbe Bestand ergibt immer dieselben `theme_id` — mit einer Adresse für jeden Teilnehmer und, wenn ein Modell verfügbar war, einer Zusammenfassung über Zitate; ohne Modell bleibt das Thema, und `summary=null` nennt die Ursache. `global_overview` beantwortet «was überhaupt vorhanden ist»: Dokumente, Entitäten, Beziehungen, Themen, Zusammenfassungen und die wichtigsten Themen mit Adressen. Beide lesen den Dokumentgraphen und werden ohne die Möglichkeit `doc-graph` abgelehnt; die Cluster selbst entstehen ohne Modell (`ragraf docgraph themes`).
 
-Dieselben Operationen sind als **74 MCP-Werkzeuge** (`ragraf_*`) verfügbar — zum Anbinden an einen Agenten als Server — und über die CLI. Eine eigene Gruppe von Werkzeugen ist die lebende Schicht der Datenbanken: `ragraf_db_schema`, `ragraf_db_table`, `ragraf_db_relations`, `ragraf_db_sample`, `ragraf_db_drift`, `ragraf_db_cross`. Zwei Operationen des geschlossenen Kreises (Stufe enterprise) sind als Werkzeuge `ragraf_license_offline` (Offline-Lizenz: Antrag, Ausstellung, Abnahme, Übertragung) und `ragraf_attest_bundle` (Attestierung der Lieferung: ein signierter Satz von Belegen und seine Prüfung) deklariert. Die Qualitätsschleife (Stufe pro) — `ragraf_quality_suite` (Satz von Indexprüfungen und Aufzeichnung des Laufs), `ragraf_quality_diff` (Abweichungen zwischen zwei Läufen) und `ragraf_quality_prune` (Ausdünnen des Journals der Läufe: standardmäßig ein Probelauf, gelöscht wird nur mit Bestätigung und nach einer Kopie des Journals). Drei Operationen des gemeinsamen Index (ebenfalls pro) gehören nicht zum MCP-Satz: sie steuern Veröffentlichung und Netzkern, nicht das Lesen des Index, und laufen als Prozess `python -m ragraf.shared_index` (siehe `docs/03_implementation/SHARED-INDEX.md`). Der Geheimnis-Broker (pro) ist durch zwei Werkzeuge vertreten — `ragraf_broker_issue` (Leihe: Frist, Verwalter, Grund, einmalige Einlösung) und `ragraf_broker_rotate` (Zustand des Plans, Planung, Wechsel des Werts mit Widerruf der Leihen); der Zustand der Leihen liegt in `catalog/broker.json`, das Schema der Speicher ändert sich nicht.
+Dieselben Operationen sind als <!-- surface:tools_mcp -->**83 MCP-Werkzeuge** (`ragraf_*`)<!-- /surface:tools_mcp --> verfügbar — zum Anbinden an einen Agenten als Server — und über die CLI. Eine eigene Gruppe von Werkzeugen ist die lebende Schicht der Datenbanken: `ragraf_db_schema`, `ragraf_db_table`, `ragraf_db_relations`, `ragraf_db_sample`, `ragraf_db_drift`, `ragraf_db_cross`. Eine Operation des geschlossenen Kreises (Stufe enterprise) vergleicht den erklärten Entwurf über FQN mit dem berechneten Graphen: `contract_drift` (Module, Abhängigkeiten, Verträge; jede code-seitige Abweichung trägt `Datei:Zeile`) — und ist als Werkzeug `ragraf_contract_drift` deklariert (Möglichkeit `contract-drift`). Zwei Operationen des geschlossenen Kreises (Stufe enterprise) sind als Werkzeuge `ragraf_license_offline` (Offline-Lizenz: Antrag, Ausstellung, Abnahme, Übertragung) und `ragraf_attest_bundle` (Attestierung der Lieferung: ein signierter Satz von Belegen und seine Prüfung) deklariert. Die Qualitätsschleife (Stufe pro) — `ragraf_quality_suite` (Satz von Indexprüfungen und Aufzeichnung des Laufs), `ragraf_quality_diff` (Abweichungen zwischen zwei Läufen) und `ragraf_quality_prune` (Ausdünnen des Journals der Läufe: standardmäßig ein Probelauf, gelöscht wird nur mit Bestätigung und nach einer Kopie des Journals). Die Provenienz (pro) fügt zwei Werkzeuge hinzu — `ragraf_doc_asof` (die am Datum geltende Fassung mit Gültigkeitsintervall und Versionskennung) und `ragraf_dependents` (was auf einem Fakt beruhte: transitiver Durchlauf, `outside_cap` und die Trennung zwischen „Ableitung neu berechnen“ und „menschliche Entscheidung“). Drei Operationen des gemeinsamen Index (ebenfalls pro) gehören nicht zum MCP-Satz: sie steuern Veröffentlichung und Netzkern, nicht das Lesen des Index, und laufen als Prozess `python -m ragraf.shared_index` (siehe `docs/03_implementation/SHARED-INDEX.md`). Der Geheimnis-Broker (pro) ist durch zwei Werkzeuge vertreten — `ragraf_broker_issue` (Leihe: Frist, Verwalter, Grund, einmalige Einlösung) und `ragraf_broker_rotate` (Zustand des Plans, Planung, Wechsel des Werts mit Widerruf der Leihen); der Zustand der Leihen liegt in `catalog/broker.json`, das Schema der Speicher ändert sich nicht.
 Das vierundzwanzigste ist `use_project`: die Wahl des Korpus, wenn ein Server mehrere Projekte bedient. `context` antwortet, welcher Korpus gewählt ist und auf welcher Grundlage: ohne es waren Antworten über ein fremdes Projekt nicht von Antworten über das eigene zu unterscheiden.
 
 **Neunundzwanzig Sprachen** werden über einen Syntaxbaum zerlegt (Knoten und Kanten des Graphen). Bei sechzehn ist die Karte der Knoten durch ein Profil beschrieben: PHP, Python, JavaScript, TypeScript, Java, C#, C, C++, Ruby, Lua, Go, Perl, bash, PowerShell, CSS, HTML. Bei dreizehn (Rust, Kotlin, Swift, Scala, Dart, R, F#, OCaml, Solidity, Fortran, MATLAB, Elm, Lisp) stammt sie aus der tags-Abfrage der Grammatik selbst: die Knotennamen dieser Sprachen stimmen mit den gewohnten nicht überein, und ein Profil für jede Einzelne hieße, Namen zu erfinden. Jede Sprache wird an einer Probendatei geprüft — mindestens ein gefundenes Symbol (`tests/test_new_languages.py`).
@@ -191,7 +191,7 @@ pwsh -File scripts/install.ps1 -WithTruststore
 
 ### Andere Plattformen
 
-Gemessen am 01.11.2026 auf einem frischen Debian 12 (ohne sudo, System-Python 3.11); vollständiges Protokoll mit Zahlen in `docs/03_implementation/INSTALL-FROM-SCRATCH.md`.
+Gemessen am 03.11.2026 auf einem frischen Debian 12 (ohne sudo, System-Python 3.11); vollständiges Protokoll mit Zahlen in `docs/03_implementation/INSTALL-FROM-SCRATCH.md`.
 
 ```bash
 # 1. Python 3.13 if the system has an older one (no root needed):
@@ -201,7 +201,7 @@ mkdir -p python && tar xzf py.tar.gz -C python --strip-components=1
 # 2. Install and check:
 ./python/bin/python3 -m venv .venv
 . .venv/bin/activate
-pip install ragraf-0.5.6-py3-none-any.whl    # or: pip install -e .   (from a checkout)
+pip install ragraf-0.6.0-py3-none-any.whl    # or: pip install -e .   (from a checkout)
 ragraf --version
 
 # 3. First corpus without downloading the embedding model:
@@ -222,7 +222,7 @@ Das Produkt läuft auch ohne Installation des Pakets, über einen Wrapper, der `
 python tools/ragraf.py --version
 ```
 
-> `scripts/install.ps1` ist unter Windows geprüft (PowerShell 7.6, Python 3.14.7) und nutzt jetzt dasselbe Home `~/.ragraf`. Der `pip`-Weg unter Linux ist seit dem 01.11.2026 geprüft; macOS wurde nicht gemessen (kein Mac im Labor).
+> `scripts/install.ps1` ist unter Windows geprüft (PowerShell 7.6, Python 3.14.7) und nutzt jetzt dasselbe Home `~/.ragraf`. Der `pip`-Weg unter Linux ist seit dem 03.11.2026 geprüft; macOS wurde nicht gemessen (kein Mac im Labor).
 ### Externe Schicht: Java und Joern (optional)
 
 Für den interprozeduralen Graphen (Operation `slice`) braucht man JDK 21 und Joern. Ohne sie arbeitet das Produkt: der Index wird gebaut, Suche und Struktur sind verfügbar, `slice` lehnt mit einem Grund ab.
@@ -406,11 +406,11 @@ Das Projekt wird für konkrete Aufgaben entwickelt, deshalb werden Vorschläge z
 
 ## Das Projekt in Zahlen und der gemessene Prüfstand
 
-Die veröffentlichten Zahlen (abgeglichen am 01.11.2026; die Größen des Index — nach dem Eintrag der aktiven Revision): **67 Operationen** der Fassade, **74 MCP-Werkzeuge**, **22** CLI-Unterbefehle, **29** Sprachen über den Syntaxbaum und **40** als Text (einschließlich `document`), **84** Datenformate im Register (61 Sprachen, 9 Familien von Dokumenten, 10 Arten von Daten, 4 ohne Parser); der eigene Index von RAGRAF — 1 037 Dateien, 6 524 Knoten und 90 844 Kanten (der Stand wird mit dem aktiven Revisionseintrag durch die Prüfung `Test-DocumentedNumbers` abgeglichen — Zahlen einer vergangenen Revision ergeben eine Warnung mit ihrer `rev_id` und ihrem Datum, bei der Veröffentlichung ist das eine Ablehnung: `tools/release/gate_release.py`; die geltenden Zahlen — `python tools/ragraf.py -p config/ragraf.yaml status`).
+Die veröffentlichten Zahlen (abgeglichen am 07.11.2026; die Größen des Index — nach dem Eintrag der aktiven Revision): <!-- surface:figures -->**76 Operationen** der Fassade, **83 MCP-Werkzeuge**, **26** CLI-Unterbefehle, **29** Sprachen über den Syntaxbaum und **40** als Text (einschließlich `document`), **84** Datenformate im Register (61 Sprachen, 9 Familien von Dokumenten, 10 Arten von Daten, 4 ohne Parser)<!-- /surface:figures -->; der eigene Index von RAGRAF — 984 Dateien, 7 079 Knoten und 99 267 Kanten (der Stand wird mit dem aktiven Revisionseintrag durch die Prüfung `Test-DocumentedNumbers` abgeglichen — Zahlen einer vergangenen Revision ergeben eine Warnung mit ihrer `rev_id` und ihrem Datum, bei der Veröffentlichung ist das eine Ablehnung: `tools/release/gate_release.py`; die geltenden Zahlen — `python tools/ragraf.py -p config/ragraf.yaml status`).
 
-**Der Prüfstand, entpersonalisiert** (Namen der Projekte, Pfade und Domänen sind verborgen). Die Zahlen dieses Abschnitts sind eine **Momentaufnahme vom 16.10.2026**, nicht der heutige Zustand: zu jenem Zeitpunkt standen **28 Korpora im Register, 25 indiziert** — 10 mit der CPG-Schicht, 15 im Modus `degraded`. Bei 16 von ihnen wurde der Revisionseintrag am selben Tag gelesen: **7 527 Dateien, 94 528 Symbole, 791 871 Kanten, 86 790 Chunks**.
+**Der Prüfstand, entpersonalisiert** (Namen der Projekte, Pfade und Domänen sind verborgen). Die Zahlen dieses Abschnitts sind eine **Momentaufnahme vom 16.10.2026**, nicht der heutige Zustand: zu jenem Zeitpunkt standen **28 Korpora im Register, 25 indiziert** — 10 mit der CPG-Schicht, 15 im Modus `degraded`. Bei 16 von ihnen wurde der Revisionseintrag am selben Tag gelesen: **7 527 Dateien, 94 528 Symbole, 791 844 Kanten, 86 790 Chunks**.
 
-Die aktuelle Größe des Registers ist mit Absicht von der Momentaufnahme getrennt: sie ändert sich mit jeder angebundenen Entwicklung, und sie in die Tabelle unten einzusetzen hieße, die gestrige Messung als heutige auszugeben. Sie steht in einer eigenen Zeile und wird mit `catalog/catalog.json` abgeglichen — **nach dem Register am 03.11.2026: 45 Korpora, 37 indiziert**. Diese Zahl bewacht eine Prüfung des Checkers: weicht sie vom Register ab, ist das ein Befund und keine veraltete Zeile.
+Die aktuelle Größe des Registers ist mit Absicht von der Momentaufnahme getrennt: sie ändert sich mit jeder angebundenen Entwicklung, und sie in die Tabelle unten einzusetzen hieße, die gestrige Messung als heutige auszugeben. Sie steht in einer eigenen Zeile und wird mit `catalog/catalog.json` abgeglichen — **nach dem Register am 10.11.2026: 56 Korpora, 43 indiziert**. Diese Zahl bewacht eine Prüfung des Checkers: weicht sie vom Register ab, ist das ein Befund und keine veraltete Zeile.
 
 | Korpus | Typ | Dateien | Symbole | Kanten | Modus |
 |---|---|---|---|---|---|

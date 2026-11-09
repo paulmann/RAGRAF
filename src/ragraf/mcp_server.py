@@ -131,6 +131,69 @@ TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "ragraf_doc_asof",
+        "description": (
+            "Поиск по документам, действительным на дату: в каждом факте — "
+            "интервал действия (valid_from/valid_to), редакция (version_id) и "
+            "признак замены (superseded_by). Отличается от ragraf_doc_search "
+            "тем, что отвечает по редакции на дату, а не по последней загруженной."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "запрос по содержанию документа"},
+                "date": {"type": "string",
+                         "description": "дата действия: ГГГГ-ММ-ДД или ДД.ММ.ГГГГ"},
+                "limit": {"type": "integer", "default": 20},
+                "kind": {"type": "string",
+                         "description": "вид узла: section, paragraph, table, record, slide, sheet"},
+                "with_text": {"type": "boolean", "default": True},
+                "text_width": {"type": "integer", "default": 240},
+            },
+            "required": ["query", "date"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "ragraf_dependents",
+        "description": (
+            "Что опиралось на факт: прямые и транзитивные зависимости по рёбрам "
+            "деривации (до depth шагов). У каждой строки — адрес, провенанс "
+            "(stated/derived), расстояние и действие: «пересчитать» или «решение человека»."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "fact": {"type": "string", "description": "идентификатор факта"},
+                "locator": {"type": "string", "description": "адрес факта: path:строки"},
+                "depth": {"type": "integer", "default": 3},
+                "include_stated": {"type": "boolean", "default": True},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "ragraf_stale_cascade",
+        "description": (
+            "Что пересчитать после изменения входов: обход рёбер деривации "
+            "от изменённых фактов до depth шагов, с адресами и расстоянием. "
+            "По умолчанию только отчёт; apply ставит пометки, clear их "
+            "закрывает. За пределом глубины факты считаются в outside_cap."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "changed": {"type": "string",
+                            "description": "факты или адреса через запятую"},
+                "depth": {"type": "integer", "default": 3},
+                "apply": {"type": "boolean", "default": False},
+                "clear": {"type": "boolean", "default": False},
+                "limit": {"type": "integer", "default": 50},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
         "name": "ragraf_entity_neighbors",
         "description": (
             "Соседи сущности по документному графу: кто связан и через какую "
@@ -546,6 +609,71 @@ TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "ragraf_contract_pin_status",
+        "description": (
+            "ПИННИНГ ПОДПИСИ ОПЕРАЦИЙ: что подтверждено человеком, что разошлось "
+            "с текущим описанием. Хеш считается по каноническому описанию "
+            "операции (имя, параметры с умолчаниями, ключи ответа) через "
+            "surface — второго описания поверхности нет. В ответе: пины с "
+            "возрастом, расхождения (оба хеша и возраст пина), неподтверждённые "
+            "операции, устаревшие пины и события журнала (pin_mismatch — "
+            "высокий уровень, pin_break — вызов, которого уже нет в описании). "
+            "Ничего не меняет. Возможность издания enterprise (contract-pin)."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "limit": {"type": "integer", "default": 50,
+                          "description": "сколько последних событий журнала показать"},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "ragraf_contract_pin_approve",
+        "description": (
+            "ПОДТВЕРДИТЬ ТЕКУЩЕЕ ОПИСАНИЕ операции (или всех операций) — пин "
+            "ставится на релиз, а не на каждый запуск. Автор обязателен: пин без "
+            "автора неотличим от самоподписи. Автоматического подтверждения нет: "
+            "при расхождении RAGRAF сообщает, а не «чинит» пин сам. Возможность "
+            "издания enterprise (contract-pin)."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "op": {"type": "string", "description": "какую операцию подтвердить"},
+                "everything": {"type": "boolean", "default": False,
+                               "description": "подтвердить описание всех операций"},
+                "by": {"type": "string", "description": "кто подтверждает (обязательно)"},
+                "note": {"type": "string", "description": "пометка к пину"},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "ragraf_preflight",
+        "description": (
+            "ЦЕНА И ГРАНИЦЫ ДО СТАРТА: осмотр каталога ДО создания индекса и "
+            "ничего не создаёт. Отвечает: распределение по расширениям и число "
+            "файлов, доля сгенерированного кода, найденные миграции, ожидаемое "
+            "время разбора (замер на выборке тем же парсером с названной "
+            "погрешностью), слепые зоны динамики по языкам с адресами "
+            "файл:строка (call_user_func, $obj->$method, getattr, eval, "
+            "reflection), готовность векторов и Joern, эффект исключений. "
+            "Возможность издания pro (preflight)."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "root": {"type": "string",
+                         "description": "каталог для осмотра (по умолчанию корень корпуса)"},
+                "sample": {"type": "integer", "default": 50,
+                           "description": "сколько файлов разобрать для замера времени"},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
         "name": "ragraf_quality_suite",
         "description": (
             "Набор проверок индекса: чанки сверх предела размера, обрезанные "
@@ -579,6 +707,58 @@ TOOLS: list[dict[str, Any]] = [
             "properties": {
                 "from_run": {"type": "integer", "description": "номер прогона «от»"},
                 "to_run": {"type": "integer", "description": "номер прогона «до»"},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "ragraf_quality_pair",
+        "description": (
+            "ПАРНЫЙ ПРОГОН ПО ФИКСИРОВАННЫМ КЕЙСАМ: два прогона качества "
+            "сравниваются по каждому кейсу (better/worse/not_sure). Кейс — "
+            "ожидаемые пути, обязательные шаги и запрет обхода (файл "
+            "quality-cases.yaml плюс задачи bench/tasks.yaml). Правило "
+            "блокирующее: если хотя бы один ранее проходивший кейс упал, общий "
+            "вердикт не может быть «не хуже» — находка regressions. Одинаковое "
+            "состояние (та же ревизия и отпечаток) даёт все not_sure честно. "
+            "От quality_diff отличается предметом: тот сравнивает показатели "
+            "индекса и между ревизиями вердикт не выносит. Возможность издания "
+            "pro (quality-loop)."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "from_run": {"type": "integer", "description": "номер прогона «от»"},
+                "to_run": {"type": "integer", "description": "номер прогона «до»"},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "ragraf_quality_trace",
+        "description": (
+            "ТРАССА ПОДТВЕРЖДЁННОГО СБОЯ: записать сбой кейса целиком "
+            "(объявление, шаги сеанса, решения гейта, ревизия индекса), "
+            "показать сохранённые и повторить трассу. Повтор называет "
+            "вердикт: still_failing, fixed (только на той же ревизии), "
+            "other_rev, not_reproducible. Пройденный кейс не пишется.\n\n"
+            "Тип: действие с журналом. Меняет: только журнал сбоев "
+            "(таблица quality_trace), индекс и документы не трогает.\n"
+            "Не меняет: граф, чанки, базу.\n"
+            "Возвращает: trace_id, digest, вердикт повтора и причину.\n"
+            "Сначала: quality_suite --session, затем save с тем же session."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["save", "list", "replay"],
+                           "default": "list"},
+                "case_id": {"type": "string",
+                            "description": "кейс, чей сбой записывается"},
+                "trace_id": {"type": "integer", "default": 0},
+                "session": {"type": "string",
+                            "description": "сеанс, чьи шаги попадут в трассу"},
+                "label": {"type": "string", "default": ""},
             },
             "additionalProperties": False,
         },
@@ -1495,6 +1675,42 @@ TOOLS: list[dict[str, Any]] = [
             "additionalProperties": False,
         },
     },
+    {
+        "name": "ragraf_contract_drift",
+        "description": (
+            "СВЕРКА ЗАМЫСЛА И КОДА ПО FQN: внешний YAML-манифест проекта "
+            "(модули, зависимости, контракты с bind по FQN) сверяется с "
+            "вычисленным графом. Находки: module_without_code, "
+            "code_without_module (только при strict_code_coverage), unbound_fqn "
+            "(метод переименован или удалён), stale_crosslink, "
+            "contract_violation (ожидаемая сигнатура или ожидаемые вызовы не "
+            "совпали с фактом) и missing_verification. У каждого code-side "
+            "расхождения адрес файл:строка, у расхождения на стороне манифеста — "
+            "строка манифеста. Манифест пишет сам проект: операция его только "
+            "читает и не выдумывает. Нет манифеста — found=false с причиной, это "
+            "не ошибка. Сверка статическая: значения во время выполнения не "
+            "покрыты, а при capability=degraded проверка вызовов помечена как "
+            "неполная."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "manifest_path": {
+                    "type": "string",
+                    "description": "путь к YAML-манифесту (по умолчанию "
+                                   "contracts.yaml в корне корпуса)",
+                },
+                "source": {
+                    "type": "string",
+                    "enum": ["manifest", "anchors", "both"],
+                    "default": "manifest",
+                    "description": "откуда берётся замысел: только манифест, "
+                                   "только якоря в комментариях или оба (манифест главнее)",
+                },
+            },
+            "additionalProperties": False,
+        },
+    },
     # --- хранилище секретов: значения под правом и с аудитом ---
     {
         "name": "ragraf_secret_list",
@@ -1685,6 +1901,22 @@ _TOOL_META: dict[str, dict[str, Any]] = {
         "title": "Поиск по документам с адресом и провенансом",
         "readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
     },
+    "ragraf_doc_asof": {
+        "title": "Поиск по документам, действительным на дату, с интервалом и редакцией",
+        "readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
+        "openWorldHint": False,
+    },
+    "ragraf_dependents": {
+        "title": "Зависимые факты: что опиралось на утверждение и что пересчитать",
+        "readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
+        "openWorldHint": False,
+    },
+    "ragraf_stale_cascade": {
+        "title": "Что пересчитать после изменения входов: каскад по рёбрам "
+                 "факт → факт",
+        "readOnlyHint": False, "destructiveHint": False,
+        "idempotentHint": True, "openWorldHint": False,
+    },
     "ragraf_entity_neighbors": {
         "title": "Соседи сущности по документному графу, с адресами цитат",
         "readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
@@ -1775,6 +2007,18 @@ _TOOL_META: dict[str, dict[str, Any]] = {
         "readOnlyHint": False, "destructiveHint": True, "idempotentHint": False,
         "openWorldHint": False,
     },
+    "ragraf_contract_pin_status": {
+        "title": "Пиннинг подписи операций: что подтверждено и что разошлось",
+        "readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
+    },
+    "ragraf_contract_pin_approve": {
+        "title": "Подтвердить текущее описание операции (пин на релиз)",
+        "readOnlyHint": False, "destructiveHint": False, "idempotentHint": True,
+    },
+    "ragraf_preflight": {
+        "title": "Цена и границы до старта: время, слепые зоны, готовность",
+        "readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
+    },
     "ragraf_quality_suite": {
         "title": "Набор проверок индекса и запись прогона",
         "readOnlyHint": False, "destructiveHint": False, "idempotentHint": True,
@@ -1782,6 +2026,15 @@ _TOOL_META: dict[str, dict[str, Any]] = {
     "ragraf_quality_diff": {
         "title": "Расхождения между двумя прогонами качества",
         "readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
+    },
+    "ragraf_quality_pair": {
+        "title": "Парный прогон по фиксированным кейсам (регрессия видна сразу)",
+        "readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
+    },
+    "ragraf_quality_trace": {
+        "title": "Трасса подтверждённого сбоя: запись, список и повтор",
+        "readOnlyHint": False, "destructiveHint": False,
+        "idempotentHint": True, "openWorldHint": False,
     },
     "ragraf_quality_prune": {
         "title": "Прореживание журнала прогонов качества (с копией и подтверждением)",
@@ -1918,6 +2171,11 @@ _TOOL_META: dict[str, dict[str, Any]] = {
     },
     "ragraf_db_cross": {
         "title": "Сверка «код ↔ база»: какие таблицы упоминает код",
+        "readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
+        "openWorldHint": True,
+    },
+    "ragraf_contract_drift": {
+        "title": "Сверка замысла и кода по FQN: модули, контракты, дрейф",
         "readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
         "openWorldHint": True,
     },
@@ -2098,25 +2356,35 @@ UNCLASSIFIED_TOOLS = _apply_tool_meta()
 
 
 def build_fingerprint() -> str:
-    """Короткий отпечаток СБОРКИ сервера: содержимое файла + версия пакета.
+    """Короткий отпечаток СБОРКИ сервера: содержимое ВСЕГО пакета + версия.
 
     Зачем. Измеренное расхождение: в исходнике 30 инструментов, а клиент показал
     24 — живой процесс MCP был старше правки кода, и увидеть это было нечем:
-    `serverInfo` нёс только `version` пакета, одинаковую у всех сборок. Теперь
-    отпечаток живого процесса можно сравнить с отпечатком файла на диске и
-    сразу понять, что процесс устарел.
+    `serverInfo` нёс только `version` пакета, одинаковую у всех сборок.
 
-    Считается по СОДЕРЖИМОМУ файла, а не по времени правки: время меняется при
+    Замер 06.11.2026 показал, что одного файла мало: правки в `watch.py`,
+    `catalog.py`, `ensure.py` живой сервер не замечал, потому что отпечаток
+    считался по `mcp_server.py`. Теперь в него входят ВСЕ модули пакета, а
+    `code_drift()` сравнивает отпечаток живого процесса с диском.
+
+    Считается по СОДЕРЖИМОМУ файлов, а не по времени правки: время меняется при
     копировании и не меняется при откате, а содержимое — всегда.
     """
     digest = hashlib.sha256()
     digest.update(__version__.encode("utf-8"))
-    try:
-        digest.update(Path(__file__).read_bytes())
-    except OSError:
-        # Файл недоступен (запуск без исходников): отпечаток остаётся
+    package = Path(__file__).resolve().parent
+    sources = sorted(package.rglob("*.py"))
+    if not sources:
+        # Файлы недоступны (запуск без исходников): отпечаток остаётся
         # отпечатком версии, а не выдумкой.
         digest.update(b"no-source")
+        return digest.hexdigest()[:12]
+    for path in sources:
+        try:
+            digest.update(path.name.encode("utf-8"))
+            digest.update(path.read_bytes())
+        except OSError:
+            digest.update(b"unreadable")
     return digest.hexdigest()[:12]
 
 
@@ -2136,6 +2404,24 @@ def _note_contact(agent: str, method: str, tool: str = "",
         contact_mod.record(agent, method, tool, client_name=client)
     except Exception:
         pass
+
+
+def _config_stamp(path: str | None) -> tuple[int, int] | None:
+    """Отпечаток файла конфигурации: время правки и размер.
+
+    Нужен долгоживущему процессу (MCP): по такому отпечатку видно, что файл
+    правили после запуска. Не читаем файл целиком и не считаем хеш: цена
+    такой проверки — один `stat`, а выигрыш — правка исключений и порогов
+    начинает действовать без перезапуска сервера (замер 05.11.2026: без неё
+    переиндексация от сервера дала 979 файлов вместо 927).
+    """
+    if not path:
+        return None
+    try:
+        info = os.stat(path)
+    except OSError:
+        return None
+    return (int(info.st_mtime_ns), int(info.st_size))
 
 
 class McpServer:
@@ -2164,6 +2450,9 @@ class McpServer:
                  access_scopes: list[str] | None = None) -> None:
         self.config_path = config_path
         self.cfg: ProjectConfig | None = None
+        # Отпечаток файла конфигурации: по нему видно, что конфиг правили
+        # после запуска, и кэш перечитывается (см. `config()`).
+        self._cfg_stamp: tuple[int, int] | None = None
         self._facade: Facade | None = None
         # Имя из параметров запуска: считается приоритетным, потому что
         # задано владельцем явно и не зависит от клиента.
@@ -2332,6 +2621,17 @@ class McpServer:
         return data
 
     def config(self) -> ProjectConfig:
+        """Конфигурация корпуса; перечитывается, если файл изменился.
+
+        ЗАЧЕМ ПРОВЕРКА. Процесс MCP живёт часами, а `config/<корпус>.yaml`
+        правит человек или агент — исключения, пороги, режим CPG. Кэш без
+        проверки означал, что правка не действует до перезапуска сервера.
+        Замер 05.11.2026: после исключения `**/config/*.yaml` из корпуса RAGRAF
+        переиндексация, запущенная ЭТИМ сервером, построила ревизию с ПРЕЖНИМ
+        списком — 979 файлов вместо 927, и активной стала ревизия,
+        противоречащая файлу конфигурации. Цена проверки — один `stat`, как у
+        `rev_info` (`facade.rev_info`), а не полная перечитка на каждый вызов.
+        """
         if self.cfg is None:
             if not self.config_path:
                 raise ConfigError(
@@ -2339,6 +2639,16 @@ class McpServer:
                     "(список даёт ragraf_catalog) или с путём к каталогу проекта."
                 )
             self.cfg = load_config(self.config_path)
+            self._cfg_stamp = _config_stamp(self.config_path)
+            return self.cfg
+        if _config_stamp(self.config_path) != self._cfg_stamp:
+            # Конфигурацию сменили на диске: фасад держит ПРЕЖНЮЮ, поэтому он
+            # сбрасывается вместе с кэшем — иначе исключения и пороги были бы
+            # старыми в одном месте и новыми в другом.
+            self.log(f"конфигурация изменена на диске, перечитываю: {self.config_path}")
+            self._reset_facade()
+            self.cfg = load_config(self.config_path)
+            self._cfg_stamp = _config_stamp(self.config_path)
         return self.cfg
 
     def facade(self) -> Facade:
@@ -2942,7 +3252,15 @@ class McpServer:
                 req_id,
                 {
                     "isError": True,
-                    "content": [{"type": "text", "text": f"ошибка операции {name}: {type(exc).__name__}"}],
+                    # Текст причины идёт в ответ ВМЕСТЕ с именем класса. Раньше
+                    # уходило только имя (`OperationalError`), и по ответу нельзя
+                    # было ничего ни понять, ни исправить: агент видел
+                    # «ошибка операции ensure: OperationalError» и начинал
+                    # чинить несуществующую поломку (замер 04.11.2026: в корпусе
+                    # не было `.ragraf`, а причина — «индекс не создан» — была
+                    # выброшена на этом самом месте).
+                    "content": [{"type": "text",
+                                 "text": f"ошибка операции {name}: {type(exc).__name__}: {exc}"}],
                 },
             )
         if progress_id is not None:
@@ -2952,6 +3270,12 @@ class McpServer:
             # подтверждён, и агент обязан это видеть, а не догадываться,
             # о каком проекте ему ответили (B1).
             result.setdefault("corpus", self._corpus_block())
+            # Единая точка: если свежесть говорит «устарел», предупреждение
+            # обязано попасть в `stale_warnings`, а оттуда — в ТЕКСТ ответа.
+            # Иначе агент видит «found=True, provenance=index» и не знает, что
+            # факты отстали (замер 06.11.2026: `freshness.warning` была, а
+            # `stale_warnings` пуст).
+            self._warn_if_stale(result)
             if args.get("brief"):
                 result = self._brief_view(result)
         return self._ok(req_id, self._content(result))
@@ -2997,6 +3321,24 @@ class McpServer:
                 with_text=bool(a.get("with_text", True)),
                 text_width=int(a.get("text_width") or 240),
             ),
+            "ragraf_doc_asof": lambda a: f().op_doc_asof(
+                a.get("query", ""), a.get("date", ""),
+                limit=int(a.get("limit") or 20), kind=a.get("kind"),
+                with_text=bool(a.get("with_text", True)),
+                text_width=int(a.get("text_width") or 240),
+            ),
+            "ragraf_dependents": lambda a: f().op_dependents(
+                fact=a.get("fact", ""), locator=a.get("locator", ""),
+                depth=int(a.get("depth") or 3),
+                include_stated=bool(a.get("include_stated", True)),
+            ),
+            "ragraf_stale_cascade": lambda a: f().op_stale_cascade(
+                changed=str(a.get("changed") or ""),
+                depth=int(a.get("depth") or 3),
+                apply=bool(a.get("apply", False)),
+                clear=bool(a.get("clear", False)),
+                limit=int(a.get("limit") or 50),
+            ),
             "ragraf_entity_neighbors": lambda a: f().op_entity_neighbors(
                 a.get("entity", ""), depth=int(a.get("depth") or 1),
                 kind=str(a.get("kind") or "entity"),
@@ -3041,6 +3383,19 @@ class McpServer:
             ),
             # Контур качества (ПРОМТ-И9): возможность pro, на Community
             # отвечает причиной издания, а не отсутствием инструмента.
+            "ragraf_contract_pin_status": lambda a: f().op_contract_pin_status(
+                limit=int(a.get("limit") or 50),
+            ),
+            "ragraf_contract_pin_approve": lambda a: f().op_contract_pin_approve(
+                op=str(a.get("op") or ""),
+                everything=bool(a.get("everything") or False),
+                by=str(a.get("by") or ""),
+                note=str(a.get("note") or ""),
+            ),
+            "ragraf_preflight": lambda a: f().op_preflight(
+                root=str(a.get("root") or ""),
+                sample=int(a.get("sample") or 50),
+            ),
             "ragraf_quality_suite": lambda a: f().op_quality_suite(
                 label=a.get("label", ""),
                 record=bool(a.get("record", True)),
@@ -3052,6 +3407,17 @@ class McpServer:
             # Прореживание журнала прогонов (ПРОМТ-И10). Инструмент помечен
             # destructiveHint: удаление записей необратимо, и клиент обязан
             # спросить человека хотя бы за счёт этой пометки.
+            "ragraf_quality_pair": lambda a: f().op_quality_pair(
+                from_run=int(a.get("from_run") or 0),
+                to_run=int(a.get("to_run") or 0),
+            ),
+            "ragraf_quality_trace": lambda a: f().op_quality_trace(
+                action=str(a.get("action") or "list"),
+                case_id=str(a.get("case_id") or ""),
+                trace_id=int(a.get("trace_id") or 0),
+                session=str(a.get("session") or ""),
+                label=str(a.get("label") or ""),
+            ),
             "ragraf_quality_prune": lambda a: f().op_quality_prune(
                 # Отсутствие `keep` — «из предела журнала»; явный 0 остаётся
                 # отказом по причине «удалить всё — не прореживание».
@@ -3190,6 +3556,12 @@ class McpServer:
                 previous_rev=a.get("previous_rev"),
             ),
             "ragraf_db_cross": lambda a: f().op_db_cross(),
+            # Сверка замысла и кода по FQN: манифест пишет проект, операция
+            # только читает его и индекс. Нет манифеста — found=false, код 0.
+            "ragraf_contract_drift": lambda a: f().op_contract_drift(
+                manifest_path=a.get("manifest_path"),
+                source=str(a.get("source") or "manifest"),
+            ),
             "ragraf_write_check": lambda a: f().op_write_check(
                 a.get("table", ""),
                 list(a.get("columns") or []),
@@ -3426,6 +3798,14 @@ class McpServer:
         # 30, у клиента 24» объясняется устаревшим живым процессом, и увидеть
         # это можно, только имея отпечаток рядом с ответом.
         payload["build"] = self.build
+        # КОД НА ДИСКЕ ПРОТИВ КОДА В ПРОЦЕССЕ. Живой сервер держит модули,
+        # загруженные при старте, и правка исходников его не меняет — это
+        # измерено не раз (см. `build_fingerprint`). Молчать об этом нельзя:
+        # агент получает ответ от кода, которого уже нет на диске.
+        drift = self.code_drift()
+        payload["code_stale"] = bool(drift)
+        if drift:
+            payload["code_stale_reason"] = drift
         payload["tools"] = len(self._tools_list()["tools"])
         # Издание и его возможности — в конверте контекста тоже: это первое, что
         # вызывают, когда непонятно, с чем работаешь, и «что мне разрешено»
@@ -3489,7 +3869,78 @@ class McpServer:
                 "reason": "корень клиента не входит в выбранный корпус",
                 "suggest": "ragraf_use_project",
             })
+        self._warn_if_stale(payload)
         return payload
+
+    def code_drift(self) -> str:
+        """Расхождение кода: живой процесс собран раньше, чем файлы на диске.
+
+        Сравнение стоит чтения всех модулей пакета, поэтому результат
+        запоминается на 30 секунд: ответ не должен платить за проверку на
+        каждом вызове, но и молчать полчаса нельзя.
+        """
+        now = time.time()
+        if now - getattr(self, "_code_checked_at", 0.0) < 30.0:
+            return getattr(self, "_code_drift", "")
+        self._code_checked_at = now
+        current = build_fingerprint()
+        if current == self.build:
+            self._code_drift = ""
+            return ""
+        self._code_drift = (
+            f"процесс работает на коде сборки {self.build}, на диске {current}: "
+            "правки исходников не действуют до перезапуска сервера")
+        return self._code_drift
+
+    def _warn_if_stale(self, payload: dict) -> None:
+        """Поднять устаревание корпуса в `stale_warnings`, а значит и в текст.
+
+        Измеренный дефект 06.11.2026: `freshness` несла `stale: true` и готовую
+        причину («индекс старше 295 мин: пересбор стоит ~335 с при бюджете
+        120 с»), но `stale_warnings` оставался ПУСТ, а модель видит только
+        текстовую сводку — то есть агент получал «found=True, provenance=index»
+        и не знал, что факты отстали. Молчание здесь — тот самый «зелёный
+        ответ, который ничего не осмотрел».
+        """
+        fresh = payload.get("freshness")
+        # СТАРЫЙ КОД В ЖИВОМ ПРОЦЕССЕ — тем же полем предупреждений.
+        # Ответ от кода, которого на диске уже нет, — тот же класс, что и
+        # «факты отстали»: агент видит „found=True“ и не знает, что правка
+        # не действует до перезапуска.
+        drift = self.code_drift()
+        if drift:
+            payload["code_stale"] = True
+            payload["code_stale_reason"] = drift
+            warnings = payload.setdefault("stale_warnings", [])
+            if not any(isinstance(item, dict) and str(item.get("reason") or "") == drift
+                       for item in warnings):
+                warnings.append({"path": "", "reason": drift, "suggest": "restart"})
+        if not isinstance(fresh, dict):
+            return
+        # ОГРАНИЧЕНИЕ СВЕРКИ — ТОЖЕ ПРЕДУПРЕЖДЕНИЕ.
+        # Замер 06.11.2026: в процессе с отведённым каталогом состояния
+        # свежесть НЕ ПРОВЕРЯЕТСЯ (индекс принадлежит другому каталогу), и
+        # ответ молчал об этом: модель видела только `found=True`.
+        limitation = str(fresh.get("freshness_limitation") or "")
+        if limitation and not fresh.get("stale"):
+            warnings = payload.setdefault("stale_warnings", [])
+            for item in warnings:
+                if isinstance(item, dict) and str(item.get("reason") or "") == limitation:
+                    return
+            warnings.append({"path": "", "reason": limitation,
+                             "suggest": "ragraf_ensure"})
+            return
+        if not fresh.get("stale"):
+            return
+        reason = str(fresh.get("warning") or fresh.get("note")
+                     or "индекс устарел: факты могут не соответствовать коду")
+        result = payload.get("result") if isinstance(payload.get("result"), dict) else {}
+        root = (payload.get("corpus") or {}).get("root") or result.get("root") or ""
+        warnings = payload.setdefault("stale_warnings", [])
+        for item in warnings:
+            if isinstance(item, dict) and str(item.get("reason") or "") == reason:
+                return
+        warnings.append({"path": root, "reason": reason, "suggest": "ragraf_reindex"})
 
     def _op_ensure(self, args: dict) -> dict:
         """Привести корпус в актуальное состояние.
@@ -3551,7 +4002,9 @@ class McpServer:
             )
         except Exception:  # noqa: BLE001
             pass
-        return env.to_dict()
+        payload = env.to_dict()
+        self._warn_if_stale(payload)
+        return payload
 
     def _notify_progress(self, progress_id: Any, progress: float, message: str) -> None:
         """Уведомление о ходе — ТОЛЬКО по запросу клиента.
@@ -3824,10 +4277,33 @@ def main(argv: list[str] | None = None) -> int:
             "и ragraf_use_project\n"
         )
 
-    return McpServer(project, agent=args.agent,
-                     agent_kind=args.agent_kind,
-                     access_label=args.access_label,
-                     corpus_source=source).run()
+    server = McpServer(project, agent=args.agent,
+                       agent_kind=args.agent_kind,
+                       access_label=args.access_label,
+                       corpus_source=source)
+    # Регистрация живого сервера в реестре. Без неё «restart» в ответе —
+    # подсказка без команды: штатный перезапуск (`ragraf server restart`) не
+    # смог бы найти процесс. Реестр пишется только при известном корпусе:
+    # без корпуса писать некуда, и это состояние законно (сервер поднимается
+    # без корпуса и ждёт `ragraf_use_project`).
+    registered_cfg = None
+    if project:
+        try:
+            registered_cfg = load_config(project)
+            from . import server_control
+            server_control.register(registered_cfg, os.getpid(),
+                                    build=server.build, corpus=str(project))
+        except Exception:  # noqa: BLE001 - реестр не должен мешать серверу
+            registered_cfg = None
+    try:
+        return server.run()
+    finally:
+        if registered_cfg is not None:
+            try:
+                from . import server_control
+                server_control.unregister(registered_cfg, os.getpid())
+            except Exception:  # noqa: BLE001
+                pass
 
 
 if __name__ == "__main__":
