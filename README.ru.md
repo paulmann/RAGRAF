@@ -204,7 +204,7 @@ mkdir -p python && tar xzf py.tar.gz -C python --strip-components=1
 # 2. Установка и проверка:
 ./python/bin/python3 -m venv .venv
 . .venv/bin/activate
-pip install ragraf-0.6.0-py3-none-any.whl    # либо pip install -e . из рабочей копии
+pip install -e .   # из рабочей копии; пакета на PyPI пока нет
 ragraf --version
 
 # 3. Первый корпус без загрузки модели эмбеддингов:

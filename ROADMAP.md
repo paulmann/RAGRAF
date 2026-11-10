@@ -1,31 +1,56 @@
 # RAGRAF Roadmap
 
-> Every item was derived from the 2026-10 production revision of the codebase (defect register: `docs/DEFECTS.md`). IDs are stable — the wiki, defect register and issue tracker reference them (`R-SEC-1`, `R-PERF-1`, …).
+> **Status 10.11.2026 — version 0.10.0.** Measured surface: **76** facade operations, **83** MCP tools,
+> **26** CLI subcommands, **20** capabilities (6 Community / 8 Pro / 6 Enterprise). The item list below was
+> written against the 2026-10 revision, before the 0.1.0–0.10.0 releases, so several P0 items are already
+> closed and several estimates are stale. Items marked ✅ were closed with the evidence named in
+> «Closed since this plan was written»; everything unmarked is not re-scored here and should be re-measured
+> before it is quoted. The live plan is `docs/plans/` and the issue tracker.
+
+> Every item was derived from the 2026-10 production revision of the codebase. IDs are stable — the wiki and the issue tracker reference them (`R-SEC-1`, `R-PERF-1`, …). The defect register those IDs were closed against is an internal working document, not part of the published tree; the public record of a known open issue is [`SECURITY.md`](SECURITY.md), and a new one is [reported as an issue](https://github.com/paulmann/RAGRAF/issues/new?template=defect-report.yml).
 >
 > **Priority:** 🔴 P0 — release blocker · 🟠 P1 — next release · 🟡 P2 — planned · ⚪ P3 — backlog/vision.
 > **Effort:** S ≤ 1 day · M ≤ 1 week · L > 1 week.
 
 ---
 
+## Closed since this plan was written
+
+Verified 10.11.2026 on this tree, not taken from a report. Each row names the artefact that proves it and
+the command that re-checks it.
+
+| ID | Was | Evidence in the tree | How to check |
+|---|---|---|---|
+| **R-REL-2** | tag `v0.1.0`, add `CHANGELOG.md`, single-source the version | five tags (`v0.1.0`, `v0.3.0`, `v0.3.1`, `v0.4.0`, `v0.10.0`); `CHANGELOG.md` in Keep a Changelog format; the version lives once — `src/ragraf/__init__.py:9`, and `pyproject.toml` reads it through `dynamic = ["version"]` | `git tag --sort=v:refname` · `head -6 CHANGELOG.md` |
+| **R-REL-3** | publish the EN documentation tree | `README.md` (EN primary) and `README.ru.md` sit next to `README.de/.es/.zh/.hi`; `ROADMAP.md`, `CONTRIBUTING.md`, `SECURITY.md`, `SUPPORT.md`, `CODE_OF_CONDUCT.md` and `.github/ISSUE_TEMPLATE/defect-report.yml` are all present | `ls *.md .github/ISSUE_TEMPLATE` |
+| **R-SEC-1** | admin panel hardening: `Host`/`Origin` allow-list, no token handout | `SECURITY.md` records C-01 **CLOSED 24.10.2026**; the behaviour is covered by `tests/test_admin_origin.py` (38 properties — a foreign `Host` answers 403 instead of 200) | `python tests/test_admin_origin.py` |
+| **R-SEC-4** | Joern `.bat` launch without `shell=True` | `SECURITY.md` records C-04 **CLOSED 24.10.2026**; `cmd.exe /d /s /v:off /c` with per-argument quoting, covered by `tests/test_cmd_quoting.py` (18 properties) | `python tests/test_cmd_quoting.py` |
+| **R-DOC-1** | sync every doc count to code | the counts now live between `<!-- surface:… -->` markers rendered from `src/ragraf/surface.py`; the six READMEs carry 76 / 83 / 26 / 29 / 40 / 84 | `python tools/surface_gen.py --check` (dev tree: templates also cover `community/…`) |
+| **R-DOC-2** | generate the operation reference from code, fail CI on drift | `docs/surface.json` (numbers, operation list with parameters, capability composition, digest) is produced by `tools/surface_gen.py --write` through `tools/surface_templates.json`; the gate is the same tool with `--check` | `python tools/surface_gen.py --check` · `grep -c '"name"' docs/surface.json` |
+
+Deliberately **not** marked: **R-PERF-1** (parallel AST stage). The shipped parser is sequential — that is
+stated in the architecture document and repeated on the wiki — so the item is open no matter how old the
+plan is.
+
 ## A. Release & repository hygiene
 
 | ID | P | Effort | Item | Closes |
 |---|---|---|---|---|
 | **R-REL-1** | 🔴 P0 | M | **Close all 50 dead references**: publish the safe subset of referenced tools/tests (`check_admin.py`, `measure_safe_excludes.py`, `test_dedupe.py`, `test_mcp.py`, `bench_corpus.py`, …) as portable synthetic-fixture versions; excise or annotate the rest; remove the `AGENTS.md` row from the README doc table or ship a public `AGENTS.md`/`CONTRIBUTING.md` | A-01…A-04, B-07 |
-| **R-REL-2** | 🔴 P0 | S | **Tag `v0.1.0`** + GitHub Release with notes generated from this roadmap's P0 list; add `CHANGELOG.md` (Keep-a-Changelog); single-source the version (`importlib.metadata` fallback pattern) | G-02 |
-| **R-REL-3** | 🔴 P0 | S | **Publish the EN documentation tree** (this translation pass): README.md (EN primary) + README.ru.md (original), renumbered `docs/` without holes, `ROADMAP.md`, `CONTRIBUTING.md`, `SECURITY.md`, issue/PR templates | B-08, G-04 |
-| **R-DOC-1** | 🟠 P1 | S | Sync all doc counts to code: **38 facade ops / 40 MCP tools / 39 CLI query ops** everywhere. Re-measured 2026-10-16: `README.md` and `README.ru.md` (new «By the numbers» / «Проект в числах» section), `docs/implementation/INTEGRATION.md`, `docs/architecture/ARCHITECTURE.md` §7, `SPECIFICATION.md`, `ACCEPTANCE.md`, `TZ.md`, the article, the `ragraf-core` skill pages (EN + RU), the wiki, and the `facade.py` / `mcp_server.py` docstrings were synced. Still to do: `vec_chunk` DDL framing, JDK 21 wording in historical documents | B-01, B-04, B-05, I-01 |
-| **R-DOC-2** | 🟡 P2 | M | **Generate the operation reference from code**: docstring/schema harvest → `docs/operations.json` → rendered tables in README/wiki; CI fails on doc↔code drift (the project's own principle: facts, not memory) | B-01 permanently |
+| **R-REL-2** | ✅ done | S | **Tag `v0.1.0`** + GitHub Release with notes generated from this roadmap's P0 list; add `CHANGELOG.md` (Keep-a-Changelog); single-source the version (`importlib.metadata` fallback pattern) | G-02 |
+| **R-REL-3** | ✅ done | S | **Publish the EN documentation tree** (this translation pass): README.md (EN primary) + README.ru.md (original), renumbered `docs/` without holes, `ROADMAP.md`, `CONTRIBUTING.md`, `SECURITY.md`, issue/PR templates | B-08, G-04 |
+| **R-DOC-1** | ✅ done | S | Sync all doc counts to code: the counts then measured (**38 / 40 / 39**) everywhere. Re-measured 2026-10-16: `README.md` and `README.ru.md` (new «By the numbers» / «Проект в числах» section), `docs/implementation/INTEGRATION.md`, `docs/architecture/ARCHITECTURE.md` §7, `SPECIFICATION.md`, `ACCEPTANCE.md`, `TZ.md`, the article, the `ragraf-core` skill pages (EN + RU), the wiki, and the `facade.py` / `mcp_server.py` docstrings were synced. Still to do: `vec_chunk` DDL framing, JDK 21 wording in historical documents | B-01, B-04, B-05, I-01 |
+| **R-DOC-2** | ✅ done | M | **Generate the operation reference from code**: docstring/schema harvest → `docs/operations.json` → rendered tables in README/wiki; CI fails on doc↔code drift (the project's own principle: facts, not memory) | B-01 permanently |
 | **R-DOC-3** | 🟡 P2 | S | `docs/README.md` index page + per-document «status» header (normative / historical / study), so a snapshot document like CPG_INTEGRATION §7 can't be mistaken for current state | B-06 |
 
 ## B. Security
 
 | ID | P | Effort | Item | Closes |
 |---|---|---|---|---|
-| **R-SEC-1** | 🔴 P0 | M | **Admin panel hardening**: `Host`/`Origin` allow-list (kills DNS rebinding); remove `GET /api/token` auto-handout → operator pastes the console token once (`sessionStorage`) or one-time pairing code; optional `RAGRAF_ADMIN_TOKEN`/`--token-file` for scripts; document the threat model honestly | C-01 |
+| **R-SEC-1** | ✅ done | M | **Admin panel hardening**: `Host`/`Origin` allow-list (kills DNS rebinding); remove `GET /api/token` auto-handout → operator pastes the console token once (`sessionStorage`) or one-time pairing code; optional `RAGRAF_ADMIN_TOKEN`/`--token-file` for scripts; document the threat model honestly | C-01 |
 | **R-SEC-2** | 🟠 P1 | S | **Remove the MCP substring filter** («return », «match (», …): FT-15 is structurally guaranteed (no query endpoint exists); the filter only false-rejects legitimate searches. Keep a negative test proving query-shaped input can't reach any executor | C-02 |
 | **R-SEC-3** | 🟠 P1 | S | **Atomic + backed-up writes**: `util.write_json` → temp file + `os.replace` (atomic on NTFS/POSIX); timestamped `.bak` for global `settings.json` and `catalog.json` (project configs already backed up) | C-03, E-06 |
-| **R-SEC-4** | 🟡 P2 | M | **Joern .bat launch without `shell=True`**: `cmd.exe /c` with list-form args or direct JVM invocation; correct cmd-metachar escaping; tests with hostile paths (`A&B`, `100%`, quotes, cyrillic) | C-04 |
+| **R-SEC-4** | ✅ done | M | **Joern .bat launch without `shell=True`**: `cmd.exe /c` with list-form args or direct JVM invocation; correct cmd-metachar escaping; tests with hostile paths (`A&B`, `100%`, quotes, cyrillic) | C-04 |
 | **R-SEC-5** | ⚪ P3 | S | Telemetry privacy flag: `arg_digest` hash-only mode for sensitive environments (current 60-char plaintext digest is local-only but the docstring overstates protection) | C-05 |
 | **R-SEC-6** | ⚪ P3 | M | Secret-scanner integration for corpora: warn (never store) when a file matching secret patterns *isn't* in `secrets_exclude` — extends NFR-3 from «we don't index secrets» to «we help you not miss them» | new |
 
@@ -125,4 +150,4 @@ v0.4.0+ (vision):              R-PERF-2/5 · R-CPG-3 · R-VIS-*
 
 ---
 
-*The roadmap is a living document: proposals are discussed in issues (see [Contributing](13-Contributing) — architecture conversations before large patches).*
+*The roadmap is a living document: proposals are discussed in issues (see [`CONTRIBUTING.md`](CONTRIBUTING.md) — architecture conversations before large patches).*

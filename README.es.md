@@ -201,7 +201,7 @@ mkdir -p python && tar xzf py.tar.gz -C python --strip-components=1
 # 2. Install and check:
 ./python/bin/python3 -m venv .venv
 . .venv/bin/activate
-pip install ragraf-0.6.0-py3-none-any.whl    # or: pip install -e .   (from a checkout)
+pip install -e .   # from a checkout; the package is not published on PyPI yet
 ragraf --version
 
 # 3. First corpus without downloading the embedding model:
