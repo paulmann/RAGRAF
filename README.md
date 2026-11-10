@@ -11,7 +11,7 @@
 
 [**Quick start**](#first-steps) · [**Documentation**](#documentation) · [**Wiki**](https://github.com/paulmann/RAGRAF/wiki) · [**Changelog**](CHANGELOG.md) · [**Русская версия**](README.ru.md)
 
-> **Documentation status.** Every number below was measured on 07.11.2026 against version 0.6.0; the sizes of the RAGRAF index are compared with the active revision record by `Test-DocumentedNumbers`, and a figure that belongs to a past revision fails the release gate rather than passing as today's measurement.
+> **Documentation status.** Every count below is rendered from the code of this tree (`src/ragraf/surface.py`, through `tools/surface_gen.py`) and not typed by hand; the sizes of the RAGRAF index are compared with the active revision record by `Test-DocumentedNumbers`, and a figure that belongs to a past revision fails the release gate rather than passing as today's measurement.
 
 An assistant that answers an agent's questions about a codebase — *where is it, who calls it, what breaks if I change it, how is it done elsewhere* — with verifiable facts (`file:line`) instead of blind `rg` and full-file reads. Python 3.13+, SQLite (graph + FTS5 + vectors in one place), tree-sitter, local embeddings without torch. An optional property-graph layer (Java + Joern) unlocks slicing; without it the product still works and says so.
 
