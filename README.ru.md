@@ -12,7 +12,7 @@
 [![License](https://img.shields.io/badge/license-BUSL--1.1-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.13%2B-informational)](pyproject.toml)
 
-![RAGRAF — графово-векторная база знаний о коде для LLM-агентов: 84 инструмента MCP, проверяемые факты со ссылкой файл:строка, всё локально](assets/social-preview.png)
+![RAGRAF — графово-векторная база знаний о коде для LLM-агентов: 86 инструмента MCP, проверяемые факты со ссылкой файл:строка, всё локально](assets/social-preview.png)
 
 [**Быстрый старт**](#первые-шаги) · [**Документация**](#документация) · [**Вики**](https://github.com/paulmann/RAGRAF/wiki) · [**Журнал изменений**](CHANGELOG.md) · [**English version**](README.md)
 

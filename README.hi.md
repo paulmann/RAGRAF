@@ -12,7 +12,7 @@
 [![License](https://img.shields.io/badge/license-BUSL--1.1-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.13%2B-informational)](pyproject.toml)
 
-![RAGRAF — LLM-एजेंट के लिए सोर्स कोड पर ग्राफ़-वेक्टर ज्ञानकोश: 83 MCP टूल, file:line संदर्भ के साथ सत्यापनीय तथ्य, पूरी तरह लोकल](assets/social-preview.png)
+![RAGRAF — LLM-एजेंट के लिए सोर्स कोड पर ग्राफ़-वेक्टर ज्ञानकोश: 86 MCP टूल, file:line संदर्भ के साथ सत्यापनीय तथ्य, पूरी तरह लोकल](assets/social-preview.png)
 
 [**तेज़ शुरुआत**](#पहले-कदम) · [**दस्तावेज़**](#दस्तावेज़) · [**विकी**](https://github.com/paulmann/RAGRAF/wiki) · [**बदलावों की सूची**](CHANGELOG.md) · [**English version**](README.md)
 

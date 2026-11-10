@@ -5,6 +5,25 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: [S
 
 ## [Unreleased]
 
+—
+
+## [0.11.0] — 2026-11-10
+
+### Added — отчёт выпуска внутри поставки (X21)
+
+- **`RELEASE-REPORT.md` — артефакт поставки**: собирается из того же
+  `ops_pins.json`, что лежит рядом, поэтому не может ему противоречить;
+  версия, состояния пинов, поведение, вердикт и (при `--previous`) раздел
+  «что изменилось».
+- **`gate_release.check_report_artifact`**: отчёт обязан совпадать с набором
+  по байтам; подмена версии или вердикта — блокировка. Отчёт, лежащий в
+  сборке без объявления в `artifacts`, — тоже блокировка.
+- **`checksums.sha256` покрывает артефакты**: отчёт и `ops_pins.json` входят
+  в суммы.
+- `build_release.py --previous` — прошлый выпуск для раздела «что изменилось»;
+  состояние выпуска считается в одном месте (`tools/release/release_report.py`).
+- `tests/test_release_gate.py` — 40 → **51 проверка**.
+
 ### Added — что изменилось с выпуска, в машинном виде (X20)
 
 - **Блок `changes` в JSON**: `ops_changed`, `tools_changed`, `samples_changed`
@@ -1509,6 +1528,7 @@ First public release («Публикация RAGRAF: установщик, READM
 - Installation-verification runs of the maintainer environment (see the release commit message for the full protocol: clean-environment install, synthetic-project init→index→search→symbol→code, 6 portable suites, syntax of 49 files, BOM/CRLF clean).
 
 [Unreleased]: сравнение ведётся по коммитам; теги прежних выпусков сняты с публикации
+[0.11.0]: https://github.com/paulmann/RAGRAF/releases/tag/v0.11.0
 [0.10.0]: https://github.com/paulmann/RAGRAF/releases/tag/v0.10.0
 [0.4.1]: https://github.com/paulmann/RAGRAF/compare/v0.4.0...main
 [0.2.0]: выпуск снят с публикации, история в архиве

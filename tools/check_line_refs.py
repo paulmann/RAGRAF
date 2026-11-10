@@ -90,7 +90,7 @@ PAIRS = (
          anchor="**Отсюда важное следствие, которое пришлось исправить (30.10.2026, этап 7).**",
          path="src/ragraf/paths.py", marker="def settings_path"),
     # Актуализация 2026-10-30: утверждения нового раздела плана и их объекты.
-    dict(doc="docs/00_plan/PLAN.md", anchor="| версия | **0.10.0**",
+    dict(doc="docs/00_plan/PLAN.md", anchor="| версия | **0.11.0**",
          path="src/ragraf/__init__.py", marker="__version__"),
     dict(doc="docs/00_plan/PLAN.md", anchor="**Активная ревизия.** Выбор был размазан",
          path="src/ragraf/store.py", marker="def active_revision"),

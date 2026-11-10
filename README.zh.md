@@ -12,7 +12,7 @@
 [![License](https://img.shields.io/badge/license-BUSL--1.1-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.13%2B-informational)](pyproject.toml)
 
-![RAGRAF — 面向 LLM 智能体的图-向量代码知识库：83 个 MCP 工具、带 file:line 引用的可验证事实、完全本地运行](assets/social-preview.png)
+![RAGRAF — 面向 LLM 智能体的图-向量代码知识库：86 个 MCP 工具、带 file:line 引用的可验证事实、完全本地运行](assets/social-preview.png)
 
 [**快速开始**](#第一步) · [**文档**](#文档) · [**Wiki**](https://github.com/paulmann/RAGRAF/wiki) · [**更新日志**](CHANGELOG.md) · [**English version**](README.md)
 

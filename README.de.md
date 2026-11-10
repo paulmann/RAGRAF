@@ -12,7 +12,7 @@
 [![License](https://img.shields.io/badge/license-BUSL--1.1-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.13%2B-informational)](pyproject.toml)
 
-![RAGRAF — graph- und vektorbasierte Wissensdatenbank über Quellcode für LLM-Agenten: 83 MCP-Werkzeuge, überprüfbare Fakten mit der Angabe Datei:Zeile, vollständig lokal](assets/social-preview.png)
+![RAGRAF — graph- und vektorbasierte Wissensdatenbank über Quellcode für LLM-Agenten: 86 MCP-Werkzeuge, überprüfbare Fakten mit der Angabe Datei:Zeile, vollständig lokal](assets/social-preview.png)
 
 [**Schnellstart**](#erste-schritte) · [**Dokumentation**](#dokumentation) · [**Wiki**](https://github.com/paulmann/RAGRAF/wiki) · [**Änderungen**](CHANGELOG.md) · [**English version**](README.md)
 
