@@ -131,8 +131,14 @@ def _returns(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> tuple[list[str], str
     return [], "literal" if literal else "variable"
 
 
-def ops_of(root: Path) -> list[dict[str, Any]]:
-    body = _read(root / "src" / "ragraf" / "facade.py")
+def ops_from_file(path: Path) -> list[dict[str, Any]]:
+    """Описания операций из конкретного файла фасада.
+
+    Отдельная точка нужна пиннингу: он сверяет контракт РАБОТАЮЩЕГО кода, а
+    файл этот лежит не всегда под корпусом (`<корпус>/src/ragraf/facade.py`).
+    Разбор тот же самый, второго описания поверхности не появляется.
+    """
+    body = _read(path)
     try:
         tree = ast.parse(body)
     except SyntaxError as exc:
@@ -158,13 +164,82 @@ def ops_of(root: Path) -> list[dict[str, Any]]:
     return [found[name] for name in sorted(found)]
 
 
-def _names(pattern: str, body: str) -> list[str]:
-    return sorted(set(re.findall(pattern, body)))
+def ops_of(root: Path) -> list[dict[str, Any]]:
+    """Описания операций корпуса: дерево исходников под `root`."""
+    return ops_from_file(Path(root) / "src" / "ragraf" / "facade.py")
+
+
+def _assigned(tree: ast.Module, name: str) -> ast.AST | None:
+    """Значение присваивания верхнего уровня по имени (`X = …` или `X: T = …`)."""
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == name:
+                    return node.value
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            if node.target.id == name:
+                return node.value
+    return None
+
+
+def _literal(node: ast.AST, what: str) -> Any:
+    try:
+        return ast.literal_eval(node)
+    except (ValueError, TypeError, SyntaxError) as exc:
+        raise SurfaceError(f"{what} не литерал: {type(exc).__name__}: {exc}") from exc
+
+
+def tools_from_file(path: Path) -> list[dict[str, Any]]:
+    """Инструменты MCP из файла сервера: имя, схема входа, пометки.
+
+    Разбор AST, а не регулярка: схема входа — вложенная структура, и новый
+    обязательный параметр или суженный тип обязаны менять описание, а не
+    теряться между строк (регулярка их просто не видит).
+
+    Пометки берутся из `_TOOL_META` (`readOnlyHint` и остальные): это часть
+    контракта, а не украшение — по ним клиент решает, безопасно ли звать
+    инструмент, пишущий состояние.
+    """
+    body = _read(path)
+    try:
+        tree = ast.parse(body)
+    except SyntaxError as exc:
+        raise SurfaceError(f"mcp_server.py не разобран: {exc}") from exc
+    node = _assigned(tree, "TOOLS")
+    if node is None:
+        raise SurfaceError("в mcp_server.py нет объявления TOOLS")
+    tools = _literal(node, "TOOLS")
+    if not isinstance(tools, list) or not tools:
+        raise SurfaceError("TOOLS — не непустой список")
+    meta_node = _assigned(tree, "_TOOL_META")
+    meta = _literal(meta_node, "_TOOL_META") if meta_node is not None else {}
+    if not isinstance(meta, dict):
+        meta = {}
+    out: list[dict[str, Any]] = []
+    for tool in tools:
+        if not isinstance(tool, dict):
+            raise SurfaceError("элемент TOOLS — не словарь")
+        name = str(tool.get("name") or "")
+        if not name:
+            raise SurfaceError("в TOOLS есть инструмент без имени")
+        schema = tool.get("inputSchema")
+        out.append({"name": name,
+                    "schema": schema if isinstance(schema, dict) else {},
+                    "annotations": dict(meta.get(name) or {}) if isinstance(meta.get(name), dict) else {}})
+    names = [item["name"] for item in out]
+    if len(set(names)) != len(names):
+        raise SurfaceError("в TOOLS повторяется имя инструмента")
+    return sorted(out, key=lambda item: item["name"])
 
 
 def tools_of(root: Path) -> list[str]:
-    body = _read(root / "src" / "ragraf" / "mcp_server.py")
-    return _names(r'"name":\s*"(ragraf_[a-z0-9_]+)"', body)
+    """Имена инструментов MCP корпуса — из того же разбора, что и схемы."""
+    return [item["name"] for item in
+            tools_from_file(Path(root) / "src" / "ragraf" / "mcp_server.py")]
+
+
+def _names(pattern: str, body: str) -> list[str]:
+    return sorted(set(re.findall(pattern, body)))
 
 
 def cli_of(root: Path) -> list[str]:

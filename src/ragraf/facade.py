@@ -1785,6 +1785,239 @@ class Facade:
             env.limits.append("время разбора не оценено: " + str(timing.get("reason") or ""))
         return env.to_dict()
 
+    def op_contract_pin_sample(self, mode: str = "compare", op: str = "",
+                               limit: int = 50, by: str = "", note: str = "",
+                               only_changed: bool = False,
+                               except_ops: str = "") -> dict:
+        """54. Проба ПОВЕДЕНИЯ: что операция возвращает, а не какой у неё вид.
+
+        Зачем. Пин видит форму: имя, параметры с умолчаниями, ключи ответа.
+        Правка, которая форму не меняет, но меняет результат, для пина невидима;
+        это было названо в §6 документа и ничем не проверялось. Здесь ответ
+        вызывается и хешируется без изменчивых полей (ревизия, свежесть,
+        длительности, номера сеансов).
+
+        Два режима записи и один чтения: `take` записывает пробу, `compare` сверяет
+        с записанной и НИЧЕГО не пишет в описание, `accept` принимает текущее
+        поведение как новое — с обязательным именем человека и строкой истории
+        (вид `sample`), чтобы «изменилось» нельзя было погасить молча. Ворота
+        берут готовый итог сверки из журнала — сами пробы не запускают.
+
+        Границы названы прямо: проба видит только то, что можно вызвать (остальное
+        — `not_sampled` с причиной), а поведение — предупреждение, а не отказ.
+        """
+        env = self.make_env("contract_pin_sample", provenance="journal")
+        pin_mod, refusal = self._feature_module(
+            "contract_pin_sample", "pin", "contract-pin")
+        if refusal is not None:
+            return refusal
+        wanted_mode = str(mode or "compare").strip().lower()
+        if wanted_mode not in ("take", "compare", "accept"):
+            env.found = False
+            env.error = (f"режим {wanted_mode!r} вне списка: take, compare или accept "
+                         f"(взять пробу, сверить или принять новое поведение)")
+            return env.to_dict()
+        if wanted_mode == "accept" and not str(by or "").strip():
+            env.found = False
+            env.error = ("принятие поведения требует имени: без `--approved-by` "
+                         "смена не отличается от самопринятия")
+            env.extra["next_action"] = util.next_action(
+                "contract_pin_sample", self._config_hint(), kind="no_data",
+                detail="не назван принимающий поведение")
+            return env.to_dict()
+        wanted = [item.strip() for item in str(op or "").split(",") if item.strip()]
+        skip = {item.strip() for item in str(except_ops or "").split(",") if item.strip()}
+        try:
+            pin_mod.ensure_schema(self.control.conn)
+            # Отбор: имена из `op`, минус `except`, а при `only_changed` — только
+            # разошедшиеся при последней сверке. Иначе приём одной правки
+            # подписывает весь набор.
+            selected = [name for name in (wanted or sorted(pin_mod.PROBES))
+                        if name not in skip]
+            if only_changed:
+                changed_now = set(pin_mod.changed_ops(self.control.conn))
+                selected = [name for name in selected if name in changed_now]
+            if wanted or skip or only_changed:
+                unknown = [name for name in selected if name not in pin_mod.PROBES]
+                selected = [name for name in selected if name in pin_mod.PROBES]
+                if wanted:
+                    unknown = sorted(set(wanted) - set(pin_mod.PROBES))
+                if unknown:
+                    env.limits.append("имени нет в списке проб: %s (пробуются %s)"
+                                      % (", ".join(unknown), ", ".join(sorted(pin_mod.PROBES))))
+                if not selected:
+                    env.found = False
+                    env.error = ("отбор проб пуст: под условия не попала ни одна проба "
+                                 "(проверьте --op/--except/--only-changed)")
+                    return env.to_dict()
+            if wanted_mode == "take":
+                data = pin_mod.take(self.control.conn, self.cfg.root,
+                                    call=self._sample_call, ready=self._probe_ready,
+                                    ops=selected or None)
+            elif wanted_mode == "accept":
+                data = pin_mod.accept(self.control.conn, self.cfg.root, by=str(by),
+                                      note=str(note), call=self._sample_call,
+                                      ready=self._probe_ready, ops=selected or None)
+            else:
+                data = pin_mod.compare(self.control.conn, self.cfg.root,
+                                       call=self._sample_call, ready=self._probe_ready,
+                                       ops=selected or None)
+            state = pin_mod.sample_state(self.control.conn)
+        except Exception as exc:  # noqa: BLE001 — причина названа
+            env.found = False
+            env.error = f"PinRefusal: {type(exc).__name__}: {exc}"
+            env.extra["next_action"] = util.next_action(
+                "contract_pin_sample", self._config_hint(), kind="no_data",
+                detail="проба поведения не выполнена")
+            return env.to_dict()
+        env.result = {"mode": wanted_mode, **data, "state": state,
+                      "selected": selected,
+                      "probes": {name: {"args": item.get("args") or {},
+                                         "needs": str(item.get("needs") or ""),
+                                         "why": str(item.get("why") or "")}
+                                 for name, item in pin_mod.PROBES.items()},
+                      "scope": ("поведение, а не форма: ответ вызывается и "
+                                "канонизируется без ревизии, свежести, "
+                                "длительностей и номеров сеансов")}
+        checks = data.get("checks") or [{"op": item["op"],
+                                          "verdict": item.get("status"),
+                                          "detail": item.get("detail")}
+                                         for item in (data.get("taken")
+                                                      or data.get("accepted") or [])]
+        env.extra["sampled"] = len(checks)
+        env.extra["selected"] = list(selected)
+        env.extra["changed"] = [item["op"] for item in checks
+                                if item.get("verdict") == "changed"]
+        env.extra["not_sampled"] = [item["op"] for item in checks
+                                    if item.get("verdict") == "not_sampled"]
+        env.extra["state"] = str(state.get("state") or "none")
+        env.found = bool(checks)
+        for item in data.get("unknown") or []:
+            env.limits.append(f"имени {item!r} нет в списке проб: пробуются "
+                              f"{', '.join(sorted(pin_mod.PROBES))}")
+        if env.extra["changed"]:
+            env.limits.append("поведение изменилось: %s — форму пин при этом "
+                              "мог не менять" % ", ".join(env.extra["changed"]))
+        if env.extra["not_sampled"]:
+            env.limits.append("пустая проба не считается совпадением: %d из %d "
+                              "вызовов не пробовались (причина в detail)"
+                              % (len(env.extra["not_sampled"]), len(checks)))
+        if not checks:
+            env.limits.append("проб нет: `mode=take` записывает первую; ворота "
+                              "показывают только итог уже сделанной сверки")
+        return env.to_dict()
+
+    def _sample_call(self, op: str, args: dict) -> dict:
+        """Вызов операции для пробы: ответ фасада как есть.
+
+        Отдельный метод, а не лямбда: проверки подставляют свою пробу и должны
+        видеть ровно ту же форму ответа, что и боевой путь. Имя метода берётся из
+        объявления пробы: замер 10.11.2026 — для `usage` собирательное `op_usage`
+        не существует (в CLI он идёт в `usage_summary`), и проба молча попадала в
+        `not_sampled`.
+        """
+        from . import pin as pin_mod  # локальный импорт: циклов на уровне модуля нет
+
+        name = pin_mod.probe_method(op)
+        method = getattr(self, name, None)
+        if method is None:
+            raise AttributeError(f"метода {name} нет в этой сборке")
+        return method(**dict(args or {}))
+    def _probe_ready(self, need: str) -> bool:
+        """Готово ли условие пробы: `config`, `index`, `journal`.
+
+        Проверка своя у каждого условия, и она дешёвая: `index` смотрит наличие
+        ревизии, `journal` — что журнал открыт, `config` — что корень выбран.
+        Неизвестное условие считается НЕ выполненным: лучше `not_sampled` с
+        причиной, чем проба, которая делает вид, что прошла.
+        """
+        key = str(need or "").strip().lower()
+        if key == "config":
+            return bool(getattr(self.cfg, "root", ""))
+        if key == "journal":
+            return getattr(self, "control", None) is not None
+        if key == "index":
+            try:
+                return bool(self.current_rev())
+            except Exception:  # noqa: BLE001 — нет индекса и есть причина
+                return False
+        return False
+
+    def op_contract_pin_history(self, kind: str = "", op: str = "",
+                                limit: int = 50) -> dict:
+        """53. Журнал смен набора: кто менял, когда и с какого хеша на какой.
+
+        Зачем. `contract_pin_status` называет ПОСЛЕДНЮЮ смену, но вопроса «кто
+        ломал контракт в этот месяц и сколько раз он менялся» он не отвечает —
+        пин хранит одну строку на объект. Здесь каждая смена — строка, а сверху
+        сводка по авторам и объектам.
+
+        Счётчик, а не оценка: одна смена может быть крупной правкой, другая —
+        подъёмом версии. Поэтому ответ называет это сам (`note`).
+
+        Ничего не меняет: чистка истории — часть подтверждения.
+        """
+        env = self.make_env("contract_pin_history", provenance="journal")
+        pin_mod, refusal = self._feature_module(
+            "contract_pin_history", "pin", "contract-pin")
+        if refusal is not None:
+            return refusal
+        wanted = str(kind or "").strip()
+        if wanted == "all":
+            wanted = ""
+        if wanted and wanted not in pin_mod.HISTORY_KINDS:
+            env.found = False
+            env.error = (f"вид {wanted!r} вне списка: "
+                         f"{', '.join(pin_mod.HISTORY_KINDS)} (пусто или all — все)")
+            return env.to_dict()
+        try:
+            pin_mod.ensure_schema(self.control.conn)
+            rows = pin_mod.history(self.control.conn, limit=int(limit or 50),
+                                   kind=wanted, op=str(op or ""))
+            summary = pin_mod.authors(self.control.conn)
+        except Exception as exc:  # noqa: BLE001 — причина названа
+            env.found = False
+            env.error = f"PinRefusal: {type(exc).__name__}: {exc}"
+            env.extra["next_action"] = util.next_action(
+                "contract_pin_history", self._config_hint(), kind="no_data",
+                detail="история смен не прочитана")
+            return env.to_dict()
+        env.result = {
+            "changes": rows,
+            "summary": summary,
+            "filter": {"kind": wanted, "op": str(op or ""), "limit": int(limit or 50)},
+            "retention": (f"хранится {pin_mod.HISTORY_KEEP_PER_OBJECT} последних смен "
+                          f"на объект и все за {pin_mod.HISTORY_KEEP_DAYS} дней; "
+                          f"строки со ссылкой из журнала не удаляются"),
+            "total": summary.get("total", 0),
+        }
+        env.found = bool(rows)
+        env.extra["changes"] = len(rows)
+        env.extra["changes_total"] = int(summary.get("total") or 0)
+        env.extra["top_author"] = str(summary.get("top_author") or "")
+        env.extra["top_object"] = str(summary.get("top_object") or "")
+        env.extra["retention"] = env.result["retention"]
+        if rows:
+            latest = rows[0]
+            env.extra["latest"] = {"op": latest["op"], "kind": latest["kind"],
+                                   "approved_at": latest["approved_at"],
+                                   "approved_by": latest["approved_by"]}
+            # Адрес смены в журнале: без него строка — пересказ, а не факт.
+            env.extra["latest_citation"] = {
+                "source": "пин", "locator": f"pin_history#{latest['id']}",
+                "quote": (f"{latest['op']} ({latest['kind']}): "
+                          f"{latest['approved_by']}, {latest['approved_at']}, "
+                          f"было {(latest['previous_hash'] or 'пина не было')[:12]}"),
+            }
+        else:
+            # Пустая история — названное состояние, а не пустой список молча:
+            # «не было смен» и «история не ведётся» выглядят одинаково.
+            env.limits.append(
+                "история смен пуста: набор ещё не подтверждали — "
+                "`contract_pin_approve` ставит пин и пишет первую строку")
+        env.limits.append(str(summary.get("note") or ""))
+        return env.to_dict()
+
     def op_contract_pin_status(self, limit: int = 50) -> dict:
         """52. Пиннинг подписи операций: что подтверждено, что разошлось.
 
@@ -1816,6 +2049,14 @@ class Facade:
             return env.to_dict()
         env.result = data
         totals = data.get("totals") or {}
+        pin_state = data.get("pin_state") or {}
+        env.extra["pin_state"] = str(pin_state.get("state") or "")
+        env.extra["pin_age_seconds"] = pin_state.get("pin_age_seconds")
+        # Смена набора — отдельно от возраста пина: «принято давно, а менялось
+        # вчера» и «принято вчера, с тех пор не менялось» — разные ответы.
+        env.extra["pin_changed_at"] = str(data.get("changed_at") or "")
+        env.extra["pin_changed_age_seconds"] = data.get("changed_age_seconds")
+        env.extra["pin_changes"] = len(data.get("history") or [])
         env.extra["pinned"] = int(totals.get("pinned") or 0)
         env.extra["mismatches"] = int(totals.get("mismatches") or 0)
         env.extra["unpinned"] = int(totals.get("unpinned") or 0)
@@ -1823,14 +2064,32 @@ class Facade:
         env.found = bool(totals.get("pinned"))
         for item in data.get("limits") or []:
             env.limits.append(str(item))
-        if not env.found:
+        # Состояние набора — то же, по которому решает ворота выпуска
+        # (`tools/release/gate_release.py`): расхождение останавливает выпуск,
+        # неполный набор тоже, отсутствие пина — только предупреждает.
+        if str(pin_state.get("state") or "") == "diverged":
+            env.limits.append("выпуск заблокирован: описание разошлось с пином "
+                              "(%d операций) — подтверждение принимает человек"
+                              % len(pin_state.get("diverged") or []))
+        elif str(pin_state.get("state") or "") == "partial":
+            env.limits.append("выпуск заблокирован: набор не полон — не подтверждено "
+                              "%d из %d" % (int(pin_state.get("unpinned") or 0),
+                                            int(pin_state.get("total_ops") or 0)))
+        elif not env.found:
             env.limits.append(
                 "ни один пин не поставлен: подтверждать нечего — "
                 "`contract_pin_approve` ставит пин на текущее описание")
+        history = data.get("history") or []
+        if history:
+            env.limits.append(
+                "последняя смена набора: %s (%s), было %s"
+                % (history[0].get("op"), history[0].get("approved_by"),
+                   (history[0].get("previous_hash") or "пина не было")[:12]))
         return env.to_dict()
 
     def op_contract_pin_approve(self, op: str = "", everything: bool = False,
-                                by: str = "", note: str = "") -> dict:
+                                by: str = "", note: str = "",
+                                kind: str = "op") -> dict:
         """53. Подтвердить текущее описание операции (или всех) человеком.
 
         Автор обязателен: пин без автора неотличим от самоподписи, а весь смысл
@@ -1844,7 +2103,7 @@ class Facade:
         try:
             data = pin_mod.approve(self.control.conn, self.cfg.root, op=str(op or ""),
                                    everything=bool(everything), by=str(by or ""),
-                                   note=str(note or ""))
+                                   note=str(note or ""), kind=str(kind or "op"))
         except pin_mod.PinRefusal as exc:
             env.found = False
             env.error = f"PinRefusal: {exc}"
@@ -1859,6 +2118,41 @@ class Facade:
             return env.to_dict()
         env.result = data
         env.extra["approved"] = int(data.get("total") or 0)
+        return env.to_dict()
+
+    def op_contract_diff(self, before: str = "", after: str = "") -> dict:
+        """54. Сводка изменений контракта между двумя выпусками (X10).
+
+        Два файла `ops_pins.json` — до и после — дают отчёт «что добавилось,
+        что исчезло, что изменилось», с разделением на ломающее и совместимое.
+        Ничего не подтверждает: решение остаётся человеку, а пин ставит
+        `contract_pin_approve`.
+        """
+        env = self.make_env("contract_diff", provenance="journal")
+        diff_mod, refusal = self._feature_module(
+            "contract_diff", "contract_diff", "contract-pin")
+        if refusal is not None:
+            return refusal
+        try:
+            data = diff_mod.diff(str(before or ""), str(after or ""))
+        except diff_mod.ContractDiffError as exc:
+            env.found = False
+            env.error = f"ContractDiffError: {exc}"
+            env.extra["next_action"] = util.next_action(
+                "contract_diff", self._config_hint(), kind="bad_input", detail=str(exc))
+            return env.to_dict()
+        except Exception as exc:  # noqa: BLE001 — причина названа
+            env.found = False
+            env.error = f"ContractDiffError: {type(exc).__name__}: {exc}"
+            return env.to_dict()
+        env.result = data
+        totals = data.get("totals") or {}
+        env.extra["breaking"] = int(totals.get("breaking") or 0)
+        env.extra["compatible"] = int(totals.get("compatible") or 0)
+        env.extra["verdict"] = str(data.get("verdict") or "")
+        env.found = True
+        for item in data.get("limits") or []:
+            env.limits.append(str(item))
         return env.to_dict()
 
     def op_db_cross(self) -> dict:

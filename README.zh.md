@@ -63,7 +63,7 @@ RAGRAF 用索引取代这条路径。智能体通过固定操作提问，得到�
 
 ## 能力
 
-<!-- surface:ops_heading -->**76 个操作**作用于代码仓库<!-- /surface:ops_heading -->——固定集合，没有面向图的查询语言：
+<!-- surface:ops_heading -->**79 个操作**作用于代码仓库<!-- /surface:ops_heading -->——固定集合，没有面向图的查询语言：
 
 | 操作 | 回答什么问题 |
 |---|---|
@@ -118,7 +118,7 @@ RAGRAF 用索引取代这条路径。智能体通过固定操作提问，得到�
 
 **主题与图的地图。** `themes` 返回文档图的实体分组——确定性：同一层始终给出相同的 `theme_id`——每个成员都带引用地址；若有模型，附基于引用的摘要，没有模型时主题保留而 `summary=null` 说明原因。`global_overview` 回答「这里总体上有什么」：文档、实体、关系、主题、摘要，以及带地址的主要主题。两者都读取文档图，缺少 `doc-graph` 能力时拒绝执行；分组本身不需要模型（`ragraf docgraph themes`）。
 
-同一批操作也以 <!-- surface:tools_mcp -->**83 个 MCP 工具**（`ragraf_*`）<!-- /surface:tools_mcp -->提供——用于作为服务器接入智能体，同时也通过 CLI 提供。其中一组工具是数据库活层：`ragraf_db_schema`、`ragraf_db_table`、`ragraf_db_relations`、`ragraf_db_sample`、`ragraf_db_drift`、`ragraf_db_cross`。封闭层级（enterprise 版）的两个操作以工具形式声明：`ragraf_license_offline`（离线许可证：申请、签发、接受、转移）与 `ragraf_attest_bundle`（交付认证：带签名的证据包及其校验）。封闭层级（enterprise 版）的一个操作按 FQN 将声明的设计与计算出的图进行比对：`contract_drift`（模块、依赖、契约；每个代码侧差异都带 `file:line`）——并以工具 `ragraf_contract_drift` 声明（能力 `contract-drift`）。质量回路（pro 版）是 `ragraf_quality_suite`（索引检查套件加运行记录）、`ragraf_quality_diff`（两次运行之间的差异）与 `ragraf_quality_prune`（精简运行日志：默认只做演练，删除仅在确认并在日志副本之后）。来源层（pro）新增两个工具——`ragraf_doc_asof`（某一日期生效的版本，含有效期区间与版本号）与 `ragraf_dependents`（哪些结论依赖某个事实：传递遍历、`outside_cap`，并区分「重新计算推导」与「人的决定」）。共享索引的三个操作（同样属于 pro）不在 MCP 集合里：它们管理发布与网络通道，而不是索引读取，以 `python -m ragraf.shared_index` 运行（见 `docs/03_implementation/SHARED-INDEX.md`）。机密代理（pro）由两个工具表示——`ragraf_broker_issue`（租约：期限、保管人、原因、一次性兑换）与 `ragraf_broker_rotate`（计划状态、排期、带租约撤销的轮换）；租约状态存放在 `catalog/broker.json`，存储模式不变。
+同一批操作也以 <!-- surface:tools_mcp -->**86 个 MCP 工具**（`ragraf_*`）<!-- /surface:tools_mcp -->提供——用于作为服务器接入智能体，同时也通过 CLI 提供。其中一组工具是数据库活层：`ragraf_db_schema`、`ragraf_db_table`、`ragraf_db_relations`、`ragraf_db_sample`、`ragraf_db_drift`、`ragraf_db_cross`。封闭层级（enterprise 版）的两个操作以工具形式声明：`ragraf_license_offline`（离线许可证：申请、签发、接受、转移）与 `ragraf_attest_bundle`（交付认证：带签名的证据包及其校验）。封闭层级（enterprise 版）的一个操作按 FQN 将声明的设计与计算出的图进行比对：`contract_drift`（模块、依赖、契约；每个代码侧差异都带 `file:line`）——并以工具 `ragraf_contract_drift` 声明（能力 `contract-drift`）。质量回路（pro 版）是 `ragraf_quality_suite`（索引检查套件加运行记录）、`ragraf_quality_diff`（两次运行之间的差异）与 `ragraf_quality_prune`（精简运行日志：默认只做演练，删除仅在确认并在日志副本之后）。来源层（pro）新增两个工具——`ragraf_doc_asof`（某一日期生效的版本，含有效期区间与版本号）与 `ragraf_dependents`（哪些结论依赖某个事实：传递遍历、`outside_cap`，并区分「重新计算推导」与「人的决定」）。共享索引的三个操作（同样属于 pro）不在 MCP 集合里：它们管理发布与网络通道，而不是索引读取，以 `python -m ragraf.shared_index` 运行（见 `docs/03_implementation/SHARED-INDEX.md`）。机密代理（pro）由两个工具表示——`ragraf_broker_issue`（租约：期限、保管人、原因、一次性兑换）与 `ragraf_broker_rotate`（计划状态、排期、带租约撤销的轮换）；租约状态存放在 `catalog/broker.json`，存储模式不变。
 第二十四个是 `use_project`：当一个服务器服务多个项目时选择语料。`context` 回答选中了哪个语料、依据是什么——没有它，关于别的项目的回答与本项目的回答无法区分。
 
 **二十九种语言**被解析成语法树（图的节点与边）。其中十六种由配置文件描述节点映射：PHP、Python、JavaScript、TypeScript、Java、C#、C、C++、Ruby、Lua、Go、Perl、bash、PowerShell、CSS、HTML。其余十三种（Rust、Kotlin、Swift、Scala、Dart、R、F#、OCaml、Solidity、Fortran、MATLAB、Elm、Lisp）从语法自身的标签查询获取节点名：它们的节点名与熟悉的那些不一致，而为每种语言写一份配置等于凭空发明名字。每种语言都在样例文件上校验——至少找到一个符号（`tests/test_new_languages.py`）。
@@ -400,7 +400,7 @@ python tools/ragraf.py ensure .
 
 ## 用数字看项目与实测基准
 
-公开发表的数字（2026-11-07 核对；索引规模取自活动修订记录）：<!-- surface:figures -->外观上的 **76 个操作**、**83 个 MCP 工具**、**26** 个 CLI 子命令、**29** 种语法树语言与 **40** 种文本接入语言（包括 `document`）、登记表中 **84** 种数据格式（61 种语言、9 类文档家族、10 类数据、4 种无解析器）<!-- /surface:figures -->；RAGRAF 自身索引——984 个文件、7 079 个节点、99 267 条边（快照由 `Test-DocumentedNumbers` 与活动修订记录比对：属于过去修订的数字会给出带其 `rev_id` 与日期的警告，而在发布时这就是拒绝——`tools/release/gate_release.py`；活动数字来自 `python tools/ragraf.py -p config/ragraf.yaml status`）。
+公开发表的数字（2026-11-07 核对；索引规模取自活动修订记录）：<!-- surface:figures -->外观上的 **79 个操作**、**86 个 MCP 工具**、**26** 个 CLI 子命令、**29** 种语法树语言与 **40** 种文本接入语言（包括 `document`）、登记表中 **84** 种数据格式（61 种语言、9 类文档家族、10 类数据、4 种无解析器）<!-- /surface:figures -->；RAGRAF 自身索引——984 个文件、7 079 个节点、99 267 条边（快照由 `Test-DocumentedNumbers` 与活动修订记录比对：属于过去修订的数字会给出带其 `rev_id` 与日期的警告，而在发布时这就是拒绝——`tools/release/gate_release.py`；活动数字来自 `python tools/ragraf.py -p config/ragraf.yaml status`）。
 
 **试验场，已去个人化**（去掉项目名、路径和域名）。本节的数字是 **2026-10-16 的快照**，不是当前状态：当时登记册里有 **28 个语料、25 个已索引**——10 个带 CPG 层，15 个处于 `degraded` 模式。其中 16 个的修订记录在同一天读过：**7 527 个文件、94 528 个符号、791 844 条边、86 790 个分块**。
 

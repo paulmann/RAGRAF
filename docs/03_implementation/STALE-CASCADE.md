@@ -18,7 +18,7 @@
 | автоматические пометки при индексации | `src/ragraf/provenance.py:971` |
 | хук индексатора (после сборки производных фактов) | `src/ragraf/indexer.py:679` |
 | тот же хук в сборке документного графа | `src/ragraf/docgraph_extract.py:404` |
-| операция фасада `stale_cascade` | `src/ragraf/facade.py:5966` |
+| операция фасада `stale_cascade` | `src/ragraf/facade.py:6260` |
 | свойства | `tests/test_provenance.py:327` (раздел 5б) |
 
 ## 2. Почему отдельная таблица, а не колонка в `stale_edge`

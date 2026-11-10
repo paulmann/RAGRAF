@@ -630,6 +630,68 @@ TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "ragraf_contract_pin_sample",
+        "description": (
+            "ПРОБА ПОВЕДЕНИЯ: что операция ВОЗВРАЩАЕТ на фиксированном вызове, "
+            "а не какой у неё вид. Пин видит форму (имя, параметры, ключи "
+            "ответа); правка тела, не меняющая форму, для него невидима — эта "
+            "проба закрывает именно тот случай. Ответ вызывается и "
+            "канонизируется без изменчивых полей (ревизия, свежесть, "
+            "длительности, номера сеансов) и хешируется. Режимы: take — "
+            "записать пробу, compare — сверить с записанной. Вызов, который "
+            "нельзя сделать (нет индекса), назван `not_sampled` с причиной, а "
+            "не выдан за совпадение. Ничего не блокирует: поведение — "
+            "предупреждение. Возможность издания enterprise (contract-pin)."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "mode": {"type": "string", "enum": ["take", "compare", "accept"],
+                          "default": "compare",
+                          "description": "take — записать пробу, compare — сверить с "
+                                         "записанной, accept — принять новое поведение"},
+                "op": {"type": "string",
+                        "description": "какие операции пробовать (через запятую, пусто — все)"},
+                "limit": {"type": "integer", "default": 50,
+                          "description": "сколько результатов показать"},
+                "by": {"type": "string",
+                        "description": "кто принимает новое поведение (обязательно при mode=accept)"},
+                "note": {"type": "string", "description": "пометка к принятию"},
+                "only_changed": {"type": "boolean", "default": False,
+                                  "description": "только пробы, разошедшиеся при последней сверке"},
+                "except_ops": {"type": "string",
+                                "description": "исключить операции (через запятую)"},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "ragraf_contract_pin_history",
+        "description": (
+            "ЖУРНАЛ СМЕН НАБОРА: кто менял описание, когда и с какого хеша на "
+            "какой. Пин хранит одно состояние на объект, поэтому историю не "
+            "заменяет: здесь каждая смена — отдельная строка с автором, "
+            "отметкой времени, возрастом и предыдущим хешем, а сверху сводка по "
+            "авторам и объектам. Сводка — счётчик смен, а не оценка качества. "
+            "Пустая история названа отдельно. Срок хранения: последние смены "
+            "на объект и всё за полгода; строки, на которые ссылается журнал "
+            "событий, не удаляются. Ничего не меняет. Возможность издания "
+            "enterprise (contract-pin)."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "kind": {"type": "string", "enum": ["op", "tool", "all"], "default": "all",
+                         "description": "какой контракт показать: op — операции, "
+                                        "tool — инструменты MCP, all — оба"},
+                "op": {"type": "string", "description": "чью историю показать (пусто — всех)"},
+                "limit": {"type": "integer", "default": 50,
+                          "description": "сколько последних смен показать"},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
         "name": "ragraf_contract_pin_approve",
         "description": (
             "ПОДТВЕРДИТЬ ТЕКУЩЕЕ ОПИСАНИЕ операции (или всех операций) — пин "
@@ -646,7 +708,33 @@ TOOLS: list[dict[str, Any]] = [
                                "description": "подтвердить описание всех операций"},
                 "by": {"type": "string", "description": "кто подтверждает (обязательно)"},
                 "note": {"type": "string", "description": "пометка к пину"},
+                "kind": {"type": "string", "enum": ["op", "tool", "all"], "default": "op",
+                          "description": "какой контракт подтвердить: op — операции, "
+                                         "tool — инструменты MCP, all — оба"},
             },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "ragraf_contract_diff",
+        "description": (
+            "СВОДКА ИЗМЕНЕНИЙ КОНТРАКТА между двумя выпусками: два файла "
+            "ops_pins.json (до и после) → что добавилось, что исчезло, что "
+            "изменилось, с разделением на ломающее и совместимое. Ломающее — "
+            "исчезнувший объект или параметр, новый обязательный параметр, "
+            "смена типа, сужение enum, снятая пометка безопасности. Ничего не "
+            "подтверждает: пин ставит contract_pin_approve. Возможность "
+            "издания enterprise (contract-pin)."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "before": {"type": "string",
+                           "description": "манифест описаний ДО выпуска (ops_pins.json)"},
+                "after": {"type": "string",
+                          "description": "манифест описаний ПОСЛЕ выпуска"},
+            },
+            "required": ["before", "after"],
             "additionalProperties": False,
         },
     },
@@ -2011,9 +2099,21 @@ _TOOL_META: dict[str, dict[str, Any]] = {
         "title": "Пиннинг подписи операций: что подтверждено и что разошлось",
         "readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
     },
+    "ragraf_contract_pin_sample": {
+        "title": "Проба поведения: что операция возвращает",
+        "readOnlyHint": False, "destructiveHint": False, "idempotentHint": True,
+    },
+    "ragraf_contract_pin_history": {
+        "title": "Журнал смен набора: кто менял, когда и с какого хеша",
+        "readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
+    },
     "ragraf_contract_pin_approve": {
         "title": "Подтвердить текущее описание операции (пин на релиз)",
         "readOnlyHint": False, "destructiveHint": False, "idempotentHint": True,
+    },
+    "ragraf_contract_diff": {
+        "title": "Сводка изменений контракта между двумя выпусками",
+        "readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
     },
     "ragraf_preflight": {
         "title": "Цена и границы до старта: время, слепые зоны, готовность",
@@ -2422,6 +2522,24 @@ def _config_stamp(path: str | None) -> tuple[int, int] | None:
     except OSError:
         return None
     return (int(info.st_mtime_ns), int(info.st_size))
+
+
+def pin_break_reason(exc: BaseException) -> str:
+    """Причина поломки контракта по исключению вызова. Пусто — не про аргументы.
+
+    Список закрытый (`pin.BREAK_REASONS`) и короткий: `TypeError` — вызов не
+    сошёлся по составу аргументов (лишний, недостающий, не тот тип),
+    `KeyError` — обработчик не нашёл переданного ключа. Всё прочее (нет индекса,
+    сбой хранилища, ошибка внутри операции) — НЕ повод писать в журнал
+    контракта: там ищут расхождение описания, а не любой сбой.
+
+    Граница названа прямо: `TypeError` из недр операции тоже сюда попадёт.
+    Он станет событием только после расхождения и только один раз, а в `detail`
+    уйдёт текст исключения — поэтому ошибка видна, а не замаскирована.
+    """
+    if isinstance(exc, (TypeError, KeyError)):
+        return "bad_arguments"
+    return ""
 
 
 class McpServer:
@@ -3221,10 +3339,19 @@ class McpServer:
 
         handler = self._handlers().get(name)
         if handler is None:
+            # Журнал контракта: клиент зовёт инструмент, которого у сервера уже
+            # нет. Само по себе это обычная ошибка вызова, и событие появится
+            # только если расхождение описания уже записано.
+            self._note_pin_break(str(name or ""), reason="unknown_name",
+                                 detail="имени нет среди инструментов сервера")
             return self._ok(
                 req_id,
                 {"isError": True, "content": [{"type": "text", "text": f"неизвестный инструмент: {name}"}]},
             )
+        # Каждый вызов известного инструмента пишет свой хеш в журнал контракта:
+        # инструмент можно переименовать или сузить его схему, не тронув ни
+        # одной операции, — без этой записи такой клиент остался бы без события.
+        self._observe_pin(str(name or ""))
         # Уведомления о ходе отправляются ТОЛЬКО по запросу клиента: у HARNESS
         # незапрошенное уведомление о ходе — ошибка («получено уведомление о
         # ходе для неизвестного токена»), а не подсказка. Замерено по коду
@@ -3246,6 +3373,13 @@ class McpServer:
             )
         except Exception as exc:  # ошибка операции не должна ронять сервер
             self.log(f"ошибка {name}: {type(exc).__name__}: {exc}")
+            # Плагин обновился, клиент остался на старом контракте: снаружи это
+            # выглядит как невнятная ошибка вызова. Ошибка аргументов пишется в
+            # журнал контракта — но только после расхождения и только первая.
+            reason = pin_break_reason(exc)
+            if reason:
+                self._note_pin_break(str(name or ""), reason=reason,
+                                     detail=f"{type(exc).__name__}: {exc}")
             if "--debug" in sys.argv:
                 traceback.print_exc(file=sys.stderr)
             return self._ok(
@@ -3279,6 +3413,69 @@ class McpServer:
             if args.get("brief"):
                 result = self._brief_view(result)
         return self._ok(req_id, self._content(result))
+
+    def _note_pin_break(self, name: str, *, reason: str, detail: str = "",
+                        kind: str = "tool") -> None:
+        """Отметить неуспешный вызов в журнале контракта.
+
+        Точка нужна именно здесь: сценарий «плагин обновился, а клиент работает
+        по старому контракту» приходит через MCP, а не через командную строку, и
+        без неё в журнале не было бы ни одного события от настоящих клиентов.
+        `pin.note_break` сам решает, писать ли: до расхождения описания он молчит,
+        а повтор того же вызова после того же расхождения не пишет.
+
+        Соединение открывается своё и короткое: строить ради журнала весь фасад
+        (он сверяет суммы корпуса) нельзя — отказ клиента не повод переиндексировать
+        проект. Сбой записи не меняет ответ клиенту.
+        """
+        conn = None
+        try:
+            from . import pin as pin_mod
+            from . import store as store_mod
+
+            conn = store_mod.connect(self.config().control_db)
+            pin_mod.note_break(conn, str(name), reason=reason, detail=detail, kind=kind)
+        except Exception:  # noqa: BLE001 — журнал не имеет права ломать ответ
+            return
+        finally:
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:  # noqa: BLE001 — закрытие уже закрытого
+                    pass
+
+    def _observe_pin(self, name: str) -> None:
+        """Записать наблюдённый хеш инструмента в журнал контракта (X10).
+
+        Пишется на КАЖДЫЙ вызов известного инструмента — так же, как для
+        операции. Соединение берётся у живого фасада, если он уже построен:
+        лишняя запись не должна стоить клиенту второго открытия базы.
+        """
+        conn = None
+        fresh = False
+        try:
+            from . import pin as pin_mod
+            from . import store as store_mod
+
+            root = self.config().root
+            observed = pin_mod.tool_hash_of(root, str(name))
+            if not observed:
+                return
+            facade = self._facade
+            if facade is not None:
+                conn = facade.control.conn
+            else:
+                conn = store_mod.connect(self.config().control_db)
+                fresh = True
+            pin_mod.observe(conn, str(name), observed, root=root, kind="tool")
+        except Exception:  # noqa: BLE001 — журнал не имеет права ломать ответ
+            return
+        finally:
+            if fresh and conn is not None:
+                try:
+                    conn.close()
+                except Exception:  # noqa: BLE001 — закрытие уже закрытого
+                    pass
 
     # ---------------- инструменты ----------------
 
@@ -3386,11 +3583,30 @@ class McpServer:
             "ragraf_contract_pin_status": lambda a: f().op_contract_pin_status(
                 limit=int(a.get("limit") or 50),
             ),
+            "ragraf_contract_pin_sample": lambda a: f().op_contract_pin_sample(
+                mode=str(a.get("mode") or "compare"),
+                op=str(a.get("op") or ""),
+                limit=int(a.get("limit") or 50),
+                by=str(a.get("by") or ""),
+                note=str(a.get("note") or ""),
+                only_changed=bool(a.get("only_changed") or False),
+                except_ops=str(a.get("except_ops") or ""),
+            ),
+            "ragraf_contract_pin_history": lambda a: f().op_contract_pin_history(
+                kind=str(a.get("kind") or ""),
+                op=str(a.get("op") or ""),
+                limit=int(a.get("limit") or 50),
+            ),
             "ragraf_contract_pin_approve": lambda a: f().op_contract_pin_approve(
                 op=str(a.get("op") or ""),
                 everything=bool(a.get("everything") or False),
                 by=str(a.get("by") or ""),
                 note=str(a.get("note") or ""),
+                kind=str(a.get("kind") or "op"),
+            ),
+            "ragraf_contract_diff": lambda a: f().op_contract_diff(
+                before=str(a.get("before") or ""),
+                after=str(a.get("after") or ""),
             ),
             "ragraf_preflight": lambda a: f().op_preflight(
                 root=str(a.get("root") or ""),

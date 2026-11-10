@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "counts": {
-    "ops": 76,
-    "tools": 83,
+    "ops": 79,
+    "tools": 86,
     "cli": 26,
     "tree": 29,
     "text": 40,
@@ -326,6 +326,23 @@
       "returns_from": "variable"
     },
     {
+      "name": "contract_diff",
+      "params": [
+        {
+          "name": "before",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "after",
+          "type": "str",
+          "default": "''"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
       "name": "contract_drift",
       "params": [
         {
@@ -364,10 +381,91 @@
           "name": "note",
           "type": "str",
           "default": "''"
+        },
+        {
+          "name": "kind",
+          "type": "str",
+          "default": "'op'"
         }
       ],
       "returns": [],
       "returns_from": "variable"
+    },
+    {
+      "name": "contract_pin_history",
+      "params": [
+        {
+          "name": "kind",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "op",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "default": "50"
+        }
+      ],
+      "returns": [
+        "changes",
+        "filter",
+        "retention",
+        "summary",
+        "total"
+      ],
+      "returns_from": "literal"
+    },
+    {
+      "name": "contract_pin_sample",
+      "params": [
+        {
+          "name": "mode",
+          "type": "str",
+          "default": "'compare'"
+        },
+        {
+          "name": "op",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "default": "50"
+        },
+        {
+          "name": "by",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "note",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "only_changed",
+          "type": "bool",
+          "default": "False"
+        },
+        {
+          "name": "except_ops",
+          "type": "str",
+          "default": "''"
+        }
+      ],
+      "returns": [
+        "mode",
+        "probes",
+        "scope",
+        "selected",
+        "state"
+      ],
+      "returns_from": "literal"
     },
     {
       "name": "contract_pin_status",
@@ -1953,8 +2051,11 @@
     "ragraf_code",
     "ragraf_compact",
     "ragraf_context",
+    "ragraf_contract_diff",
     "ragraf_contract_drift",
     "ragraf_contract_pin_approve",
+    "ragraf_contract_pin_history",
+    "ragraf_contract_pin_sample",
     "ragraf_contract_pin_status",
     "ragraf_db_cross",
     "ragraf_db_drift",
@@ -2226,7 +2327,10 @@
       "edition": "enterprise",
       "status": "shipped",
       "operations": [
+        "contract_diff",
         "contract_pin_approve",
+        "contract_pin_history",
+        "contract_pin_sample",
         "contract_pin_status"
       ]
     },
@@ -2281,14 +2385,16 @@
     "formats": "src/ragraf/formats.py",
     "features": "src/ragraf/edition_baseline.json"
   },
-  "digest": "6eb30f839b05ac3c1ec2b04e03ee3292466714e5a6746caaf48b0e4e9ba5c1e3",
+  "digest": "78789dc4707881a1e2a9cd5c26b807480015ed08ccf2440bfc23479ca9e8eca2",
   "revision": {
-    "rev_id": "rev-1495",
-    "files": 978,
-    "nodes": 7079,
-    "edges": 98771,
-    "sealed_at": "2026-11-09T23:38:03+03:00",
-    "source": "graph",
-    "notes": []
+    "rev_id": null,
+    "files": null,
+    "nodes": null,
+    "edges": null,
+    "sealed_at": "",
+    "source": "",
+    "notes": [
+      "индекс не найден: размеры ревизии неизвестны"
+    ]
   }
 }

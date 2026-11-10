@@ -16,7 +16,7 @@
 | компактный список | `src/ragraf/quality_traces.py:163` |
 | полная трасса | `src/ragraf/quality_traces.py:185` |
 | повтор с вердиктом | `src/ragraf/quality_traces.py:203` |
-| операция фасада `quality_trace` | `src/ragraf/facade.py:8411` |
+| операция фасада `quality_trace` | `src/ragraf/facade.py:8705` |
 | шаги сеанса и решения гейта (публичные помощники) | `src/ragraf/quality_cases.py:356`, `:361` |
 | проверка одного кейса | `src/ragraf/quality_cases.py:366` |
 | свойства | `tests/test_quality_traces.py` |

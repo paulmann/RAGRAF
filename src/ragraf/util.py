@@ -547,6 +547,7 @@ REFUSAL_KINDS: tuple[str, ...] = (
     "degraded",      # режим ревизии не позволяет операцию
     "no_data",       # операция возможна, данных в корпусе нет
     "bad_input",     # вход неверен — исправляется вызывающим
+    "pin_unaccepted",  # контракт операций не принят человеком (X9)
 )
 
 #: Основа команд. Путь к конфигу подставляется, если он известен.
@@ -558,6 +559,10 @@ _COMMANDS: dict[str, str] = {
     "edition": "python tools/ragraf.py edition",
     "license": "python tools/ragraf.py edition",
     "degraded": "python tools/ragraf.py -p {arg} index --cpg",
+    # Одна команда на два потребителя — отказ операции и ворота выпуска:
+    # подтверждение пина всегда означает одно и то же действие.
+    "pin_unaccepted": ("python tools/ragraf.py -p {arg} query contract_pin_approve"
+                       " --all-ops --approved-by <кто>"),
 }
 
 #: Что не так и почему — по виду отказа.
@@ -580,6 +585,8 @@ _TEXT: dict[str, tuple[str, str, bool]] = {
                 "операция выполнена, но искомого в индексе нет", False),
     "bad_input": ("вход неверен",
                   "операция не смогла разобрать аргумент", True),
+    "pin_unaccepted": ("контракт операций не принят человеком",
+                       "пин не поставлен или разошёлся с описанием", True),
 }
 
 

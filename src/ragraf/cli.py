@@ -73,7 +73,9 @@ OPS = [
     # Подготовка корпуса к индексации (X5): осмотр ДО создания индекса.
     "preflight",
     # Пиннинг подписи операций (X6): состояние пинов и подтверждение человеком.
-    "contract_pin_status", "contract_pin_approve",
+    # Сводка изменений между выпусками (X10) — та же возможность.
+    "contract_pin_status", "contract_pin_approve", "contract_pin_history",
+    "contract_pin_sample", "contract_diff",
     # Парный прогон по фиксированным кейсам (X4, блоки 4+7): та же возможность
     # `quality-loop`, отдельная операция — чтобы вердикт по кейсам не смешивался
     # с `quality_diff`, который между ревизиями вердикт не выносит.
@@ -1056,6 +1058,22 @@ def dispatch_op(fc, args: argparse.Namespace) -> dict:
             sign=bool(getattr(args, "sign", True)),
         )
     # ---------------- контур качества (ПРОМТ-И9) ----------------
+    if op == "contract_pin_sample":
+        return fc.op_contract_pin_sample(
+            mode=str(getattr(args, "sample_mode", "") or "compare"),
+            op=str(getattr(args, "op_name", "") or ""),
+            limit=int(getattr(args, "limit", 0) or 50),
+            by=str(getattr(args, "approved_by", "") or ""),
+            note=str(getattr(args, "pin_note", "") or ""),
+            only_changed=bool(getattr(args, "only_changed", False)),
+            except_ops=str(getattr(args, "except_ops", "") or ""),
+        )
+    if op == "contract_pin_history":
+        return fc.op_contract_pin_history(
+            kind=str(getattr(args, "contract_kind", "") or ""),
+            op=str(getattr(args, "op_name", "") or ""),
+            limit=int(getattr(args, "limit", 0) or 50),
+        )
     if op == "contract_pin_status":
         return fc.op_contract_pin_status(limit=int(getattr(args, "limit", 0) or 50))
     if op == "contract_pin_approve":
@@ -1064,6 +1082,12 @@ def dispatch_op(fc, args: argparse.Namespace) -> dict:
             everything=bool(getattr(args, "all_ops", False)),
             by=str(getattr(args, "approved_by", "") or ""),
             note=str(getattr(args, "pin_note", "") or ""),
+            kind=str(getattr(args, "contract_kind", "") or "op"),
+        )
+    if op == "contract_diff":
+        return fc.op_contract_diff(
+            before=str(getattr(args, "before", "") or ""),
+            after=str(getattr(args, "after", "") or ""),
         )
     if op == "preflight":
         # Ничего не создаёт: осмотр каталога до индексации (X5).
@@ -2661,14 +2685,39 @@ def build_parser() -> argparse.ArgumentParser:
     # Контур качества (ПРОМТ-И9). `--no-record` нужен затем, чтобы прогон
     # можно было повторить, не засоряя журнал: сравнение идёт по `digest`.
     pq.add_argument("--op-name", dest="op_name", default="",
-                    help="contract_pin_approve: какую операцию подтвердить")
+                    help="contract_pin_approve: какую операцию подтвердить; "
+                         "contract_pin_history: чью историю показать; "
+                         "contract_pin_sample: какие операции пробовать "
+                         "(через запятую, пусто — все из списка)")
     pq.add_argument("--all-ops", dest="all_ops", action="store_true",
                     help="contract_pin_approve: подтвердить описание всех операций")
     pq.add_argument("--approved-by", dest="approved_by", default="",
-                    help="contract_pin_approve: кто подтверждает (обязательно)")
+                    help="contract_pin_approve: кто подтверждает (обязательно); "
+                         "contract_pin_sample: кто принимает новое поведение "
+                         "(обязательно при mode=accept)")
     pq.add_argument("--pin-note", dest="pin_note", default="",
                     help="contract_pin_approve: пометка к пину "
                          "(имя отличается от --note других подкоманд)")
+    pq.add_argument("--contract-kind", dest="contract_kind", default="",
+                    choices=["", "op", "tool", "all"],
+                    help="contract_pin_approve: какой контракт подтвердить "
+                         "(op — операции, tool — инструменты MCP, all — оба; "
+                         "по умолчанию op); contract_pin_history: за каким "
+                         "контрактом следить (пусто или all — оба)")
+    pq.add_argument("--sample-mode", dest="sample_mode", default="compare",
+                    choices=["take", "compare", "accept"],
+                    help="contract_pin_sample: take — записать пробу поведения, "
+                         "compare — сверить с записанной (по умолчанию), "
+                         "accept — принять новое поведение (требует --approved-by)")
+    pq.add_argument("--only-changed", dest="only_changed", action="store_true",
+                    help="contract_pin_sample: только пробы, разошедшиеся при "
+                         "последней сверке")
+    pq.add_argument("--except", dest="except_ops", default="",
+                    help="contract_pin_sample: исключить операции (через запятую)")
+    pq.add_argument("--before", default="",
+                    help="contract_diff: манифест описаний ДО выпуска (ops_pins.json)")
+    pq.add_argument("--after", default="",
+                    help="contract_diff: манифест описаний ПОСЛЕ выпуска")
     pq.add_argument("--root", default="",
                     help="preflight: каталог для осмотра (по умолчанию корень корпуса)")
     pq.add_argument("--sample", type=int, default=50,

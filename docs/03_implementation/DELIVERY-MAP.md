@@ -12,14 +12,14 @@
 
 | № | Блок (что просили) | Возможность | Операция | Код | Проверка |
 |---|---|---|---|---|---|
-| 1 | Документный слой с интервалами действия (`valid_from` / `valid_to`, `doc_asof`, пометка заменённого) | `provenance` (Pro) | `doc_asof` | `src/ragraf/facade.py:5875` — операция; разбор интервала и запись слоя — `src/ragraf/provenance.py` | `tests/test_provenance.py` (66 свойств) |
+| 1 | Документный слой с интервалами действия (`valid_from` / `valid_to`, `doc_asof`, пометка заменённого) | `provenance` (Pro) | `doc_asof` | `src/ragraf/facade.py:6169` — операция; разбор интервала и запись слоя — `src/ragraf/provenance.py` | `tests/test_provenance.py` (66 свойств) |
 | 2 | Слой замысла: якоря `MODULE_CONTRACT` как факты и сверка «объявлено / вычислено» | `contract-drift` (Enterprise) | `contract_drift` | `src/ragraf/facade.py:1612` — операция; разбор якорей — `src/ragraf/anchors.py` | `tests/test_contracts_anchors.py` (35 свойств) |
 | 3 | Рёбра деривации и транзитивное устаревание: «что пересчитать» по цепочке выводов | `provenance` (Pro) | `dependents`, `stale_cascade` | `src/ragraf/provenance.py:924` — каскад; обратный обход и таблица пометок — тот же модуль | `tests/test_provenance.py` (66 свойств) |
 | 4 | Утверждения по трассе, а не только по ответу; подтверждённый сбой как воспроизводимая трасса | `quality-loop` (Pro) | `quality_suite`, `quality_trace` | `src/ragraf/quality_traces.py:105` — запись трассы; проверка кейсов — `src/ragraf/quality_cases.py` | `tests/test_quality_cases.py` (49), `tests/test_quality_traces.py` (42) |
-| 5 | Сообщение отказа называет следующее действие | дисциплина текста (не товар) | — (поле `next_action` у отказов) | `src/ragraf/util.py:586` — единая сборка отказа | `tests/test_preflight.py` (34 свойства) |
-| 6 | Пиннинг подписи операций и корреляция «описание изменилось — вызов упал» | `contract-pin` (Enterprise) | `contract_pin_status`, `contract_pin_approve` | `src/ragraf/pin.py:229` — наблюдение хеша на вызове; подтверждение — `src/ragraf/pin.py` | `tests/test_contract_pin.py` (42 свойства) |
+| 5 | Сообщение отказа называет следующее действие | дисциплина текста (не товар) | — (поле `next_action` у отказов) | `src/ragraf/util.py:593` — единая сборка отказа | `tests/test_preflight.py` (34 свойства) |
+| 6 | Пиннинг подписи операций и корреляция «описание изменилось — вызов упал» | `contract-pin` (Enterprise) | `contract_pin_status`, `contract_pin_approve`, `contract_pin_history`, `contract_pin_sample`, `contract_diff` | `src/ragraf/pin.py:723` — состояние набора; хеши — `src/ragraf/pin.py`; сводка между выпусками; ворота выпуска — `tools/release/gate_release.py`; весь выпуск — `tools/release/release.py` | `tests/test_contract_pin.py` (173 проверки) |
 | 7 | Парные прогоны и per-case регрессия в бенчмарке | `quality-loop` (Pro) | `quality_pair` | `src/ragraf/quality_cases.py:483` — сравнение прогонов по кейсам | `tests/test_quality_cases.py` (49 свойств) |
-| 8 | Сверка чисел в документации с кодом (источник истины — код) | дисциплина сборки (не товар) | — (гейт `surface_gen`) | `src/ragraf/surface.py:134` — счёт операций из AST | `tests/test_documented_numbers.py` (76 свойств) |
+| 8 | Сверка чисел в документации с кодом (источник истины — код) | дисциплина сборки (не товар) | — (гейт `surface_gen`) | `src/ragraf/surface.py:167` — счёт операций из AST | `tests/test_documented_numbers.py` (76 свойств) |
 | 9 | Предварительная оценка индексации легаси до первого прохода | `preflight` (Pro) | `preflight` | `src/ragraf/preflight.py:348` — осмотр корпуса, который ничего не создаёт | `tests/test_preflight.py` (34 свойства) |
 
 ## Что стоит за статусами

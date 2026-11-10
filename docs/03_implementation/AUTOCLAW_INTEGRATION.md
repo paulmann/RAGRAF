@@ -358,8 +358,8 @@ Get-ChildItem "$env:APPDATA\AutoClaw-oversea-official\accounts" -Directory | For
 источников и карта метаданных (`sources`, `map`, страница `/sources`), документы
 PDF/DOCX/XLSX/PPTX/EML/ODT/RTF в языке `document`, локальная польза
 (`feedback`, `analytics`, страница `/value`). Числа сверяются с кодом
-(`Test-DocumentedNumbers`): сервер отдаёт **83 инструмента**, фасад —
-76 операций, CLI — 26 подкоманд.
+(`Test-DocumentedNumbers`): сервер отдаёт **86 инструментов**, фасад —
+79 операций, CLI — 26 подкоманд.
 
 Полная настройка обоих агентов и каталог возможностей —
 `docs/03_implementation/AGENTS_SETUP_AND_CAPABILITIES.md`.

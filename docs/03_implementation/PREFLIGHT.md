@@ -58,7 +58,7 @@
 
 ## 2. Единый текст отказа
 
-`util.next_action(operation, arg, kind=..., detail=...)` (`src/ragraf/util.py:586`) возвращает четыре
+`util.next_action(operation, arg, kind=..., detail=...)` (`src/ragraf/util.py:593`) возвращает четыре
 обязательные части:
 
 | поле | смысл |
@@ -69,11 +69,12 @@
 | `possible` | возможно ли выполнить операцию вообще (после действия или с другим входом) |
 
 Виды отказа — закрытый список: `no_index`, `stale_index`, `no_documents`,
-`feature`, `edition`, `license`, `degraded`, `no_data`, `bad_input`. Вид вне
+`feature`, `edition`, `license`, `degraded`, `no_data`, `bad_input`,
+`pin_unaccepted`. Вид вне
 списка — ошибка вызывающего кода, а не пустой совет: опечатка в имени не должна
 давать «ничего не посоветовали».
 
-Подключено в отказах: «индекса нет» (`_no_index`, `src/ragraf/facade.py:7388`), «возможность не в сборке»
+Подключено в отказах: «индекса нет» (`_no_index`, `src/ragraf/facade.py:1455`), «возможность не в сборке»
 (`_feature_refusal`), «издание закрыто» и «лицензия недействительна»
 (`_edition_refusal`), «режим ниже full» (`slice`), а также в исключении
 `IndexNotBuilt`, которое поднимается при сборке фасада.

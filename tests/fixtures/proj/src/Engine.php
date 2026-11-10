@@ -18,20 +18,15 @@ class Engine
     public function run(array $jobs): array
     {
         $done = [];
+        $prefix = $this->config->get('prefix', 'stage');
         foreach ($jobs as $job) {
             $name = $job['name'] ?? 'unknown';
             $limit = (int) $this->config->get('limit', 10);
             if (count($done) >= $limit) {
                 break;
             }
-            $done[] = $this->formatStage($name);
+            $done[] = $prefix . ':' . trim($name);
         }
         return $done;
-    }
-
-    private function formatStage(string $name): string
-    {
-        $prefix = $this->config->get('prefix', 'stage');
-        return $prefix . ':' . trim($name);
     }
 }
