@@ -1207,6 +1207,20 @@ def main(argv: list[str] | None = None) -> int:
         state["blocks"].append("описания операций в сборке не совпадают с её кодом")
         state["actions"].append("пересобрать ops_pins.json")
         return finish(1)
+
+    # Таблица источников называет голову ПРЕДЫДУЩЕЙ сверки, и отставание
+    # когда-то держалось правилом в документе. 22.11.2026 правило не сработало:
+    # пересчёт был закоммичен отдельно, и в архиве 0.13.5 голова оказалась на два
+    # коммита от тега. Здесь это считается, а не обещается.
+    lag_code, lag_output = run("check_sources_lag.py", "--mode", "build",
+                               "--tree", str(tree), "--source", str(source))
+    lag_text = lag_output.strip().splitlines()[-1] if lag_output.strip() else "(пусто)"
+    print(("OK: " if lag_code == 0 else "FAIL: ") + lag_text)
+    if lag_code != 0:
+        state["blocks"].append("таблица источников называет не текущую голову публикации")
+        state["actions"].append("пересчитать таблицу в рабочем дереве и не коммитить её отдельно; "
+                                "клон публикации задаётся RAGRAF_PUBLICATION_CLONE")
+        return finish(1)
     # Состояния для итога берутся ИЗ АРТЕФАКТА, а не из сообщений шагов: это
     # единственное место, где описания и пробы записаны вместе.
     artifact_doc: dict = {}
