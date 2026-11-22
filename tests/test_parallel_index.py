@@ -175,6 +175,35 @@ def main() -> int:
               f"реестр {(entry.get('node_count'), entry.get('edge_count'))}"
               f" / граф {(rev.get('node_count'), rev.get('edge_count'))}")
 
+    print("\n=== 3. Проба записи в каталог состояния: гонка между процессами ===")
+    import threading
+
+    if str(REPO / "src") not in sys.path:
+        sys.path.insert(0, str(REPO / "src"))
+    from ragraf.util import dir_blocker  # noqa: E402
+
+    shared = base / "probe-race"
+    shared.mkdir(parents=True, exist_ok=True)
+    verdicts: list[str | None] = []
+    guard = threading.Lock()
+
+    def probe() -> None:
+        answer = dir_blocker(shared)
+        with guard:
+            verdicts.append(answer)
+
+    threads = [threading.Thread(target=probe) for _ in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    check(len(verdicts) == 8 and all(item is None for item in verdicts),
+          "8 одновременных проверок одного каталога: все отвечают «можно писать»",
+          str([item for item in verdicts if item is not None])[:140])
+    leftovers = [p.name for p in shared.iterdir() if "write-probe" in p.name]
+    check(leftovers == [], "пробы не остаются после проверки", str(leftovers)[:100])
+
     print("\n=== ИТОГ ===")
     print(f"пройдено: {PASS}, провалено: {FAIL}")
     return 0 if FAIL == 0 else 1

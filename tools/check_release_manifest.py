@@ -379,6 +379,31 @@ def main() -> int:
                 re.search(rf"^## \[{re.escape(version)}\]", log, re.M) is not None,
                 f"в CHANGELOG.md нет раздела выпуска [{version}]",
             )
+        # Манифесты плагина повторяют версию и живут ВНЕ собранного дерева:
+        # плагин — отдельная поставка, но выпускается тем же кодом. Пропущенный
+        # здесь повтор уже один раз пережил подъём версии (замер 22.11.2026):
+        # поймал его только тест интеграции, и только при удачном порядке прогона.
+        for relative, label in (
+            ("plugin/.claude-plugin/plugin.json", "plugin.json"),
+            (".claude-plugin/marketplace.json", "marketplace.json"),
+        ):
+            manifest = BUILT_TREE / relative
+            expect(manifest.is_file(), f"в собранном дереве нет {relative}")
+            if not manifest.is_file():
+                continue
+            try:
+                payload = json.loads(manifest.read_text(encoding="utf-8"))
+            except Exception as exc:  # noqa: BLE001 — причина называется
+                expect(False, f"{label} не разбирается: {type(exc).__name__}")
+                continue
+            found = {payload.get("version")}
+            for item in payload.get("plugins") or []:
+                if isinstance(item, dict):
+                    found.add(item.get("version"))
+            expect(
+                found == {version},
+                f"{label} называет версии {sorted(str(x) for x in found)}, а код — {version}",
+            )
     else:
         expect(BUILT_TREE is not None, "собранное дерево недоступно — свойство версии не проверено")
 

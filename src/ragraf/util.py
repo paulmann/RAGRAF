@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import re
+import uuid
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Sequence
 
@@ -359,6 +360,13 @@ def dir_blocker(path: Path) -> str | None:
     на защищённой папке: `OperationalError: ...control.sqlite не существует`).
     Проверяется именно запись: `mkdir` без исключения ещё не значит, что файл
     создастся (каталог только для чтения, занятый путь, чужая учётная запись).
+
+    Имя пробы — СВОЁ у каждого процесса (pid и случайный хвост). С общим именем два
+    одновременных `index` одного корпуса мешали друг другу: один успевал удалить
+    пробу раньше, чем второй, и второй получал `FileNotFoundError` — то есть
+    исправный каталог объявлялся недоступным. Замер 22.11.2026: прогон 0.13.2
+    группой дал на этом 2 провала в `tests/test_parallel_index.py`, одиночно набор
+    проходил — гонка видна только под нагрузкой.
     """
     try:
         if path.exists() and not path.is_dir():
@@ -366,7 +374,7 @@ def dir_blocker(path: Path) -> str | None:
         path.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
         return f"каталог не создаётся: {exc}"
-    probe = path / ".ragraf-write-probe"
+    probe = path / f".ragraf-write-probe-{os.getpid()}-{uuid.uuid4().hex[:8]}"
     try:
         probe.write_bytes(b"")
         probe.unlink()
