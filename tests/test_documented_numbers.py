@@ -679,9 +679,21 @@ def main() -> int:
     check(ru_row is not None and published_row is not None
           and ru_row[2] == published_row[2],
           "столбец «sha256 в публичном main» генератор не выдумывает: он его не трогает")
-    check(ru_row is not None and ru_row[4] == "нет",
-          "несовпадение с опубликованной копией объявлено признаком «нет»",
-          ru_row[4] if ru_row else "нет строки")
+    # Признак «нет» проверяется на ПРИНУДИТЕЛЬНОМ расхождении. Ждать, что живое
+    # дерево отличается от опубликованного, нельзя: сразу после выпуска они
+    # совпадают, и проверка зеленела бы, ничего не проверив (измерено 22.11.2026
+    # при подготовке 0.13.4: «да» вместо «нет» при неизменённом README.ru).
+    ru_path = root / "community" / "README.ru.md"
+    ru_path.write_text(ru_path.read_text(encoding="utf-8") + "\n<!-- проба -->\n",
+                       encoding="utf-8", newline="\n")
+    run_registry_tool(root, "--write")
+    forced_row = sources_row(
+        (root / "docs" / "03_implementation" / "RELEASE-SOURCES.md").read_text(encoding="utf-8"),
+        "community/README.ru.md")
+    check(forced_row is not None and forced_row[4] == "нет"
+          and published_row is not None and forced_row[2] == published_row[2],
+          "расхождение с опубликованной копией объявлено «нет», столбец main не тронут",
+          forced_row[4] if forced_row else "нет строки")
     readme_after = (root / "README.md").read_text(encoding="utf-8")
     surface_after = SURFACE_RE.findall(readme_after)
     check(surface_before and surface_before == surface_after,

@@ -548,6 +548,6 @@ with tempfile.TemporaryDirectory(prefix="ragraf-prov-",
 
 print()
 print("=" * 78)
-print(f"ИТОГ: {PASS} пройдено, {FAIL} провалено")
+print(f"ИТОГ: проверок {PASS + FAIL}: пройдено {PASS}, провалено {FAIL}")
 print("=" * 78)
 raise SystemExit(0 if FAIL == 0 else 1)
