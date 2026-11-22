@@ -103,6 +103,9 @@ _CODE: tuple[DataFormat, ...] = (
                engine="html"),
     DataFormat("javascript", "JavaScript", "code",
                (".js", ".mjs", ".cjs", ".jsx"), structure="tree", engine="javascript"),
+    DataFormat("astro", "Astro", "code", (".astro",),
+               structure="tree", engine="typescript",
+               note="frontmatter и script-блоки разбираются как TypeScript; разметка остаётся разметкой"),
     DataFormat("typescript", "TypeScript", "code", (".ts", ".mts", ".tsx"),
                structure="tree", engine="typescript"),
     DataFormat("python", "Python", "code", (".py", ".pyi"), structure="tree",
@@ -265,6 +268,15 @@ _UNSUPPORTED: tuple[DataFormat, ...] = (
                structure="none", note="сжатый ITS-контейнер: разборщика нет"),
     DataFormat("djvu", "DjVu", "unsupported", (".djvu",), structure="none",
                note="скан без текстового слоя: нужен OCR, он не выполняется"),
+    # Изображения и архивы числились в карте языков (`document`), но ни в одном
+    # формате: проверка «каждое расширение отнесено к формату» падала, а в
+    # панели их нельзя было ни увидеть, ни выключить.
+    DataFormat("image", "Изображения", "unsupported",
+               (".bmp", ".gif", ".jpeg", ".jpg", ".png", ".tif", ".tiff", ".webp"),
+               structure="none",
+               note="растровое изображение: текстового слоя нет, нужен OCR"),
+    DataFormat("archive", "Архивы", "unsupported", (".zip",), structure="none",
+               note="архив: содержимое не распаковывается при индексации"),
 )
 
 FORMATS: tuple[DataFormat, ...] = _CODE + _DOCUMENT + _DATA + _UNSUPPORTED

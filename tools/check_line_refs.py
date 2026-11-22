@@ -90,12 +90,17 @@ PAIRS = (
          anchor="**Отсюда важное следствие, которое пришлось исправить (30.10.2026, этап 7).**",
          path="src/ragraf/paths.py", marker="def settings_path"),
     # Актуализация 2026-10-30: утверждения нового раздела плана и их объекты.
-    dict(doc="docs/00_plan/PLAN.md", anchor="| версия | **0.11.0**",
+    dict(doc="docs/00_plan/PLAN.md", anchor="| версия | **0.13.0**",
          path="src/ragraf/__init__.py", marker="__version__"),
     dict(doc="docs/00_plan/PLAN.md", anchor="**Активная ревизия.** Выбор был размазан",
          path="src/ragraf/store.py", marker="def active_revision"),
     dict(doc="docs/00_plan/PLAN.md", anchor="| **7** ✅ закрыт 30.10.2026 |",
          path="src/ragraf/paths.py", marker="def settings_path"),
+    # Настройки схлопывания дублей (0.13.0): правило выбора главной копии и его
+    # объект. Пара объявлена там же, где остальные «правило → место в коде».
+    dict(doc="docs/AGENTS-context.md",
+         anchor="копию выбирает `choose_keeper`",
+         path="src/ragraf/dedupe.py", marker="def choose_keeper"),
     # §4 инварианты AGENTS.md — «правило → место в коде».
     dict(doc="AGENTS.md", anchor="1. **Самоисключение", path="src/ragraf/config.py",
          marker="**/.ragraf/**"),
@@ -816,7 +821,7 @@ PAIRS = PAIRS + (
 # состояния копией реестра, наборы работают с собственным конфигом проекта,
 # сторожа гоняет фасад, причина отказа слоя баз называет переменную).
 PAIRS = PAIRS + (
-    dict(doc="AGENTS-TRAPS.md", anchor="\u043f\u0440\u043e\u0433\u043e\u043d \u043f\u0440\u043e\u0432\u0435\u0440\u043e\u043a (`tools/check_all.py:396`)",
+    dict(doc="AGENTS-TRAPS.md", anchor="\u043f\u0440\u043e\u0433\u043e\u043d \u043f\u0440\u043e\u0432\u0435\u0440\u043e\u043a (`tools/check_all.py:400`)",
          path="tools/check_all.py", marker="RAGRAF_CATALOG_DIR=str(state_dir)"),
     dict(doc="AGENTS-TRAPS.md", anchor="\u041a\u041e\u041f\u0418\u0420\u0423\u0415\u0422\u0421\u042f \u0436\u0438\u0432\u043e\u0439 \u0440\u0435\u0435\u0441\u0442\u0440",
          path="tools/check_all.py", marker="def suite_state_dir"),
@@ -901,6 +906,19 @@ def collect_refs(lines: list[str]) -> list[tuple[int, str, int, int | None]]:
     return found
 
 
+def _anchor_key(text: str) -> str:
+    """Утверждение без номеров строк: номер проверяется отдельно, по маркеру.
+
+    Зачем нормализация. Якорь пары — цитата строки документа, а в цитату входит
+    адрес `файл:строка`. Когда вставка в `facade.py` сдвигала номера, якорь
+    переставал находиться, и проверка объявляла `stale_pair` — то есть требовала
+    двойного учёта одного числа: в документе и в таблице проверки. Само число при
+    этом НЕ теряется: его сверяет `wrong_object` — ищет маркер в указанной
+    строке. Поэтому сравниваются тексты с заменой `:123` на `:N`.
+    """
+    return re.sub(r"(?<=\.py):\d+", ":N", text or "")
+
+
 def paragraph(lines: list[str], anchor: str) -> tuple[int, int] | None:
     """Абзац, начинающийся с якоря: от строки якоря до пустой строки.
 
@@ -910,8 +928,9 @@ def paragraph(lines: list[str], anchor: str) -> tuple[int, int] | None:
     «одна из них ведёт куда надо» — не проверка, а совпадение.
     """
     start = None
+    key = _anchor_key(anchor)
     for index, line in enumerate(lines):
-        if anchor in line:
+        if anchor in line or (key and key in _anchor_key(line)):
             start = index
             break
     if start is None:

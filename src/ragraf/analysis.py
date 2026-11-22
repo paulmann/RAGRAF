@@ -267,6 +267,28 @@ def graph_refs(graph, rev: str, files: dict[str, FileInfo],
                   target=target, text=str(r["kind"]))
         refs.setdefault(target, []).append(ref)
         by_source.setdefault(src_path, []).append(ref)
+
+    # Рёбра `imports` (ES-модули, TS/JS): цель — УЗЕЛ файла, а не `@file:путь`,
+    # поэтому их не видит цикл выше. Без этой ветки файл, который импортируют,
+    # выглядел неподключённым, и `dead_code` приговаривал живой модуль
+    # (замер 22.11.2026 на корпусе из трёх TS-файлов).
+    file_paths = {str(node_id): str(path) for node_id, path in graph.execute(
+        "SELECT node_id, path FROM node WHERE rev_id = ? AND kind = 'file'"
+        " AND path IS NOT NULL", (rev,))}
+    if file_paths:
+        for src_node, dst_node, line in graph.execute(
+                "SELECT src, dst, evidence_line FROM edge WHERE rev_id = ?"
+                " AND kind = 'imports' AND evidence_kind = 'import'", (rev,)):
+            src_path = file_paths.get(str(src_node))
+            target = file_paths.get(str(dst_node))
+            if not src_path or not target or target == src_path:
+                continue
+            if targets and target not in targets:
+                continue
+            ref = Ref(path=src_path, line=int(line or 0), kind="include",
+                      target=target, text="imports")
+            refs.setdefault(target, []).append(ref)
+            by_source.setdefault(src_path, []).append(ref)
     return refs, by_source
 
 

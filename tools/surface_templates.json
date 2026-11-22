@@ -33,10 +33,10 @@
       "figures": "फ़साड पर **{ops} ऑपरेशन**, **{tools} MCP टूल**, **{cli}** CLI उपकमांड, सिंटैक्स-ट्री से पढ़ी जाने वाली **{tree}** भाषाएँ और पाठ के रूप में जोड़ी गई **{text}** (जिनमें `document` भी), रजिस्टर में **{formats}** डेटा फ़ॉर्मैट (61 भाषाएँ, दस्तावेज़ के 9 कुल, डेटा के 10 प्रकार, 4 पार्सर के बिना)"
     },
     "docs/03_implementation/INTEGRATION.md": {
-      "tools_claim": "Сервер объявляет **{tools} инструментов** с префиксом `ragraf_`"
+      "tools_claim": "Сервер объявляет **{tools} инструмента** с префиксом `ragraf_`"
     },
     "docs/03_implementation/EDITIONS-PRO.md": {
-      "caps_claim": "у **enterprise** действуют **{caps} возможностей**",
+      "caps_claim": "у **enterprise** действуют **{caps} возможности**",
       "pro_claim": "У **pro** действуют **{caps_pro}**"
     }
   }

@@ -55,6 +55,11 @@ KNOWN_NODE_KINDS = {
     # P1-3: пакетная переменная Perl (`our %hFORMAT`) и точка входа/ключ,
     # общие для корпуса (узел без своего файла — помечен props.shared).
     "variable", "route_node", "placeholder",
+    # 0.13.0: TypeScript `type Foo = ...` — объявление типа, а не функция и не
+    # переменная. Класс фактов осмотрен: узел виден через `op_symbol` (поиск по
+    # имени вид не фильтрует), `dead_code` не приговаривает тип как мёртвое
+    # объявление.
+    "type_alias",
 }
 KNOWN_EDGE_KINDS = {
     "defines", "contains", "calls", "calls_heuristic", "calls_builtin",

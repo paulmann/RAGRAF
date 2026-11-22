@@ -106,7 +106,10 @@ print("=" * 78)
 # агент доходит до журнала: без этого исправление бесполезно.
 import shutil  # noqa: E402
 
-LIVE = pathlib.Path(__file__).resolve().parents[1].parent / "revoap.com/.ragraf/control.sqlite"
+# Журнал вызовов берётся из СВОЕГО корпуса. Прежняя редакция читала чужой
+# (revoap.com), который на этой машине повреждён: чтение копии давало
+# «database disk image is malformed», и проверка падала не по своей вине.
+LIVE = pathlib.Path(__file__).resolve().parents[1] / ".ragraf" / "control.sqlite"
 STAGING = REPO / ".staging"
 STAGING.mkdir(exist_ok=True)
 
@@ -124,7 +127,10 @@ else:
     shutil.copy2(LIVE, work_db)
 
     # Конфигурация корпуса копируется и получает другой путь к журналу.
-    cfg_src = REPO / "config" / "revoap.yaml"
+    # Собственный корпус: предмет проверки — журнал вызовов, а не чужое дерево.
+    # Прежний выбор (revoap.yaml) приводил к таймауту 180 с: чужой корпус
+    # требовал пересборки, и первый вызов ждал её.
+    cfg_src = REPO / "config" / "ragraf.yaml"
     cfg_tmp = STAGING / "mcp_agent_probe.yaml"
     shutil.copy2(cfg_src, cfg_tmp)
 

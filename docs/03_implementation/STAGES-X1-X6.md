@@ -39,8 +39,8 @@
 | запись слоя происхождения в лексическое хранилище | `src/ragraf/provenance.py:360` |
 | сборка производных фактов из документов | `src/ragraf/provenance.py:473` |
 | обратный обход: на что влияет факт | `src/ragraf/provenance.py:725` |
-| операция «что было верно на дату» | `src/ragraf/facade.py:6169` |
-| операция «от чего зависит утверждение» | `src/ragraf/facade.py:6208` |
+| операция «что было верно на дату» | `src/ragraf/facade.py:6578` |
+| операция «от чего зависит утверждение» | `src/ragraf/facade.py:6617` |
 | набор проверок (42 свойства) | `tests/test_provenance.py` |
 | документ возможности | `docs/03_implementation/DOC-PROVENANCE.md` |
 
@@ -106,7 +106,7 @@
 | загрузка якорей всего корпуса | `src/ragraf/anchors.py:277` |
 | закрытый список видов дрейфа (11 видов) | `src/ragraf/contracts.py:69` |
 | сверка манифеста, якорей и графа | `src/ragraf/contracts.py:698` |
-| операция с полем `source` (manifest / anchors / both) | `src/ragraf/facade.py:1612` |
+| операция с полем `source` (manifest / anchors / both) | `src/ragraf/facade.py:1648` |
 | набор проверок (35 свойств) | `tests/test_contracts_anchors.py` |
 | документ возможности | `docs/03_implementation/CONTRACT-ANCHORS.md` |
 
@@ -140,7 +140,7 @@
 | парный прогон `quality_pair` | `src/ragraf/quality_loop.py:711` |
 | чтение решений гейта (не второй журнал) | `src/ragraf/gate.py:413` |
 | запись решения гейта | `src/ragraf/gate.py:432` |
-| операция `quality_pair` | `src/ragraf/facade.py:8960` |
+| операция `quality_pair` | `src/ragraf/facade.py:9401` |
 | инструмент `ragraf_quality_pair` | `src/ragraf/mcp_server.py:803` |
 | набор проверок (49 свойств) | `tests/test_quality_cases.py` |
 | документ возможности | `docs/03_implementation/QUALITY-CASES.md` |
@@ -174,13 +174,13 @@
 | оценка погрешности по выборке | `src/ragraf/preflight.py:189` |
 | осмотр корпуса (ничего не создаёт) | `src/ragraf/preflight.py:348` |
 | предел чтения файлов на прогон | `src/ragraf/preflight.py:42` |
-| закрытый список видов отказа (9 видов) | `src/ragraf/util.py:540` |
-| единый следующий шаг отказа | `src/ragraf/util.py:593` |
-| операция `preflight` | `src/ragraf/facade.py:1726` |
-| подсказка «в каком конфиге дело» | `src/ragraf/facade.py:7855` |
-| отказ «индекса нет» | `src/ragraf/facade.py:7864` |
+| закрытый список видов отказа (9 видов) | `src/ragraf/util.py:564` |
+| единый следующий шаг отказа | `src/ragraf/util.py:617` |
+| операция `preflight` | `src/ragraf/facade.py:1762` |
+| подсказка «в каком конфиге дело» | `src/ragraf/facade.py:8296` |
+| отказ «индекса нет» | `src/ragraf/facade.py:8305` |
 | инструмент `ragraf_preflight` | `src/ragraf/mcp_server.py:742` |
-| флаг выборки в командной строке | `src/ragraf/cli.py:2723` |
+| флаг выборки в командной строке | `src/ragraf/cli.py:2822` |
 | набор проверок (34 свойства) | `tests/test_preflight.py` |
 | документ возможности | `docs/03_implementation/PREFLIGHT.md` |
 
@@ -212,9 +212,9 @@
 | `pin_break` — только после расхождения, и только первый вызов | `src/ragraf/pin.py:633` |
 | состояние пинов, расхождения, события | `src/ragraf/pin.py:1344` |
 | догоняющая миграция колонки `observed_hash` | `src/ragraf/telemetry.py:347` |
-| операция `contract_pin_status` | `src/ragraf/facade.py:2021` |
-| операция `contract_pin_approve` | `src/ragraf/facade.py:2090` |
-| разбор новых операций в командной строке | `src/ragraf/cli.py:1077` |
+| операция `contract_pin_status` | `src/ragraf/facade.py:2075` |
+| операция `contract_pin_approve` | `src/ragraf/facade.py:2144` |
+| разбор новых операций в командной строке | `src/ragraf/cli.py:1094` |
 | инструмент `ragraf_contract_pin_status` | `src/ragraf/mcp_server.py:612` |
 | инструмент `ragraf_contract_pin_approve` | `src/ragraf/mcp_server.py:695` |
 | набор проверок (30 свойств) | `tests/test_contract_pin.py` |

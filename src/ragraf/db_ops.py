@@ -326,10 +326,15 @@ def migrations_vs_live(conn, rev_id: str, *, limit: int = 300) -> dict[str, Any]
     ).fetchall():
         mig_cols.setdefault(str(r[0]).lower(), set()).add(str(r[1]).lower())
 
-    live_tables = {
-        str(r[0]).lower() for r in conn.execute(
-            "SELECT table_name FROM db_live_table WHERE rev_id = ?", (rev_id,)).fetchall()
-    }
+    # Таблицы живой схемы может не быть вовсе: живой слой не собирался (или
+    # ревизия собрана до его появления). Это отсутствие данных, а не поломка —
+    # исключение здесь превращало бы честный «сверять нечего» в падение.
+    live_tables: set[str] = set()
+    if _store.table_exists(conn, "db_live_table"):
+        live_tables = {
+            str(r[0]).lower() for r in conn.execute(
+                "SELECT table_name FROM db_live_table WHERE rev_id = ?", (rev_id,)).fetchall()
+        }
     live_cols: dict[str, set[str]] = {}
     if _store.table_exists(conn, "db_live_column"):
         for r in conn.execute(

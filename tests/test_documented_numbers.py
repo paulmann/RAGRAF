@@ -138,13 +138,21 @@ SANDBOX_FILES = (
     "tools/surface_templates.json",
     "docs/surface.json",
     "docs/03_implementation/EDITIONS-PRO.md",
-    "tools/release/manifest.toml",
-    "tools/release/gate_release.py",
-    "tools/release/relcommon.py",
 )
+
+#: Гейт и сборщик — один инструмент из нескольких модулей: `gate_release`
+#: импортирует `build_release`, тот — `release_report`. Перечислять модули по
+#: одному значит держать список, который расходится с кодом молча: замер
+#: 22.11.2026 давал по очереди ModuleNotFoundError на build_release, затем на
+#: release_report, и каждый раз «ворот публикации» краснели импортом, а не
+#: расхождением чисел. Поэтому каталог копируется целиком.
+SANDBOX_FILES = tuple(name for name in SANDBOX_FILES if not name.startswith("tools/release/"))
 
 #: Файлы, которых может не быть в живом дереве: журнал прежних состояний
 #: реестра появляется при первой смене состава.
+#: Локальные импорты гейта обязаны быть в списке песочницы: иначе проверка
+#: «ворот публикации» красна импортом, а не расхождением чисел. Свойство
+#: измеряется ниже функцией local_imports_of_gate().
 SANDBOX_OPTIONAL = ("catalog/registry_history.jsonl",)
 
 
@@ -228,7 +236,7 @@ def replace_registry(text: str, doc: registry_line.Document,
 # «активном» состоянии — то есть тест падал на собственной неполноте, а не на
 # дефекте продукта. Найдено прогоном этапа 11: набор не входит ни в одну группу
 # `check_all`, поэтому его краснота не была видна в общем прогоне.
-SANDBOX_TREES = ("src/ragraf", "assets")
+SANDBOX_TREES = ("src/ragraf", "assets", "tools/release")
 
 
 def build_sandbox(root: Path) -> None:

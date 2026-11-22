@@ -85,50 +85,28 @@ DEFAULT_MIN_LENGTH = 8
 def collect_values(vault, min_length: int) -> tuple[dict[str, str], list[str], dict]:
     """Расшифровать значения всех секретов (без записи в аудит) — для перебора.
 
-    Ключ и расшифровка берутся у самого хранилища (`vault.master` и
-    `vault._decrypt` — те же функции, которыми пользуется выдача): второго пути к
-    значению в проекте нет и заводить его нельзя. Аудит здесь не пишется
-    осознанно — см. заголовок файла; аудируемый путь проверяется отдельной
-    пробой через `Vault.reveal`.
-
-    Счётчик записей и строк аудита берётся из `Vault.check()`: он читает всё
-    хранилище и ничего не пишет — то есть безопасен для замера.
+    Реализация ОДНА — `ragraf.secretscan.collect_values`: тот же путь к значению
+    нужен памяти фактов (`facts.py`), и вторая копия расшифровки означала бы
+    второй путь к секрету. Импорт внутри функции, потому что `root/src`
+    попадает в `sys.path` только в `main()`: на уровне модуля пакета ещё нет.
     """
-    from ragraf import vault as vault_mod
+    from ragraf import secretscan
 
-    health = vault.check()
-    master = vault.master()
-    conn = vault._connect()  # noqa: SLF001
-    try:
-        rows = conn.execute(
-            "SELECT id, name, ver, nonce, ciphertext FROM secret"
-        ).fetchall()
-    finally:
-        conn.close()
-    values: dict[str, str] = {}
-    skipped: list[str] = []
-    for row in rows:
-        name = str(row["name"])
-        try:
-            value = vault_mod._decrypt(master, str(row["id"]), name,  # noqa: SLF001
-                                       int(row["ver"]), str(row["nonce"]),
-                                       str(row["ciphertext"]))
-        except Exception:  # noqa: BLE001 — нечитаемая запись не отменяет проверку
-            skipped.append(name)
-            continue
-        if value and len(value) >= min_length:
-            values[name] = value
-    return values, skipped, health
+    return secretscan.collect_values(vault, min_length)
 
 
 def leak_pattern(values: dict[str, str]) -> re.Pattern[str]:
-    """Одно регулярное выражение из всех значений: один проход по тексту."""
-    parts = sorted(values.values(), key=len, reverse=True)
-    return re.compile("|".join(re.escape(p) for p in parts)) if parts else re.compile(r"(?!x)x")
+    """Одно регулярное выражение из всех значений: реализация — в `secretscan`."""
+    from ragraf import secretscan
+
+    return secretscan.leak_pattern(values)
 
 
 def scan_text(pattern: re.Pattern[str], text: str) -> bool:
-    return bool(text) and pattern.search(text) is not None
+    """Есть ли в тексте хоть одно значение: реализация — в `secretscan`."""
+    from ragraf import secretscan
+
+    return secretscan.scan_text(pattern, text)
 
 
 def scan_answers(facade, pattern: re.Pattern[str], symbol: str, table: str) -> list[dict]:

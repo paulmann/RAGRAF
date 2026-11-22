@@ -1953,6 +1953,154 @@ TOOLS: list[dict[str, Any]] = [
             "additionalProperties": False,
         },
     },
+    {
+        "name": "ragraf_fact_store",
+        "description": (
+            "Записать факт: короткое знание с ключом, версией и сроком жизни. "
+            "Ключ namespace+subject+predicate занимается ОДИН раз: повторная "
+            "запись получает отказ fact_exists с текущей версией, а замена — "
+            "отдельным fact_replace. Возможность уровня pro (memory-facts); в "
+            "сборке без модуля отвечает причиной, а не пустым ответом."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "subject": {"type": "string", "description": "о чём факт"},
+                "predicate": {"type": "string", "description": "что именно утверждается"},
+                "value": {"type": "string", "description": "значение факта (до 4000 символов)"},
+                "namespace": {"type": "string", "description": "пространство имён, по умолчанию default"},
+                "confidence": {"type": "number", "description": "достоверность 0..1"},
+                "ttl_days": {"type": "integer", "description": "срок жизни в сутках; 0 — бессрочно"},
+                "tags": {"type": "string", "description": "метки через запятую"},
+                "path": {"type": "string", "description": "файл, к которому относится факт"},
+                "task": {"type": "string", "description": "задача, в которой факт записан"},
+            },
+            "required": ["subject", "predicate", "value"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "ragraf_fact_recall",
+        "description": (
+            "Прочитать активные факты: свежие первыми, истёкшие скрыты (но "
+            "сосчитаны в expired_hidden). Факт — знание АГЕНТА, а не факт "
+            "индекса: source=fact. Возможность уровня pro (memory-facts)."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "подстрока по subject/predicate/значению"},
+                "namespace": {"type": "string", "description": "только это пространство имён"},
+                "tags": {"type": "string", "description": "метки через запятую (все обязательны)"},
+                "include_expired": {"type": "boolean", "description": "показать истёкшие"},
+                "limit": {"type": "integer", "description": "сколько вернуть (до 500)"},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "ragraf_fact_replace",
+        "description": (
+            "Заменить значение факта, сохранив прежнюю версию в истории. Без "
+            "ttl_days срок жизни не пересчитывается: правка текста не продлевает "
+            "жизнь факту. Возможность уровня pro (memory-facts)."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "fact_id": {"type": "string", "description": "идентификатор факта"},
+                "value": {"type": "string", "description": "новое значение"},
+                "reason": {"type": "string", "description": "почему значение изменилось"},
+                "confidence": {"type": "number", "description": "новая достоверность (не указана — не меняется)"},
+                "ttl_days": {"type": "integer", "description": "новый срок жизни (не указан — не меняется)"},
+            },
+            "required": ["fact_id", "value"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "ragraf_fact_forget",
+        "description": (
+            "Мягко удалить факт: надгробие, полная история и причина в журнале "
+            "заметок. Строка не удаляется: иначе нечем объяснить, почему факт "
+            "менялся. Возможность уровня pro (memory-facts)."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "fact_id": {"type": "string", "description": "идентификатор факта"},
+                "reason": {"type": "string", "description": "почему факт больше не верен"},
+            },
+            "required": ["fact_id"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "ragraf_fact_history",
+        "description": (
+            "История факта: чем он был, когда и по какой причине перестал быть "
+            "правдой. Активная версия названа полем active_version. Возможность "
+            "уровня pro (memory-facts)."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "fact_id": {"type": "string", "description": "идентификатор факта"},
+            },
+            "required": ["fact_id"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "ragraf_skill_catalog",
+        "description": (
+            "Что есть в каталоге навыков корпуса: имя, описание, размер тела и "
+            "остаток бюджета инструкций. Цена названа ДО чтения: агент решает, "
+            "читать ли тело или сразу справку. Возможность уровня pro "
+            "(skills-catalog); в сборке без модуля отвечает причиной."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "ragraf_skill_load",
+        "description": (
+            "Тело навыка (SKILL.md) по требованию: постранично, с sha256 и "
+            "next_offset=0 в конце. Дорогое чтение целиком не навязывается. "
+            "Возможность уровня pro (skills-catalog)."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "имя навыка (слаг)"},
+                "offset": {"type": "integer", "description": "с какого символа тела читать"},
+                "limit": {"type": "integer", "description": "сколько символов отдать; 0 — всё тело"},
+            },
+            "required": ["name"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "ragraf_skill_reference",
+        "description": (
+            "Файл справки навыка (reference/<имя>.md) по требованию: половина "
+            "тела навыка, и целиком её читать ради одного раздела не надо. "
+            "Путь за пределы каталога навыка отклоняется. Возможность уровня "
+            "pro (skills-catalog)."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "имя навыка (слаг)"},
+                "file": {"type": "string", "description": "имя файла справки вида <имя>.md"},
+            },
+            "required": ["name", "file"],
+            "additionalProperties": False,
+        },
+    },
 ]
 
 
@@ -2360,6 +2508,46 @@ _TOOL_META: dict[str, dict[str, Any]] = {
     "ragraf_secret_policy": {
         "title": "Правила работы с секретами для агента",
         "readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
+    },
+    "ragraf_fact_store": {
+        "title": "Память фактов: записать факт с ключом и сроком жизни",
+        "readOnlyHint": False, "destructiveHint": False, "idempotentHint": False,
+        "openWorldHint": False,
+    },
+    "ragraf_fact_recall": {
+        "title": "Память фактов: прочитать активные факты",
+        "readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
+        "openWorldHint": False,
+    },
+    "ragraf_fact_replace": {
+        "title": "Память фактов: заменить значение, сохранив версию",
+        "readOnlyHint": False, "destructiveHint": False, "idempotentHint": False,
+        "openWorldHint": False,
+    },
+    "ragraf_fact_forget": {
+        "title": "Память фактов: забыть факт (надгробие и история)",
+        "readOnlyHint": False, "destructiveHint": True, "idempotentHint": False,
+        "openWorldHint": False,
+    },
+    "ragraf_fact_history": {
+        "title": "Память фактов: история версий факта",
+        "readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
+        "openWorldHint": False,
+    },
+    "ragraf_skill_catalog": {
+        "title": "Каталог навыков: что есть и сколько это стоит",
+        "readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
+        "openWorldHint": False,
+    },
+    "ragraf_skill_load": {
+        "title": "Каталог навыков: тело навыка по требованию",
+        "readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
+        "openWorldHint": False,
+    },
+    "ragraf_skill_reference": {
+        "title": "Каталог навыков: файл справки по требованию",
+        "readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
+        "openWorldHint": False,
     },
 
 }
@@ -3840,6 +4028,50 @@ class McpServer:
                 reason=str(a.get("reason") or ""),
             ),
             "ragraf_secret_policy": lambda a: self._op_vault("secret_policy", a),
+            "ragraf_fact_store": lambda a: f().op_fact_store(
+                subject=str(a.get("subject") or ""),
+                predicate=str(a.get("predicate") or ""),
+                value=str(a.get("value") or ""),
+                namespace=str(a.get("namespace") or "default"),
+                confidence=float(a.get("confidence") or 1.0),
+                ttl_days=int(a.get("ttl_days") or 0),
+                tags=str(a.get("tags") or ""),
+                path=str(a.get("path") or ""),
+                task=str(a.get("task") or ""),
+            ),
+            "ragraf_fact_recall": lambda a: f().op_fact_recall(
+                query=str(a.get("query") or ""),
+                namespace=str(a.get("namespace") or ""),
+                tags=str(a.get("tags") or ""),
+                include_expired=bool(a.get("include_expired", False)),
+                limit=int(a.get("limit") or 50),
+            ),
+            "ragraf_fact_replace": lambda a: f().op_fact_replace(
+                fact_id=str(a.get("fact_id") or ""),
+                value=str(a.get("value") or ""),
+                reason=str(a.get("reason") or ""),
+                confidence=(None if a.get("confidence") is None
+                            else float(a.get("confidence"))),
+                ttl_days=(None if a.get("ttl_days") is None
+                          else int(a.get("ttl_days"))),
+            ),
+            "ragraf_fact_forget": lambda a: f().op_fact_forget(
+                fact_id=str(a.get("fact_id") or ""),
+                reason=str(a.get("reason") or ""),
+            ),
+            "ragraf_fact_history": lambda a: f().op_fact_history(
+                fact_id=str(a.get("fact_id") or ""),
+            ),
+            "ragraf_skill_catalog": lambda a: f().op_skill_catalog(),
+            "ragraf_skill_load": lambda a: f().op_skill_load(
+                name=str(a.get("name") or ""),
+                offset=int(a.get("offset") or 0),
+                limit=int(a.get("limit") or 0),
+            ),
+            "ragraf_skill_reference": lambda a: f().op_skill_reference(
+                name=str(a.get("name") or ""),
+                file=str(a.get("file") or ""),
+            ),
         }
 
     def _op_vault(self, op: str, args: dict) -> dict:

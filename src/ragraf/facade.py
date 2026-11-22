@@ -1439,6 +1439,30 @@ class Facade:
 
     # ---------------- слой баз данных ----------------
 
+    def _db_disabled(self, op: str) -> dict:
+        """Отказ выключенного слоя баз — с пометкой, что вопрос о вызове к нему не применяется.
+
+        Требование этапа 10: ответ, который отдал бы связь, обязан назвать вид
+        доказательства ЛИБО прямо сказать, что вопрос не применяется. Молчаливый
+        отказ читался агентом как «связь есть, но доказательства нет», хотя здесь
+        причина другая — слой выключен в конфиге корпуса.
+        """
+        env = self.make_env(op)
+        env.found = False
+        env.error = ("структура баз выключена в конфиге корпуса "
+                     "(db.enabled: false): включите сбор в разделе «Базы данных» "
+                     "или в config-файле корпуса")
+        env.extra["evidence"] = {
+            "applies_to_calls": False,
+            "note": ("вид доказательства вызова к связям таблиц не применяется; "
+                     "слой структуры баз выключен, поэтому ни объявленных, ни "
+                     "выведенных связей в ответе нет"),
+        }
+        env.limits.append(
+            "структура баз выключена: пустой ответ означает «сбор не ведётся», "
+            "а не «связей нет»")
+        return env.to_dict()
+
     def op_db_schema(self, table: str | None = None, database: str | None = None,
                      limit: int = 200) -> dict:
         """23. Структура живых баз: таблицы, колонки, типы, индексы.
@@ -1447,6 +1471,8 @@ class Facade:
         (которая читает миграции) само по себе находка: оно показывает, что
         миграции и база разошлись.
         """
+        if not getattr(self.cfg.db, "enabled", False):
+            return self._db_disabled("db_schema")
         from . import db_ops
 
         env = self.make_env("db_schema")
@@ -1464,6 +1490,8 @@ class Facade:
 
     def op_db_table(self, table: str, database: str | None = None) -> dict:
         """24. Одна таблица подробно: колонки, индексы, связи, скрытые поля."""
+        if not getattr(self.cfg.db, "enabled", False):
+            return self._db_disabled("db_table")
         from . import db_ops
 
         env = self.make_env("db_table")
@@ -1481,6 +1509,8 @@ class Facade:
 
     def op_db_relations(self, table: str) -> dict:
         """25. Связи таблицы: объявленные и выведенные по именам — раздельно."""
+        if not getattr(self.cfg.db, "enabled", False):
+            return self._db_disabled("db_relations")
         from . import db_ops
 
         env = self.make_env("db_relations")
@@ -1515,6 +1545,8 @@ class Facade:
 
     def op_db_sample(self, table: str, database: str | None = None) -> dict:
         """26. Пример строк таблицы: снимок с пометкой устаревания."""
+        if not getattr(self.cfg.db, "enabled", False):
+            return self._db_disabled("db_sample")
         from . import db_ops
 
         env = self.make_env("db_sample")
@@ -1577,6 +1609,10 @@ class Facade:
         две ревизии, `db_cross` — живую базу с именами таблиц из кода, а
         «миграции против базы» не проверял ни один инструмент.
         """
+        # Отказа по `db.enabled` здесь нет намеренно: операция сравнивает
+        # СНИМКИ структуры двух ревизий, живая база ей не нужна. «Сбор выключен»
+        # не значит «сравнивать нечего»: пустой снимок назовётся `compared=false`
+        # с причиной. Проверка — tests/test_text_from_index.py.
         from . import db_ops
 
         env = self.make_env("db_drift")
@@ -1837,6 +1873,18 @@ class Facade:
             if only_changed:
                 changed_now = set(pin_mod.changed_ops(self.control.conn))
                 selected = [name for name in selected if name in changed_now]
+            # Предел числа проб: каждая проба — реальный вызов операции, и
+            # прогон всех сразу дорог. Сверх предела пробы не пропадают молча —
+            # они получают вид `not_sampled` с причиной, а в `limits` появляются
+            # числа (объявленный и неиспользуемый `limit` ловила проверка).
+            deferred: list[str] = []
+            try:
+                wanted_limit = int(limit)
+            except (TypeError, ValueError):
+                wanted_limit = 0
+            if wanted_limit > 0 and len(selected) > wanted_limit:
+                deferred = selected[wanted_limit:]
+                selected = selected[:wanted_limit]
             if wanted or skip or only_changed:
                 unknown = [name for name in selected if name not in pin_mod.PROBES]
                 selected = [name for name in selected if name in pin_mod.PROBES]
@@ -1902,6 +1950,12 @@ class Facade:
             env.limits.append("пустая проба не считается совпадением: %d из %d "
                               "вызовов не пробовались (причина в detail)"
                               % (len(env.extra["not_sampled"]), len(checks)))
+        if deferred:
+            env.extra["not_sampled"] = list(env.extra["not_sampled"]) + deferred
+            env.limits.append(
+                "предел проб: за прогон взято %d, отложено %d — повторите с "
+                "большим `limit` или назовите нужные имена в `op`"
+                % (len(checks), len(deferred)))
         if not checks:
             env.limits.append("проб нет: `mode=take` записывает первую; ворота "
                               "показывают только итог уже сделанной сверки")
@@ -2168,6 +2222,8 @@ class Facade:
         «таблица в коде не встречается» читался бы как «можно удалять», хотя
         статический разбор там просто бессилен.
         """
+        if not getattr(self.cfg.db, "enabled", False):
+            return self._db_disabled("db_cross")
         from . import db_ops
 
         env = self.make_env("db_cross")
@@ -2599,10 +2655,16 @@ class Facade:
         своя ревизия, своя контрольная сумма. Физически разработки разделены
         каталогами `.ragraf`, реестр лишь даёт сводную картину.
         """
-        from .catalog import Catalog, Entry
+        from .catalog import Catalog, CatalogError, Entry
 
         env = self.make_env("catalog")
-        catalog = Catalog()
+        try:
+            catalog = Catalog()
+            catalog.load()
+        except CatalogError as exc:
+            env.found = False
+            env.error = f"CatalogError: {exc}"
+            return env.to_dict()
         cached = self._catalog_cache_read(catalog.path)
         if cached is not None:
             env.result = cached
@@ -2875,10 +2937,17 @@ class Facade:
             self._drift_cache = {"files": 0, "symbols": 0, "entries": 0}
             return self._drift_cache
         rows = self.control.conn.execute(
-            """SELECT path, symbols_added, symbols_removed, symbols_changed
-               FROM drift_entry WHERE index_rev = ?""",
+            """SELECT path, kind, symbols_added, symbols_removed, symbols_changed
+               FROM drift_entry WHERE index_rev = ? ORDER BY id DESC""",
             (rev,),
         ).fetchall()
+        # Берётся ПОСЛЕДНЯЯ запись каждого пути: путь, вернувшийся к
+        # проиндексированному состоянию (`restored`), из сводки выпадает —
+        # снятое предупреждение не должно считаться расхождением.
+        latest: dict[str, object] = {}
+        for r in rows:
+            latest.setdefault(str(r["path"]), r)
+        rows = [r for r in latest.values() if str(r["kind"]) != "restored"]
         paths = {str(r["path"]) for r in rows}
         symbols = 0
         for r in rows:
@@ -2906,9 +2975,15 @@ class Facade:
             p = str(r["path"])
             if p in out:
                 continue
+            if r["kind"] == "restored":
+                # Последняя запись по пути — «файл вернулся». Предупреждения нет,
+                # но и место в словаре занято: ниже по id лежит уже закрытая история.
+                out[p] = {"path": p, "reason": "restored", "since": r["ts"],
+                          "entry_id": int(r["id"]), "resolved": True}
+                continue
             out[p] = {"path": p, "reason": f"{r['kind']} после {rev}", "since": r["ts"],
                       "entry_id": int(r["id"]), "suggest": "live_read"}
-        return out
+        return {k: v for k, v in out.items() if not v.get("resolved")}
 
     def make_env(self, op: str, provenance: str = "index") -> Envelope:
         state = self.edition_state()
@@ -2977,7 +3052,22 @@ class Facade:
             "coverage": cov,
             "stages": stages,
             "lexvec": lex_counts,
-            "vector_available": self.lexvec.vec_ok,
+            # Три разных факта, которые раньше сливались в один. `vector_library`
+            # — расширение/модель на месте; `vectors_indexed` — векторы реально
+            # лежат в ревизии; `vector_available` оставлено ради совместимости и
+            # теперь означает ровно «поиск по смыслу возможен на этой ревизии».
+            "vector_library": self.lexvec.vec_ok,
+            "vectors_indexed": int(lex_counts.get("vectors") or 0),
+            "vector_available": bool(self.lexvec.vec_ok
+                                     and int(lex_counts.get("vectors") or 0) > 0),
+            "vector_note": (
+                ""
+                if self.lexvec.vec_ok and int(lex_counts.get("vectors") or 0) > 0
+                else ("библиотека и модель на месте, но векторов в ревизии нет: "
+                      "поиск идёт по лексике"
+                      if self.lexvec.vec_ok
+                      else "векторный поиск недоступен: нет библиотеки или модели")
+            ),
             "embedding_model": self.cfg.embedding.model,
             "drift": self.drift_summary(),
             "project": self.cfg.project,
@@ -4622,8 +4712,23 @@ class Facade:
         # `--kind file` отбрасывал уже выбранную десятку (в неё попадали
         # образцы баз), и документы выглядели ненайденными. Замерено на
         # temp-корпусе: text.pdf был 40-м при limit=60 и нулём при limit=10.
-        fetch = limit if not kinds else max(int(limit) * 20, 200)
+        # Запас под дедупликацию по пути: у одного файла бывает несколько чанков
+        # (символ, файловое окно, документ), и без запаса `limit` съедался бы
+        # копиями одного и того же файла.
+        fetch = max(int(limit) * 3, 12) if not kinds else max(int(limit) * 20, 200)
         hits = self.lexvec.search_hybrid(rev, query, vector, limit=fetch)
+        # Один путь — одно место в ответе: лучший (первый по порядку выдачи) хит
+        # на файл. Повтор пути читается агентом как «нашлось больше», хотя
+        # файл тот же; проверка — tests/test_usefulness_contract.py.
+        _seen_paths: set[str] = set()
+        _unique = []
+        for _hit in hits:
+            _path = str(_hit.path)
+            if _path in _seen_paths:
+                continue
+            _seen_paths.add(_path)
+            _unique.append(_hit)
+        hits = _unique
         if kinds:
             wanted = set(kinds)
             hits = [h for h in hits if h.source_kind in wanted][:max(1, int(limit))]
@@ -5350,6 +5455,310 @@ class Facade:
         env.extra["total"] = store_obj.count(task=task)
         if not records:
             env.extra["suggest"] = ["note"]
+        return env.to_dict()
+
+    # ---------------- память фактов (возможность memory-facts, уровень pro) ----------------
+    #
+    # Почему отдельный слой, а не заметки. Заметка append-only: у неё нет версии,
+    # срока жизни и запрета противоречий, поэтому две несовместимые записи
+    # сосуществуют молча. Факт отличается ключом (один активный на
+    # namespace+subject+predicate), версией с историей замещений и сроком жизни,
+    # который СКРЫВАЕТ, но не удаляет. Механика — `facts.py`.
+    #
+    # Гейт один на все пять операций: `_feature_module` отличает «модуля нет в
+    # этой сборке» от «нет его зависимости» и отвечает причиной, а не пустотой.
+
+    def _facts_store(self, operation: str):
+        """Модуль памяти фактов и отказ, если его нет в сборке.
+
+        Общая точка для пяти операций: гейт издания и `FeatureUnavailable`
+        обязаны быть одинаковыми, иначе одна операция ответит причиной, а другая
+        пустым результатом на той же сборке.
+        """
+        return self._feature_module(operation, "facts", "memory-facts")
+
+    def _facts_refusal(self, env, operation: str, code: str, reason: str,
+                       detail: dict | None = None) -> dict:
+        """Конверт отказа памяти фактов: код, причина, возможность и подсказка.
+
+        `code` — машинный (`fact_exists`, `secret_in_text` и прочие): по тексту
+        «нельзя» агент не отличает занятый ключ от секрета в значении.
+        """
+        env.found = False
+        env.error = f"FactError: {code}: {reason}"
+        env.extra["refused"] = {
+            "reason": reason,
+            "operation": operation,
+            "feature": "memory-facts",
+            "code": code,
+            **(detail or {}),
+        }
+        return env.to_dict()
+
+    def op_fact_store(self, subject: str = "", predicate: str = "", value: str = "",
+                      namespace: str = "default", confidence: float = 1.0,
+                      ttl_days: int = 0, tags: str = "", path: str = "",
+                      task: str = "") -> dict:
+        """Записать факт: короткое знание с ключом, версией и сроком жизни.
+
+        Зачем. Знание «в этой базе часть колонок генерируемые, писать нельзя»
+        переоткрывается каждой сессией, а записанное дважды и по-разному — не
+        различимо. Ключ `namespace+subject+predicate` занимается один раз:
+        вторая запись получает отказ `fact_exists` с текущей версией, а замена
+        делается отдельной операцией `fact_replace`.
+
+        Границы: факт — знание АГЕНТА, а не факт индекса (`source: "fact"`), и в
+        ответе видно, была ли сверка со значениями хранилища секретов
+        (`secret_scan`): «сверки не было» — не то же, что «сверка чистая».
+        """
+        env = self.make_env("fact_store")
+        facts_mod, refusal = self._facts_store("fact_store")
+        if facts_mod is None:
+            return refusal
+        try:
+            data = facts_mod.FactStore(self.control).store(
+                subject=subject, predicate=predicate, value=value,
+                namespace=namespace, confidence=confidence, ttl_days=ttl_days,
+                tags=tags, path=path, rev_id=self.current_rev() or "",
+                agent=self.agent or "", task=task,
+            )
+        except facts_mod.FactError as exc:
+            return self._facts_refusal(env, "fact_store", exc.code, exc.message, exc.detail)
+        except Exception as exc:  # noqa: BLE001 — память не должна ронять работу
+            env.found = False
+            env.error = f"память фактов недоступна: {type(exc).__name__}: {exc}"
+            return env.to_dict()
+        env.result = data
+        env.found = True
+        env.extra["source"] = "fact"
+        env.extra["note"] = (
+            "факт — знание агента, а не факт индекса: он не проверен кодом и не "
+            "заменяет `search`/`symbol`"
+        )
+        return env.to_dict()
+
+    def op_fact_recall(self, query: str = "", namespace: str = "", tags: str = "",
+                       include_expired: bool = False, limit: int = 50,
+                       now: float | None = None) -> dict:
+        """Прочитать активные факты: свежие первыми, истёкшие скрыты.
+
+        Истёкшие не удалены: они скрыты из обычного чтения и видны при
+        `include_expired`. Ответ говорит, СКОЛЬКО скрыто (`expired_hidden`), —
+        иначе «факт пропал» выглядело бы как «факт стёрт».
+        """
+        env = self.make_env("fact_recall")
+        facts_mod, refusal = self._facts_store("fact_recall")
+        if facts_mod is None:
+            return refusal
+        try:
+            data = facts_mod.FactStore(self.control).recall(
+                query=query, namespace=namespace, tags=tags,
+                include_expired=include_expired, limit=limit, now=now,
+            )
+        except facts_mod.FactError as exc:
+            return self._facts_refusal(env, "fact_recall", exc.code, exc.message, exc.detail)
+        except Exception as exc:  # noqa: BLE001
+            env.found = False
+            env.error = f"память фактов недоступна: {type(exc).__name__}: {exc}"
+            return env.to_dict()
+        env.result = data["facts"]
+        env.found = bool(data["facts"])
+        env.extra["source"] = "fact"
+        env.extra["total"] = data["total"]
+        env.extra["expired_hidden"] = data["expired_hidden"]
+        env.extra["now"] = data["now"]
+        if not data["facts"]:
+            env.extra["suggest"] = ["fact_store"]
+        return env.to_dict()
+
+    def op_fact_replace(self, fact_id: str = "", value: str = "", reason: str = "",
+                        confidence: float | None = None,
+                        ttl_days: int | None = None) -> dict:
+        """Заменить значение факта, сохранив прежнюю версию в истории.
+
+        `ttl_days` не передан — срок жизни НЕ пересчитывается: правка текста не
+        должна молча продлевать жизнь факту, у которого срок истекает.
+        """
+        env = self.make_env("fact_replace")
+        facts_mod, refusal = self._facts_store("fact_replace")
+        if facts_mod is None:
+            return refusal
+        try:
+            data = facts_mod.FactStore(self.control).replace(
+                fact_id=fact_id, value=value, reason=reason,
+                confidence=confidence, ttl_days=ttl_days,
+            )
+        except facts_mod.FactError as exc:
+            return self._facts_refusal(env, "fact_replace", exc.code, exc.message, exc.detail)
+        except Exception as exc:  # noqa: BLE001
+            env.found = False
+            env.error = f"память фактов недоступна: {type(exc).__name__}: {exc}"
+            return env.to_dict()
+        env.result = data
+        env.found = True
+        env.extra["source"] = "fact"
+        return env.to_dict()
+
+    def op_fact_forget(self, fact_id: str = "", reason: str = "") -> dict:
+        """Мягко удалить факт: надгробие, история и причина в журнале заметок.
+
+        Строка `fact` остаётся с `is_deleted = 1`: полная история — единственный
+        способ потом объяснить, почему факт менялся. Причина уходит записью в
+        журнал заметок (`task="fact_forget"`); неудача этой записи названа полем
+        `note_error` и НЕ отменяет забвение.
+        """
+        env = self.make_env("fact_forget")
+        facts_mod, refusal = self._facts_store("fact_forget")
+        if facts_mod is None:
+            return refusal
+        try:
+            data = facts_mod.FactStore(self.control).forget(
+                fact_id=fact_id, reason=reason)
+        except facts_mod.FactError as exc:
+            return self._facts_refusal(env, "fact_forget", exc.code, exc.message, exc.detail)
+        except Exception as exc:  # noqa: BLE001
+            env.found = False
+            env.error = f"память фактов недоступна: {type(exc).__name__}: {exc}"
+            return env.to_dict()
+        env.result = data
+        env.found = True
+        env.extra["source"] = "fact"
+        return env.to_dict()
+
+    def op_fact_history(self, fact_id: str = "") -> dict:
+        """История факта: чем он был, когда и почему перестал быть правдой.
+
+        Здесь только прежние версии; активная названа полем `active_version`,
+        чтобы «история пуста» не путалось с «факта нет вообще» (второе — отказ
+        `fact_not_found`).
+        """
+        env = self.make_env("fact_history")
+        facts_mod, refusal = self._facts_store("fact_history")
+        if facts_mod is None:
+            return refusal
+        try:
+            data = facts_mod.FactStore(self.control).history(fact_id=fact_id)
+        except facts_mod.FactError as exc:
+            return self._facts_refusal(env, "fact_history", exc.code, exc.message, exc.detail)
+        except Exception as exc:  # noqa: BLE001
+            env.found = False
+            env.error = f"память фактов недоступна: {type(exc).__name__}: {exc}"
+            return env.to_dict()
+        env.result = data["versions"]
+        env.found = bool(data["versions"])
+        env.extra["source"] = "fact"
+        env.extra["active_version"] = data["active_version"]
+        env.extra["deleted"] = data["deleted"]
+        return env.to_dict()
+
+    # ---------------- каталог навыков (возможность skills-catalog, уровень pro) ----------------
+    #
+    # Почему операция, а не дерево файлов. Тело навыка проекта — около 58 КБ
+    # вместе со справками; клиент без доступа к файловой системе не мог
+    # прочитать навык вовсе. Каталог отдаёт цену до чтения, тело и справку —
+    # по требованию. Механика — `skills_catalog.py`.
+
+    def _skills_catalog_root(self):
+        """Корень навыков корпуса: `<root>/docs/skills`.
+
+        Один способ, без второго: у каждого корпуса свои навыки рядом с
+        документами. Нет каталога — каталог навыков честно пуст (`total: 0`), а
+        не отвечает ошибкой на вопрос «что есть».
+        """
+        return self.cfg.root / "docs" / "skills"
+
+    def _skills_refusal(self, env, operation: str, code: str, reason: str,
+                        detail: dict | None = None) -> dict:
+        """Конверт отказа каталога навыков: код, причина, возможность."""
+        env.found = False
+        env.error = f"SkillCatalogError: {code}: {reason}"
+        env.extra["refused"] = {
+            "reason": reason,
+            "operation": operation,
+            "feature": "skills-catalog",
+            "code": code,
+            **(detail or {}),
+        }
+        return env.to_dict()
+
+    def op_skill_catalog(self) -> dict:
+        """Что есть: имена навыков, описания, размеры и остаток бюджета.
+
+        Цена названа до чтения: `body_bytes` у каждого навыка и `budget_left` в
+        ответе. Агент выбирает, читать ли тело или сразу справку, а не узнаёт
+        стоимость после того, как уже потратил контекст.
+        """
+        env = self.make_env("skill_catalog")
+        skills_mod, refusal = self._feature_module(
+            "skill_catalog", "skills_catalog", "skills-catalog")
+        if skills_mod is None:
+            return refusal
+        try:
+            data = skills_mod.SkillCatalog(self._skills_catalog_root()).catalog()
+        except Exception as exc:  # noqa: BLE001 — каталог не должен ронять работу
+            env.found = False
+            env.error = f"каталог навыков недоступен: {type(exc).__name__}: {exc}"
+            return env.to_dict()
+        env.result = data["skills"]
+        env.found = bool(data["skills"])
+        env.extra["source"] = "skills"
+        env.extra["total"] = data["total"]
+        env.extra["budget_total"] = data["budget_total"]
+        env.extra["budget_used"] = data["budget_used"]
+        env.extra["budget_left"] = data["budget_left"]
+        env.extra["note"] = data["note"]
+        return env.to_dict()
+
+    def op_skill_load(self, name: str = "", offset: int = 0,
+                      limit: int = 0) -> dict:
+        """Тело навыка постранично, с `sha256` и `next_offset`.
+
+        `limit=0` — всё тело. Постраничность не украшение: «прочитать целиком»
+        — это и есть то, что дорого; `next_offset=0` значит «продолжения нет».
+        """
+        env = self.make_env("skill_load")
+        skills_mod, refusal = self._feature_module(
+            "skill_load", "skills_catalog", "skills-catalog")
+        if skills_mod is None:
+            return refusal
+        try:
+            data = skills_mod.SkillCatalog(self._skills_catalog_root()).load(
+                name, offset=offset, limit=limit)
+        except skills_mod.SkillCatalogError as exc:
+            return self._skills_refusal(env, "skill_load", exc.code, exc.message, exc.detail)
+        except Exception as exc:  # noqa: BLE001
+            env.found = False
+            env.error = f"каталог навыков недоступен: {type(exc).__name__}: {exc}"
+            return env.to_dict()
+        env.result = data
+        env.found = True
+        env.extra["source"] = "skills"
+        return env.to_dict()
+
+    def op_skill_reference(self, name: str = "", file: str = "") -> dict:
+        """Файл справки навыка: только `<имя>.md` внутри `reference/`.
+
+        Именно ради этого операция и нужна: справка — половина тела навыка, и
+        читать её целиком ради одного раздела не надо.
+        """
+        env = self.make_env("skill_reference")
+        skills_mod, refusal = self._feature_module(
+            "skill_reference", "skills_catalog", "skills-catalog")
+        if skills_mod is None:
+            return refusal
+        try:
+            data = skills_mod.SkillCatalog(self._skills_catalog_root()).read_reference(
+                name, file)
+        except skills_mod.SkillCatalogError as exc:
+            return self._skills_refusal(env, "skill_reference", exc.code,
+                                        exc.message, exc.detail)
+        except Exception as exc:  # noqa: BLE001
+            env.found = False
+            env.error = f"каталог навыков недоступен: {type(exc).__name__}: {exc}"
+            return env.to_dict()
+        env.result = data
+        env.found = True
+        env.extra["source"] = "skills"
         return env.to_dict()
 
     def op_excludes(self, action: str = "show", dirs: str = "",
@@ -7713,6 +8122,32 @@ class Facade:
             return self._no_index(env)
         data = analysis.dead_code_report(self.graph, self.lexvec.conn, rev,
                                          scope=scope, limit=limit, root=self.cfg.root)
+        # Файл, у которого остались НЕПРИВЯЗАННЫЕ вызовы, не может быть объявлен
+        # мёртвым: «связи нет» и «связь не построена» — разные факты, и второй
+        # не доказывает первый. Такие файлы уходят в `unproven` с именами
+        # неразрешённых вызовов. Замер 22.11.2026: три живых TS-файла были
+        # объявлены мёртвыми именно из-за непривязанных межфайловых вызовов.
+        unresolved: dict[str, list[str]] = {}
+        for path, name in self.graph.execute(
+                "SELECT n2.path, n1.name FROM edge e"
+                " JOIN node n1 ON n1.rev_id = e.rev_id AND n1.node_id = e.dst"
+                " JOIN node n2 ON n2.rev_id = e.rev_id AND n2.node_id = e.src"
+                " WHERE e.rev_id = ? AND e.evidence_kind = 'external_call'"
+                " AND n1.kind = 'external' AND n2.path IS NOT NULL",
+                (rev,)):
+            unresolved.setdefault(str(path), []).append(str(name))
+        unproven = [item for item in data["files"] if item["path"] in unresolved]
+        if unproven:
+            data["files"] = [item for item in data["files"] if item["path"] not in unresolved]
+            data["unproven"] = [
+                {"path": item["path"], "unresolved_calls": sorted(set(
+                    unresolved[item["path"]]))[:10],
+                 "reason": ("есть вызовы, не привязанные к определению: файл может "
+                            "быть живым, а связь — не построенной")}
+                for item in unproven
+            ]
+        else:
+            data["unproven"] = []
         env.result = data
         env.found = bool(data["files"]) or bool(data["symbols"])
         env.extra["candidates"] = data["files_candidates"]
@@ -7727,6 +8162,12 @@ class Facade:
                      "вид доказательства вызова (CPG/имя) к нему не применяется — "
                      "здесь проверяется наличие ЛЮБОЙ входящей связи и упоминания"),
         }
+        if data.get("unproven"):
+            env.limits.append(
+                f"файлов с непривязанными вызовами: {len(data['unproven'])} — "
+                "мёртвыми они НЕ объявлены: отсутствие связи не доказано"
+            )
+            env.extra["unproven_count"] = len(data["unproven"])
         if data["files_not_checked"]:
             env.limits.append(
                 f"проверено {data['files_checked']} из {data['files_candidates']} кандидатов: "

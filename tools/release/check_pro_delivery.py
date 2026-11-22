@@ -256,7 +256,12 @@ def check_composition(tree: pathlib.Path, chain: list[dict],
             return True
         return any(name == folder or name.startswith(folder + "/") for folder in folders)
 
-    built = tree_files(tree) - {"checksums.sha256"}
+    # Артефакты сборщика — не файлы поставки: `checksums.sha256` назван был,
+    # а `RELEASE-REPORT.md` и `ops_pins.json` нет, и проверка состава объявляла
+    # их «вне набора» на любой сборке, где артефакты есть. Это тот же дефект,
+    # что закрыт выше для сравнения двух прогонов: список артефактов берётся из
+    # манифеста, а не перечисляется руками.
+    built = tree_files(tree) - set(own_manifest.artifacts) - {"checksums.sha256"}
     outside = sorted(name for name in built if name not in community_files and not belongs(name))
     expect(not outside,
            f"файлов вне набора Community и вне папок изданий {folders or '—'}: "

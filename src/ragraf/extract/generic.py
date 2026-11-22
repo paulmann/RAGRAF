@@ -74,9 +74,15 @@ class LangProfile:
     name: str                              # имя грамматики tree-sitter
     title: str                             # название для человека
     functions: tuple[str, ...] = ()         # узлы объявления функции
+    # Узлы-объявления ПЕРЕМЕННОЙ, которые являются функцией только по значению
+    # (`arrow_function`, `function_expression`). `const x = () => {}` и
+    # `const port = 8080` — один узел `variable_declarator`, и без проверки
+    # значения второе стало бы «функцией». Пусто — язык такого не имеет.
+    function_values: tuple[str, ...] = ()
     methods: tuple[str, ...] = ()           # узлы объявления метода
     classes: tuple[str, ...] = ()           # узлы объявления класса
     interfaces: tuple[str, ...] = ()
+    type_aliases: tuple[str, ...] = ()      # псевдонимы типов (`type Foo = ...`)
     structs: tuple[str, ...] = ()
     enums: tuple[str, ...] = ()
     properties: tuple[str, ...] = ()
@@ -153,12 +159,20 @@ PROFILES: dict[str, LangProfile] = {
     "typescript": LangProfile(
         name="typescript", title="TypeScript",
         functions=("function_declaration", "function_expression",
-                   "generator_function_declaration"),
+                   "generator_function_declaration", "variable_declarator"),
+        # Значение, при котором объявление переменной — функция:
+        # `export const greet = (name) => ...`. Без этой проверки `const port`
+        # стало бы функцией, поэтому она и вынесена в отдельное поле профиля.
+        function_values=("arrow_function", "function_expression",
+                         "generator_function"),
         methods=("method_definition", "method_signature",
                  "abstract_method_signature"),
         classes=("class_declaration", "abstract_class_declaration"),
         inherit_nodes=("class_heritage",),            # extends / implements
         interfaces=("interface_declaration",),
+        # `type Id = string | number` — объявление типа: в проектах на TS таких
+        # десятки, и без него они не попадали в индекс вовсе.
+        type_aliases=("type_alias_declaration",),
         enums=("enum_declaration",),
         properties=("public_field_definition", "property_signature"),
         calls=("call_expression", "new_expression"),
@@ -600,6 +614,10 @@ class GenericExtractor:
             return kind_when_found if keyword in tokens else kind_when_absent
 
         if node_type in p.functions:
+            if node_type == "variable_declarator" and p.function_values:
+                value = node.child_by_field_name("value")
+                if value is None or value.type not in p.function_values:
+                    return None
             return "method" if self._containers else "function"
         if node_type in p.methods:
             # Внутри класса любая функция — метод, даже если грамматика
@@ -609,6 +627,8 @@ class GenericExtractor:
             return "class"
         if node_type in p.interfaces:
             return "interface"
+        if node_type in p.type_aliases:
+            return "type_alias"
         if node_type in p.structs:
             return "struct"
         if node_type in p.enums:

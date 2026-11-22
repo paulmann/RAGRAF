@@ -172,6 +172,9 @@ LANG_BY_EXT = {
     ".ts": "typescript",
     ".mts": "typescript",
     ".tsx": "typescript",
+    # Astro: собственная грамматика не нужна — разбираются его островки кода
+    # (frontmatter и <script>) профилем TypeScript, см. extract/astro.py.
+    ".astro": "astro",
     ".c": "c",
     ".h": "c",
     ".cpp": "cpp",

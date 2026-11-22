@@ -39,7 +39,9 @@ print("ПРОВЕРКА: АГЕНТ ИЗ ОКРУЖЕНИЯ ДОХОДИТ ДО 
 print("=" * 78)
 
 # Рабочий журнал корпуса копируется во временный: проверка пишет в копию.
-LIVE = pathlib.Path(__file__).resolve().parents[1].parent / "revoap.com/.ragraf/control.sqlite"
+# Журнал — из СВОЕГО корпуса: чужой (revoap.com) на этой машине повреждён,
+# а предмет проверки — атрибуция агента, а не чужое дерево.
+LIVE = pathlib.Path(__file__).resolve().parents[1] / ".ragraf" / "control.sqlite"
 STAGING = REPO / ".staging"
 STAGING.mkdir(exist_ok=True)
 PROBE_DB = STAGING / "cli_agent_probe.sqlite"
@@ -103,8 +105,8 @@ for agent, kind in CASES:
         env.pop("RAGRAF_AGENT_KIND", None)
 
     proc = subprocess.run(
-        [sys.executable, str(runner), "--json", "-p", str(REPO / "config" / "revoap.yaml"),
-         "query", "search", "pipeline", "--limit", "1"],
+        [sys.executable, str(runner), "--json", "-p", str(REPO / "config" / "ragraf.yaml"),
+         "query", "search", "схлопывание дублей", "--limit", "1"],
         capture_output=True, text=True, encoding="utf-8", errors="replace",
         env=env, cwd=str(REPO), timeout=300,
     )

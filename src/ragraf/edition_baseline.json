@@ -259,6 +259,30 @@
       "operations": [
         "contract_drift"
       ]
+    },
+    {
+      "name": "memory-facts",
+      "title": "память фактов: версии, история замещений, срок жизни и запрет противоречий",
+      "edition": "pro",
+      "status": "shipped",
+      "operations": [
+        "fact_store",
+        "fact_recall",
+        "fact_replace",
+        "fact_forget",
+        "fact_history"
+      ]
+    },
+    {
+      "name": "skills-catalog",
+      "title": "каталог навыков: что есть, цена до чтения и загрузка тела и справки по требованию",
+      "edition": "pro",
+      "status": "shipped",
+      "operations": [
+        "skill_catalog",
+        "skill_load",
+        "skill_reference"
+      ]
     }
   ],
   "roadmap": [

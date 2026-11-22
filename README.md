@@ -7,7 +7,7 @@
 [![License](https://img.shields.io/badge/license-BUSL--1.1-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.13%2B-informational)](pyproject.toml)
 
-![RAGRAF — graph-and-vector knowledge base over source code for LLM agents: 86 MCP tools, verifiable facts as file:line, fully local](assets/social-preview.png)
+![RAGRAF — graph-and-vector knowledge base over source code for LLM agents: 94 MCP tools, verifiable facts as file:line, fully local](assets/social-preview.png)
 
 [**Quick start**](#first-steps) · [**Documentation**](#documentation) · [**Wiki**](https://github.com/paulmann/RAGRAF/wiki) · [**Changelog**](CHANGELOG.md) · [**Русская версия**](README.ru.md)
 
@@ -29,6 +29,7 @@ An assistant that answers an agent's questions about a codebase — *where is it
 - [Development](#development)
 - [Contributing](#contributing)
 - [The project in numbers and the measured test bed](#the-project-in-numbers-and-the-measured-test-bed)
+- [How to buy](#how-to-buy)
 - [License](#license)
 
 ---
@@ -58,7 +59,7 @@ One caveat is usually left out: **the 2–3× gain applies to localisation tasks
 
 ## Capabilities
 
-<!-- surface:ops_heading -->**79 operations** over a repository<!-- /surface:ops_heading --> — a fixed set, with no graph query language:
+<!-- surface:ops_heading -->**87 operations** over a repository<!-- /surface:ops_heading --> — a fixed set, with no graph query language:
 
 | Operation | Answers the question |
 |---|---|
@@ -98,6 +99,8 @@ One caveat is usually left out: **the 2–3× gain applies to localisation tasks
 | `quality_suite` / `quality_diff` / `quality_prune` | the quality loop (pro edition): run index checks, compare two runs, thin the run journal with a copy and a confirmation |
 | `shared_index_status` / `shared_index_publish` / `shared_index_query` | the team index (pro edition): publish a corpus for network reads, admit a client, query the published index |
 | `broker_issue` / `broker_rotate` | the secret broker (pro edition): issue a secret on request — a lease with a term, a custodian and a reason — and rotate the value on a plan (leases are revoked by the rotation) |
+| `fact_store` / `fact_recall` / `fact_replace` / `fact_forget` / `fact_history` | fact memory (pro edition): a fact keyed by `namespace` + `subject` + `predicate`, with versions, a lifetime that hides instead of deleting, and the reason for forgetting kept in the notes journal |
+| `skill_catalog` / `skill_load` / `skill_reference` | the corpus skill catalog (pro edition): which skills exist and what reading each costs, the body page by page (`offset`, `limit`, `sha256`, `next_offset`), and a `reference/<name>.md` by name — with `bad_name` and `path_jail` refusals for anything outside the catalog |
 
 Two further modes are not operations but a shape of answer: **`answer=true`** returns a phrased answer with references instead of a structural result (P2-2), and `brief=true` returns a short answer shell. `usage` reports the effect metrics (`saved_calls`, `hit_rate`, `avg_ms`, `misses`, `stale_served`).
 
@@ -107,7 +110,7 @@ The same two levels as one answer are `doc_search_levels`: local facts and the g
 
 **Themes and the graph map.** `themes` returns the clusters of the document graph — deterministic, so the same layer always yields the same `theme_id` — with a citation address for every member and a summary over citations when a model was available; without a model the theme stays and `summary=null` names the reason. `global_overview` answers «what is in here at all»: documents, entities, relations, themes, summaries and the top themes with addresses. Both read the document graph and are refused without the `doc-graph` capability; the clusters themselves are built without a model (`ragraf docgraph themes`).
 
-The same operations are exposed as <!-- surface:tools_mcp -->**86 MCP tools** (`ragraf_*`)<!-- /surface:tools_mcp --> — for attachment to an agent as a server — and through the CLI. One group of tools is the live database layer: `ragraf_db_schema`, `ragraf_db_table`, `ragraf_db_relations`, `ragraf_db_sample`, `ragraf_db_drift`, `ragraf_db_cross`. One operation of the closed tier (enterprise edition) compares the declared design with the computed graph by FQN — `contract_drift` (modules, dependencies, contracts; every code-side divergence carries `file:line`) — and is declared as the tool `ragraf_contract_drift` (capability `contract-drift`). Two operations of the closed tier (enterprise edition) are declared as tools: `ragraf_license_offline` (offline licence: request, issue, acceptance, transfer) and `ragraf_attest_bundle` (delivery attestation: a signed evidence bundle and its verification). The quality loop (pro edition) is `ragraf_quality_suite` (an index check suite plus a run record), `ragraf_quality_diff` (divergences between two runs) and `ragraf_quality_prune` (thinning the run journal: a dry run by default, deletion only with confirmation and after a copy of the journal). Provenance (pro) adds two tools — `ragraf_doc_asof` (the edition in force on a date, with its validity interval and version id) and `ragraf_dependents` (what rested on a fact: the transitive walk, `outside_cap`, and the split between recomputing a derivation and a human decision). Three operations of the shared index (also pro) are outside the MCP set: they manage publication and the network channel rather than index reads, and run as `python -m ragraf.shared_index` (see `docs/03_implementation/SHARED-INDEX.md`). The secret broker (pro) is represented by two tools — `ragraf_broker_issue` (lease: term, custodian, reason, one-time redemption) and `ragraf_broker_rotate` (plan state, scheduling, rotation with lease revocation); lease state lives in `catalog/broker.json`, and the storage schema does not change.
+The same operations are exposed as <!-- surface:tools_mcp -->**94 MCP tools** (`ragraf_*`)<!-- /surface:tools_mcp --> — for attachment to an agent as a server — and through the CLI. One group of tools is the live database layer: `ragraf_db_schema`, `ragraf_db_table`, `ragraf_db_relations`, `ragraf_db_sample`, `ragraf_db_drift`, `ragraf_db_cross`. One operation of the closed tier (enterprise edition) compares the declared design with the computed graph by FQN — `contract_drift` (modules, dependencies, contracts; every code-side divergence carries `file:line`) — and is declared as the tool `ragraf_contract_drift` (capability `contract-drift`). Two operations of the closed tier (enterprise edition) are declared as tools: `ragraf_license_offline` (offline licence: request, issue, acceptance, transfer) and `ragraf_attest_bundle` (delivery attestation: a signed evidence bundle and its verification). The quality loop (pro edition) is `ragraf_quality_suite` (an index check suite plus a run record), `ragraf_quality_diff` (divergences between two runs) and `ragraf_quality_prune` (thinning the run journal: a dry run by default, deletion only with confirmation and after a copy of the journal). Provenance (pro) adds two tools — `ragraf_doc_asof` (the edition in force on a date, with its validity interval and version id) and `ragraf_dependents` (what rested on a fact: the transitive walk, `outside_cap`, and the split between recomputing a derivation and a human decision). Three operations of the shared index (also pro) are outside the MCP set: they manage publication and the network channel rather than index reads, and run as `python -m ragraf.shared_index` (see `docs/03_implementation/SHARED-INDEX.md`). The secret broker (pro) is represented by two tools — `ragraf_broker_issue` (lease: term, custodian, reason, one-time redemption) and `ragraf_broker_rotate` (plan state, scheduling, rotation with lease revocation); lease state lives in `catalog/broker.json`, and the storage schema does not change.
 The twenty-fourth one is `use_project`: choosing a corpus when one server serves several projects. `context` answers which corpus is selected and on what grounds — without it, answers about a foreign project were indistinguishable from answers about your own.
 
 **Twenty-nine languages** are parsed into a syntax tree (graph nodes and edges). Sixteen have their node map described by a profile: PHP, Python, JavaScript, TypeScript, Java, C#, C, C++, Ruby, Lua, Go, Perl, bash, PowerShell, CSS, HTML. The remaining thirteen (Rust, Kotlin, Swift, Scala, Dart, R, F#, OCaml, Solidity, Fortran, MATLAB, Elm, Lisp) take it from the grammar's own tags query: their node names do not match the familiar ones, and a profile per language would mean inventing names. Every language is checked on a sample file — at least one symbol found (`tests/test_new_languages.py`).
@@ -313,6 +316,33 @@ The value page — `http://127.0.0.1:8777/value`: 30-day calls, facts, token and
 
 ---
 
+### TypeScript, JavaScript and Astro: what is a fact here
+
+A call from another file is bound to its definition **by the import line**, and
+the edge says so: `evidence_kind="import"`, confidence 0.9, and the address of
+the call (`path:line`) taken from the placeholder that was replaced. Package
+specifiers (`react`, `@scope/pkg`) are not bound — there is no file to bind
+them to — and `tsconfig.paths` aliases are a named gap, not a quiet
+approximation.
+
+`dead_code` keeps "no reference" and "reference not built" apart. A file that
+imports something is not dead. A file whose calls could not be bound carries
+`evidence_kind="external_call"` and goes to `unproven` with the call names and
+the reason; it is never sent to the verdict. Deleting code on a hint is the one
+mistake this operation must not invite.
+
+`.astro` files are indexed: the frontmatter and every `<script>` block are
+parsed as TypeScript with the markup masked, so `path:line` points at the real
+line of the page. Markup itself does not become symbols — a template is not a
+call graph. The `astro` format is a registry entry like any other: visible and
+switchable in the panel, counted in `skipped_formats` when disabled.
+
+Where the index lives is not a setting: it is `.ragraf/` **inside the project
+root**, because the corpus checksum and the `**/.ragraf/**` self-exclusion are
+computed from that root. If the directory is protected, `ragraf index` stops
+with exit code 3 and says why, instead of failing inside sqlite with «файла не
+существует»: index a copy in a writable location.
+
 ## Requirements and limits
 
 | Item | Value |
@@ -402,11 +432,11 @@ The project is built for concrete tasks, so architecture proposals get a hearing
 
 ## The project in numbers and the measured test bed
 
-Published figures (checked on 07.11.2026; index sizes from the active revision record): <!-- surface:figures -->**79 operations** on the facade, **86 MCP tools**, **26** CLI subcommands, **29** tree-parsed languages and **40** text-attached ones (including `document`), **84** data formats in the registry (61 languages, 9 document families, 10 data kinds, 4 without a parser)<!-- /surface:figures -->; the RAGRAF index itself — 984 files, 7 079 nodes and 99 267 edges (the snapshot is compared with the active revision record by `Test-DocumentedNumbers`: figures from a past revision raise a warning naming its `rev_id` and date, and at publication that is a refusal — `tools/release/gate_release.py`; the live figures come from `python tools/ragraf.py -p config/ragraf.yaml status`).
+Published figures (checked on 23.11.2026; index sizes from the active revision record): <!-- surface:figures -->**87 operations** on the facade, **94 MCP tools**, **26** CLI subcommands, **29** tree-parsed languages and **41** text-attached ones (including `document`), **87** data formats in the registry (61 languages, 9 document families, 10 data kinds, 4 without a parser)<!-- /surface:figures -->; the RAGRAF index itself — 1 002 files, 7 415 nodes and 104 556 edges (the snapshot is compared with the active revision record by `Test-DocumentedNumbers`: figures from a past revision raise a warning naming its `rev_id` and date, and at publication that is a refusal — `tools/release/gate_release.py`; the live figures come from `python tools/ragraf.py -p config/ragraf.yaml status`).
 
 **The test bed, depersonalised** (project names, paths and domains removed). The figures in this section are a **snapshot of 16.10.2026**, not the current state: at that moment the registry held **28 corpora, 25 indexed** — 10 with the CPG layer, 15 in `degraded` mode. For 16 of them the revision record was read the same day: **7 527 files, 94 528 symbols, 791 844 edges, 86 790 chunks**.
 
-The current registry size is kept apart from the snapshot on purpose: it changes with every attached project, and putting it into the table below would pass yesterday's measurement off as today's. It is named in its own line and compared with `catalog/catalog.json` — **by the registry on 10.11.2026: 56 corpora, 43 indexed**. A checker watches this figure: if it diverges from the registry, that is a finding, not a stale line.
+The current registry size is kept apart from the snapshot on purpose: it changes with every attached project, and putting it into the table below would pass yesterday's measurement off as today's. It is named in its own line and compared with `catalog/catalog.json` — **by the registry on 22.11.2026: 60 corpora, 48 indexed**. A checker watches this figure: if it diverges from the registry, that is a finding, not a stale line.
 
 | Corpus | Kind | Files | Symbols | Edges | Mode |
 |---|---|---|---|---|---|
@@ -419,6 +449,29 @@ The current registry size is kept apart from the snapshot on purpose: it changes
 The full 16-row table, the depersonalisation rules and the counting caveat live in [the wiki → Benchmarks and Limits](https://github.com/paulmann/RAGRAF/wiki/11-Benchmarks-and-Limits). The caveat: the corpus registry and a revision record give different totals for the same revision (8 721 vs 4 498 symbols, 41 201 vs 56 106 edges), so the figures are taken from the revision record. The private map from `C-*` labels to projects stays outside the repository: it belongs to the author and is not part of the delivery.
 
 ---
+
+## How to buy
+
+One delivery, two licence levels, three periods — monthly, yearly or perpetual.
+The invoice is issued by the sole proprietor (ИП) and paid by bank transfer; the
+site does not take card details. After payment you get an **activation key**, and
+`ragraf edition license-offline` turns it into a licence file **on your machine** —
+the site never signs a licence and never holds the signing key.
+
+| Step | Where |
+|---|---|
+| Choose the edition and period | <https://ragraf.ru/pricing/> |
+| Pay the invoice | your bank, using the invoice PDF |
+| Take the key | <https://ragraf.ru/portal/> — sign-in by e-mail, no password |
+| Issue the licence | `ragraf edition license-offline` on your machine |
+
+**State today:** `PAYMENTS_MODE=off` — the site does not issue invoices
+automatically yet, and honestly says "under an agreement" instead of showing a
+price. Write to the address in `SUPPORT.md` and an invoice is issued by hand.
+
+What is promised and what is not: [`docs/03_implementation/LICENSING-AND-BILLING.md`](docs/03_implementation/LICENSING-AND-BILLING.md).
+Receipts under Russian law (54-ФЗ) are **not** integrated, so an invoice here is a
+payment document, not a fiscal receipt.
 
 ## License
 

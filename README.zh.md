@@ -12,7 +12,7 @@
 [![License](https://img.shields.io/badge/license-BUSL--1.1-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.13%2B-informational)](pyproject.toml)
 
-![RAGRAF — 面向 LLM 智能体的图-向量代码知识库：86 个 MCP 工具、带 file:line 引用的可验证事实、完全本地运行](assets/social-preview.png)
+![RAGRAF — 面向 LLM 智能体的图-向量代码知识库：94 个 MCP 工具、带 file:line 引用的可验证事实、完全本地运行](assets/social-preview.png)
 
 [**快速开始**](#第一步) · [**文档**](#文档) · [**Wiki**](https://github.com/paulmann/RAGRAF/wiki) · [**更新日志**](CHANGELOG.md) · [**English version**](README.md)
 
@@ -34,6 +34,7 @@
 - [开发](#开发)
 - [参与](#参与)
 - [用数字看项目与实测基准](#用数字看项目与实测基准)
+- [如何购买](#如何购买)
 - [许可证](#许可证)
 
 ---
@@ -63,7 +64,7 @@ RAGRAF 用索引取代这条路径。智能体通过固定操作提问，得到�
 
 ## 能力
 
-<!-- surface:ops_heading -->**79 个操作**作用于代码仓库<!-- /surface:ops_heading -->——固定集合，没有面向图的查询语言：
+<!-- surface:ops_heading -->**87 个操作**作用于代码仓库<!-- /surface:ops_heading -->——固定集合，没有面向图的查询语言：
 
 | 操作 | 回答什么问题 |
 |---|---|
@@ -103,6 +104,8 @@ RAGRAF 用索引取代这条路径。智能体通过固定操作提问，得到�
 | `quality_suite` / `quality_diff` / `quality_prune` | 质量回路（pro 版）：运行索引检查、比较两次运行、带着副本与确认精简运行日志 |
 | `shared_index_status` / `shared_index_publish` / `shared_index_query` | 团队索引（pro 版）：为网络读取发布语料、接纳客户端、查询已发布的索引 |
 | `broker_issue` / `broker_rotate` | 机密代理（pro 版）：按请求签发机密——带期限、保管人和原因的租约——并按计划轮换值（轮换会撤销租约） |
+| `fact_store` / `fact_recall` / `fact_replace` / `fact_forget` / `fact_history` | 事实记忆（pro 版）：以 `namespace` + `subject` + `predicate` 为键的事实，带版本，带只隐藏而不删除的有效期，遗忘的原因留在笔记日志中 |
+| `skill_catalog` / `skill_load` / `skill_reference` | 语料库的技能目录（pro 版）：有哪些技能、读取每一份要花多少，正文按页给出（`offset`、`limit`、`sha256`、`next_offset`），以及按名称取 `reference/<name>.md`——目录之外的一切以 `bad_name` 和 `path_jail` 拒绝 |
 
 另有两种模式不是操作，而是回答的形式：**`answer=true`** 返回带引用的成文回答，而不是结构化结果（P2-2）；`brief=true` 返回回答的简短外壳。`usage` 给出效果指标（`saved_calls`、`hit_rate`、`avg_ms`、`misses`、`stale_served`）。
 
@@ -118,7 +121,7 @@ RAGRAF 用索引取代这条路径。智能体通过固定操作提问，得到�
 
 **主题与图的地图。** `themes` 返回文档图的实体分组——确定性：同一层始终给出相同的 `theme_id`——每个成员都带引用地址；若有模型，附基于引用的摘要，没有模型时主题保留而 `summary=null` 说明原因。`global_overview` 回答「这里总体上有什么」：文档、实体、关系、主题、摘要，以及带地址的主要主题。两者都读取文档图，缺少 `doc-graph` 能力时拒绝执行；分组本身不需要模型（`ragraf docgraph themes`）。
 
-同一批操作也以 <!-- surface:tools_mcp -->**86 个 MCP 工具**（`ragraf_*`）<!-- /surface:tools_mcp -->提供——用于作为服务器接入智能体，同时也通过 CLI 提供。其中一组工具是数据库活层：`ragraf_db_schema`、`ragraf_db_table`、`ragraf_db_relations`、`ragraf_db_sample`、`ragraf_db_drift`、`ragraf_db_cross`。封闭层级（enterprise 版）的两个操作以工具形式声明：`ragraf_license_offline`（离线许可证：申请、签发、接受、转移）与 `ragraf_attest_bundle`（交付认证：带签名的证据包及其校验）。封闭层级（enterprise 版）的一个操作按 FQN 将声明的设计与计算出的图进行比对：`contract_drift`（模块、依赖、契约；每个代码侧差异都带 `file:line`）——并以工具 `ragraf_contract_drift` 声明（能力 `contract-drift`）。质量回路（pro 版）是 `ragraf_quality_suite`（索引检查套件加运行记录）、`ragraf_quality_diff`（两次运行之间的差异）与 `ragraf_quality_prune`（精简运行日志：默认只做演练，删除仅在确认并在日志副本之后）。来源层（pro）新增两个工具——`ragraf_doc_asof`（某一日期生效的版本，含有效期区间与版本号）与 `ragraf_dependents`（哪些结论依赖某个事实：传递遍历、`outside_cap`，并区分「重新计算推导」与「人的决定」）。共享索引的三个操作（同样属于 pro）不在 MCP 集合里：它们管理发布与网络通道，而不是索引读取，以 `python -m ragraf.shared_index` 运行（见 `docs/03_implementation/SHARED-INDEX.md`）。机密代理（pro）由两个工具表示——`ragraf_broker_issue`（租约：期限、保管人、原因、一次性兑换）与 `ragraf_broker_rotate`（计划状态、排期、带租约撤销的轮换）；租约状态存放在 `catalog/broker.json`，存储模式不变。
+同一批操作也以 <!-- surface:tools_mcp -->**94 个 MCP 工具**（`ragraf_*`）<!-- /surface:tools_mcp -->提供——用于作为服务器接入智能体，同时也通过 CLI 提供。其中一组工具是数据库活层：`ragraf_db_schema`、`ragraf_db_table`、`ragraf_db_relations`、`ragraf_db_sample`、`ragraf_db_drift`、`ragraf_db_cross`。封闭层级（enterprise 版）的两个操作以工具形式声明：`ragraf_license_offline`（离线许可证：申请、签发、接受、转移）与 `ragraf_attest_bundle`（交付认证：带签名的证据包及其校验）。封闭层级（enterprise 版）的一个操作按 FQN 将声明的设计与计算出的图进行比对：`contract_drift`（模块、依赖、契约；每个代码侧差异都带 `file:line`）——并以工具 `ragraf_contract_drift` 声明（能力 `contract-drift`）。质量回路（pro 版）是 `ragraf_quality_suite`（索引检查套件加运行记录）、`ragraf_quality_diff`（两次运行之间的差异）与 `ragraf_quality_prune`（精简运行日志：默认只做演练，删除仅在确认并在日志副本之后）。来源层（pro）新增两个工具——`ragraf_doc_asof`（某一日期生效的版本，含有效期区间与版本号）与 `ragraf_dependents`（哪些结论依赖某个事实：传递遍历、`outside_cap`，并区分「重新计算推导」与「人的决定」）。共享索引的三个操作（同样属于 pro）不在 MCP 集合里：它们管理发布与网络通道，而不是索引读取，以 `python -m ragraf.shared_index` 运行（见 `docs/03_implementation/SHARED-INDEX.md`）。机密代理（pro）由两个工具表示——`ragraf_broker_issue`（租约：期限、保管人、原因、一次性兑换）与 `ragraf_broker_rotate`（计划状态、排期、带租约撤销的轮换）；租约状态存放在 `catalog/broker.json`，存储模式不变。
 第二十四个是 `use_project`：当一个服务器服务多个项目时选择语料。`context` 回答选中了哪个语料、依据是什么——没有它，关于别的项目的回答与本项目的回答无法区分。
 
 **二十九种语言**被解析成语法树（图的节点与边）。其中十六种由配置文件描述节点映射：PHP、Python、JavaScript、TypeScript、Java、C#、C、C++、Ruby、Lua、Go、Perl、bash、PowerShell、CSS、HTML。其余十三种（Rust、Kotlin、Swift、Scala、Dart、R、F#、OCaml、Solidity、Fortran、MATLAB、Elm、Lisp）从语法自身的标签查询获取节点名：它们的节点名与熟悉的那些不一致，而为每种语言写一份配置等于凭空发明名字。每种语言都在样例文件上校验——至少找到一个符号（`tests/test_new_languages.py`）。
@@ -129,7 +132,7 @@ RAGRAF 用索引取代这条路径。智能体通过固定操作提问，得到�
 **文档的每个分块都有地址，而且地址可以反向解析。** 章节记作 `路径#标题/部分`，表格单元格块记作 `路径#工作表:Sheet1!A1:C20`，邮件引用记作 `路径#msg-id/部分`；`doc_get` 接收地址并返回正文，因此引用可以核对，而不必相信。分块预算为 1200 个记号（工作表和较长的流程文档为 950），超出预算的分块会让索引检查失败——该检查在修订完成与封存之间运行，因此错误的分块永远不会成为生效索引。该层由四个操作覆盖：`doc_search`、`doc_get`、`doc_status`、`doc_validate`。扫描件文字识别属于专业版能力（`doc_ocr`），默认关闭：需要本地安装语言包，而索引里的错误识别文本比诚实的拒绝更糟。
 
 
-索引哪些内容在面板里选择：**设置 → 「格式」选项卡**——84 种格式按类别分组（语言、文档、数据），可按名称、扩展名和解析方式筛选，有「全部」/「无」按钮和已启用条目计数。默认启用所有格式，`*` 表示「全部，包括以后新增的」。禁用一种格式会改变语料内容，并在下一次新鲜度检查时触发重新索引。
+索引哪些内容在面板里选择：**设置 → 「格式」选项卡**—— 84 种格式按类别分组（语言、文档、数据），可按名称、扩展名和解析方式筛选，有「全部」/「无」按钮和已启用条目计数。默认启用所有格式，`*` 表示「全部，包括以后新增的」。禁用一种格式会改变语料内容，并在下一次新鲜度检查时触发重新索引。
 
 ---
 
@@ -311,6 +314,16 @@ python tools/ragraf-admin.py --no-browser
 
 ---
 
+### TypeScript、JavaScript 与 Astro：这里什么算事实
+
+跨文件的调用**按 import 行**绑定到定义，边本身也说明了这一点：`evidence_kind="import"`、置信度 0.9，以及取自被替换占位符的调用地址（`path:line`）。包说明符（`react`、`@scope/pkg`）不绑定——没有可绑定的文件；`tsconfig.paths` 别名是明确命名的缺口，而不是无声的近似。
+
+`dead_code` 把「没有引用」与「引用没有建立」分开。被 import 的文件不会被判为死代码。含未绑定调用的文件进入 `unproven`，并附上调用名与原因；它不会进入判决。根据提示删除代码，是这个操作绝不能诱使别人犯的错误。
+
+`.astro` 文件会被索引：frontmatter 与每个 `<script>` 块按 TypeScript 解析并屏蔽标记，因此 `path:line` 指向页面真实的行号。标记本身不会变成符号：模板不是调用图。`astro` 格式与其他格式一样登记在册：在面板中可见、可关闭，关闭时计入 `skipped_formats`。
+
+索引位于哪里不是设置项：它就是项目根目录内的 `.ragraf/`，因为语料校验和与 `**/.ragraf/**` 自排除都从这个根计算。如果目录不可写，`ragraf index` 会以代码 3 结束并说明原因，而不是在 sqlite 里以「文件不存在」失败：请索引可写位置中的副本。
+
 ## 环境要求与限制
 
 | 项目 | 取值 |
@@ -329,7 +342,7 @@ python tools/ragraf-admin.py --no-browser
 pip install truststore      # 或：install.ps1 -WithTruststore
 ```
 
-在家庭网络里不需要这个包。实测：没有它——`certificate verify failed`；有它——240 MB 用 9.2 秒下载完。
+在家庭网络里不需要这个包。实测：没有它——`certificate verify failed`；有它—— 240 MB 用 9.2 秒下载完。
 
 **关于模型缓存。** 缓存目录由 `RAGRAF_MODEL_CACHE` 覆盖。读操作从不下载模型——只有带向量的索引才会。
 
@@ -400,11 +413,11 @@ python tools/ragraf.py ensure .
 
 ## 用数字看项目与实测基准
 
-公开发表的数字（2026-11-07 核对；索引规模取自活动修订记录）：<!-- surface:figures -->外观上的 **79 个操作**、**86 个 MCP 工具**、**26** 个 CLI 子命令、**29** 种语法树语言与 **40** 种文本接入语言（包括 `document`）、登记表中 **84** 种数据格式（61 种语言、9 类文档家族、10 类数据、4 种无解析器）<!-- /surface:figures -->；RAGRAF 自身索引——984 个文件、7 079 个节点、99 267 条边（快照由 `Test-DocumentedNumbers` 与活动修订记录比对：属于过去修订的数字会给出带其 `rev_id` 与日期的警告，而在发布时这就是拒绝——`tools/release/gate_release.py`；活动数字来自 `python tools/ragraf.py -p config/ragraf.yaml status`）。
+公开发表的数字（2026-11-23 核对；索引规模取自活动修订记录）：<!-- surface:figures -->外观上的 **87 个操作**、**94 个 MCP 工具**、**26** 个 CLI 子命令、**29** 种语法树语言与 **41** 种文本接入语言（包括 `document`）、登记表中 **87** 种数据格式（61 种语言、9 类文档家族、10 类数据、4 种无解析器）<!-- /surface:figures -->；RAGRAF 自身索引—— 1 002 个文件、7 415 个节点、104 556 条边（快照由 `Test-DocumentedNumbers` 与活动修订记录比对：属于过去修订的数字会给出带其 `rev_id` 与日期的警告，而在发布时这就是拒绝——`tools/release/gate_release.py`；活动数字来自 `python tools/ragraf.py -p config/ragraf.yaml status`）。
 
-**试验场，已去个人化**（去掉项目名、路径和域名）。本节的数字是 **2026-10-16 的快照**，不是当前状态：当时登记册里有 **28 个语料、25 个已索引**——10 个带 CPG 层，15 个处于 `degraded` 模式。其中 16 个的修订记录在同一天读过：**7 527 个文件、94 528 个符号、791 844 条边、86 790 个分块**。
+**试验场，已去个人化**（去掉项目名、路径和域名）。本节的数字是 **2026-10-16 的快照**，不是当前状态：当时登记册里有 **28 个语料、25 个已索引**—— 10 个带 CPG 层，15 个处于 `degraded` 模式。其中 16 个的修订记录在同一天读过：**7 527 个文件、94 528 个符号、791 844 条边、86 790 个分块**。
 
-登记册的当前规模故意与快照分开：它每接入一个项目就会变，把它放进下表会把昨天的测量冒充成今天的。它单独占一行，并与 `catalog/catalog.json` 比对——**按 2026-11-10 的登记册：56 个语料、43 个已索引**。有一项检查盯着这个数字：它一旦与登记册不符，那就是一条发现，而不是一行过时的文字。
+登记册的当前规模故意与快照分开：它每接入一个项目就会变，把它放进下表会把昨天的测量冒充成今天的。它单独占一行，并与 `catalog/catalog.json` 比对——**按 2026-11-22 的登记册：60 个语料、48 个已索引**。有一项检查盯着这个数字：它一旦与登记册不符，那就是一条发现，而不是一行过时的文字。
 
 | 语料 | 类型 | 文件 | 符号 | 边 | 模式 |
 |---|---|---|---|---|---|
@@ -417,6 +430,26 @@ python tools/ragraf.py ensure .
 完整的 16 行表格、去个人化规则与计数口径的说明在[维基 → 基准与限制](https://github.com/paulmann/RAGRAF/wiki/11-Benchmarks-and-Limits)。口径说明：语料登记册与修订记录对同一次修订给出不同的总数（符号 8 721 对 4 498，边 41 201 对 56 106），所以数字取自修订记录。`C-*` 标签到项目的私有对照表留在仓库之外：它属于作者，不属于交付。
 
 ---
+
+## 如何购买
+
+同一套产品，两个许可证级别，三种周期——月、年或永久。发票由个体经营者
+开具，通过银行转账支付；网站不接收银行卡信息。付款后获得**激活密钥**，
+`ragraf edition license-offline` 会在**您自己的机器上**把它变成许可证文件：
+网站从不签署许可证，也不持有签名密钥。
+
+| 步骤 | 位置 |
+|---|---|
+| 选择版本与周期 | <https://ragraf.ru/pricing/> |
+| 支付发票 | 用您的银行，按发票 PDF 转账 |
+| 领取密钥 | <https://ragraf.ru/portal/> — 电子邮件登录，无需密码 |
+| 生成许可证 | 在您的机器上运行 `ragraf edition license-offline` |
+
+**当前状态：** `PAYMENTS_MODE=off`——网站暂不自动开票，会如实写「面议」而不是
+显示价格。请写信到 `SUPPORT.md` 中的地址，我们会手工开票。
+
+承诺与不承诺的边界：[`docs/03_implementation/LICENSING-AND-BILLING.md`](docs/03_implementation/LICENSING-AND-BILLING.md)。
+俄罗斯法定收据（Federal Law 54-FZ）**未**接入，因此这里的发票是付款凭证，不是税务收据。
 
 ## 许可证
 

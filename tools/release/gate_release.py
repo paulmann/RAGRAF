@@ -1188,8 +1188,14 @@ def main(argv: list[str] | None = None) -> int:
 
     # Артефакт описаний проверяется сразу после сборки: пины следующего
     # выпуска сравниваются с тем кодом, который уехал, а не с источником.
+    # Манифест загружается ДО проверки отчёта: проверке нужен объект с полем
+    # `artifacts`, а не путь. С путём `release_report.declared()` всегда видел
+    # пустой набор и объявлял отчёт необъявленным (замерено 22.11.2026).
+    manifest_path = manifest or (source / rel.MANIFEST_DEFAULT)
+    declared_manifest = rel.load_manifest(manifest_path, source)
     report_code, report_message = check_report_artifact(
-        tree, manifest, Path(args.previous).resolve() if args.previous else None, source)
+        tree, declared_manifest,
+        Path(args.previous).resolve() if args.previous else None, source)
     print(("OK: " if report_code == 0 else "FAIL: ") + report_message)
     if report_code != 0:
         state["blocks"].append("отчёт выпуска расходится с набором")
@@ -1253,8 +1259,7 @@ def main(argv: list[str] | None = None) -> int:
         state["blocks"].append("пробы поведения не прочитаны")
         return finish(1)
 
-    manifest_path = manifest or (source / rel.MANIFEST_DEFAULT)
-    plan = rel.collect(source, rel.load_manifest(manifest_path, source))
+    plan = rel.collect(source, declared_manifest)
     targets = sorted(plan.files)
     if not targets:
         state["blocks"].append("манифест не дал ни одного файла")

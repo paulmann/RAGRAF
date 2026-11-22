@@ -1,7 +1,7 @@
 # RAGRAF Roadmap
 
-> **Status 10.11.2026 — version 0.11.0.** Measured surface: **79** facade operations, **86** MCP tools,
-> **26** CLI subcommands, **20** capabilities (6 Community / 8 Pro / 6 Enterprise). The item list below was
+> **Status 23.11.2026 — version 0.13.0.** Measured surface: **87** facade operations, **94** MCP tools,
+> **26** CLI subcommands, **22** capabilities (6 Community / 8 Pro / 6 Enterprise, два уровня внутри одного пакета). The item list below was
 > written against the 2026-10 revision, before the 0.1.0–0.10.0 releases, so several P0 items are already
 > closed and several estimates are stale. Items marked ✅ were closed with the evidence named in
 > «Closed since this plan was written»; everything unmarked is not re-scored here and should be re-measured

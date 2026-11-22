@@ -388,8 +388,13 @@ def discover(cfg: ProjectConfig, rev: str, *, mine: dict[str, int] | None = None
             if not profile:
                 # Ревизия в `rev.json` могла смениться между записью файла и
                 # чтением базы: берём последнюю из самой базы, а не выдумываем.
-                from . import store  # noqa: PLC0415 — модуль уже на пути
-
+                #
+                # Импорт `store` здесь НЕ повторяется: модульный импорт есть выше
+                # (строка 74), а локальный делал имя локальным на всю функцию —
+                # и `store.connect(...)` выше падал с UnboundLocalError, то есть
+                # поиск соседей ломался при втором зарегистрированном корпусе.
+                # Замер 22.11.2026, замечание клиента; проверка —
+                # `tests/test_neighbors.py` (сценарий «два корпуса»).
                 active, _skipped = store.active_revision(conn)
                 if active:
                     peer_rev = str(active["rev_id"])

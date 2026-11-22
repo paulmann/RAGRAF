@@ -1,0 +1,5980 @@
+{
+  "approved_at": "2026-11-22T04:04:36+03:00",
+  "details": {
+    "attest_bundle": {
+      "name": "attest_bundle",
+      "params": [
+        {
+          "default": "False",
+          "name": "verify",
+          "type": "bool"
+        },
+        {
+          "default": "''",
+          "name": "out",
+          "type": "str"
+        },
+        {
+          "default": "''",
+          "name": "bundle",
+          "type": "str"
+        },
+        {
+          "default": "''",
+          "name": "tree",
+          "type": "str"
+        },
+        {
+          "default": "False",
+          "name": "with_sbom",
+          "type": "bool"
+        },
+        {
+          "default": "True",
+          "name": "with_editions",
+          "type": "bool"
+        },
+        {
+          "default": "''",
+          "name": "gate_report",
+          "type": "str"
+        },
+        {
+          "default": "True",
+          "name": "sign",
+          "type": "bool"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "broker_issue": {
+      "name": "broker_issue",
+      "params": [
+        {
+          "default": "''",
+          "name": "secret",
+          "type": "str"
+        },
+        {
+          "default": "''",
+          "name": "agent",
+          "type": "str"
+        },
+        {
+          "default": "0",
+          "name": "ttl_minutes",
+          "type": "int"
+        },
+        {
+          "default": "''",
+          "name": "reason",
+          "type": "str"
+        },
+        {
+          "default": "True",
+          "name": "reveal",
+          "type": "bool"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "broker_rotate": {
+      "name": "broker_rotate",
+      "params": [
+        {
+          "default": "''",
+          "name": "secret",
+          "type": "str"
+        },
+        {
+          "default": "'status'",
+          "name": "mode",
+          "type": "str"
+        },
+        {
+          "default": "0",
+          "name": "every_days",
+          "type": "int"
+        },
+        {
+          "default": "''",
+          "name": "value",
+          "type": "str"
+        },
+        {
+          "default": "''",
+          "name": "reason",
+          "type": "str"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "calibrate": {
+      "name": "calibrate",
+      "params": [
+        {
+          "default": "'confidence'",
+          "name": "kind",
+          "type": "str"
+        },
+        {
+          "default": "None",
+          "name": "samples",
+          "type": "dict | None"
+        }
+      ],
+      "returns": [
+        "kind",
+        "note",
+        "params",
+        "sample_size"
+      ],
+      "returns_from": "literal"
+    },
+    "callees": {
+      "name": "callees",
+      "params": [
+        {
+          "name": "fqn",
+          "type": "str"
+        },
+        {
+          "default": "1",
+          "name": "depth",
+          "type": "int"
+        },
+        {
+          "default": "False",
+          "name": "hard_only",
+          "type": "bool"
+        },
+        {
+          "default": "200",
+          "name": "limit",
+          "type": "int"
+        },
+        {
+          "default": "None",
+          "name": "min_confidence",
+          "type": "float | None"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "callers": {
+      "name": "callers",
+      "params": [
+        {
+          "name": "fqn",
+          "type": "str"
+        },
+        {
+          "default": "1",
+          "name": "depth",
+          "type": "int"
+        },
+        {
+          "default": "False",
+          "name": "hard_only",
+          "type": "bool"
+        },
+        {
+          "default": "200",
+          "name": "limit",
+          "type": "int"
+        },
+        {
+          "default": "False",
+          "name": "answer",
+          "type": "bool"
+        },
+        {
+          "default": "None",
+          "name": "min_confidence",
+          "type": "float | None"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "catalog": {
+      "name": "catalog",
+      "params": [],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "class_usage": {
+      "name": "class_usage",
+      "params": [
+        {
+          "default": "None",
+          "name": "name",
+          "type": "str | None"
+        },
+        {
+          "default": "200",
+          "name": "limit",
+          "type": "int"
+        },
+        {
+          "default": "'all'",
+          "name": "mode",
+          "type": "str"
+        }
+      ],
+      "returns": [
+        "class",
+        "classes",
+        "count",
+        "defined",
+        "defined_count",
+        "mode",
+        "note",
+        "status",
+        "used",
+        "used_count"
+      ],
+      "returns_from": "literal"
+    },
+    "code": {
+      "name": "code",
+      "params": [
+        {
+          "default": "None",
+          "name": "fqn",
+          "type": "str | None"
+        },
+        {
+          "default": "None",
+          "name": "path",
+          "type": "str | None"
+        },
+        {
+          "default": "'compact'",
+          "name": "style",
+          "type": "str"
+        },
+        {
+          "default": "5",
+          "name": "limit",
+          "type": "int"
+        },
+        {
+          "default": "None",
+          "name": "entry_ids",
+          "type": "str | None"
+        },
+        {
+          "default": "None",
+          "name": "start",
+          "type": "int | None"
+        },
+        {
+          "default": "None",
+          "name": "end",
+          "type": "int | None"
+        },
+        {
+          "default": "'auto'",
+          "name": "source",
+          "type": "str"
+        },
+        {
+          "default": "False",
+          "name": "include_containers",
+          "type": "bool"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "compact": {
+      "name": "compact",
+      "params": [
+        {
+          "default": "False",
+          "name": "apply",
+          "type": "bool"
+        },
+        {
+          "default": "None",
+          "name": "vacuum",
+          "type": "bool | None"
+        },
+        {
+          "default": "None",
+          "name": "retain",
+          "type": "int | None"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "contract_diff": {
+      "name": "contract_diff",
+      "params": [
+        {
+          "default": "''",
+          "name": "before",
+          "type": "str"
+        },
+        {
+          "default": "''",
+          "name": "after",
+          "type": "str"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "contract_drift": {
+      "name": "contract_drift",
+      "params": [
+        {
+          "default": "None",
+          "name": "manifest_path",
+          "type": "str | None"
+        },
+        {
+          "default": "'manifest'",
+          "name": "source",
+          "type": "str"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "contract_pin_approve": {
+      "name": "contract_pin_approve",
+      "params": [
+        {
+          "default": "''",
+          "name": "op",
+          "type": "str"
+        },
+        {
+          "default": "False",
+          "name": "everything",
+          "type": "bool"
+        },
+        {
+          "default": "''",
+          "name": "by",
+          "type": "str"
+        },
+        {
+          "default": "''",
+          "name": "note",
+          "type": "str"
+        },
+        {
+          "default": "'op'",
+          "name": "kind",
+          "type": "str"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "contract_pin_history": {
+      "name": "contract_pin_history",
+      "params": [
+        {
+          "default": "''",
+          "name": "kind",
+          "type": "str"
+        },
+        {
+          "default": "''",
+          "name": "op",
+          "type": "str"
+        },
+        {
+          "default": "50",
+          "name": "limit",
+          "type": "int"
+        }
+      ],
+      "returns": [
+        "changes",
+        "filter",
+        "retention",
+        "summary",
+        "total"
+      ],
+      "returns_from": "literal"
+    },
+    "contract_pin_sample": {
+      "name": "contract_pin_sample",
+      "params": [
+        {
+          "default": "'compare'",
+          "name": "mode",
+          "type": "str"
+        },
+        {
+          "default": "''",
+          "name": "op",
+          "type": "str"
+        },
+        {
+          "default": "50",
+          "name": "limit",
+          "type": "int"
+        },
+        {
+          "default": "''",
+          "name": "by",
+          "type": "str"
+        },
+        {
+          "default": "''",
+          "name": "note",
+          "type": "str"
+        },
+        {
+          "default": "False",
+          "name": "only_changed",
+          "type": "bool"
+        },
+        {
+          "default": "''",
+          "name": "except_ops",
+          "type": "str"
+        }
+      ],
+      "returns": [
+        "mode",
+        "probes",
+        "scope",
+        "selected",
+        "state"
+      ],
+      "returns_from": "literal"
+    },
+    "contract_pin_status": {
+      "name": "contract_pin_status",
+      "params": [
+        {
+          "default": "50",
+          "name": "limit",
+          "type": "int"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "db_cross": {
+      "name": "db_cross",
+      "params": [],
+      "returns": [
+        "code_names",
+        "dynamic_sql"
+      ],
+      "returns_from": "literal"
+    },
+    "db_drift": {
+      "name": "db_drift",
+      "params": [
+        {
+          "default": "None",
+          "name": "previous_rev",
+          "type": "str | None"
+        }
+      ],
+      "returns": [
+        "drift",
+        "from",
+        "migrations_vs_live",
+        "to"
+      ],
+      "returns_from": "literal"
+    },
+    "db_relations": {
+      "name": "db_relations",
+      "params": [
+        {
+          "name": "table",
+          "type": "str"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "db_sample": {
+      "name": "db_sample",
+      "params": [
+        {
+          "name": "table",
+          "type": "str"
+        },
+        {
+          "default": "None",
+          "name": "database",
+          "type": "str | None"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "db_schema": {
+      "name": "db_schema",
+      "params": [
+        {
+          "default": "None",
+          "name": "table",
+          "type": "str | None"
+        },
+        {
+          "default": "None",
+          "name": "database",
+          "type": "str | None"
+        },
+        {
+          "default": "200",
+          "name": "limit",
+          "type": "int"
+        }
+      ],
+      "returns": [
+        "info",
+        "tables"
+      ],
+      "returns_from": "literal"
+    },
+    "db_table": {
+      "name": "db_table",
+      "params": [
+        {
+          "name": "table",
+          "type": "str"
+        },
+        {
+          "default": "None",
+          "name": "database",
+          "type": "str | None"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "dead_code": {
+      "name": "dead_code",
+      "params": [
+        {
+          "default": "None",
+          "name": "scope",
+          "type": "str | None"
+        },
+        {
+          "default": "200",
+          "name": "limit",
+          "type": "int"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "dependents": {
+      "name": "dependents",
+      "params": [
+        {
+          "default": "''",
+          "name": "fact",
+          "type": "str"
+        },
+        {
+          "default": "''",
+          "name": "locator",
+          "type": "str"
+        },
+        {
+          "default": "3",
+          "name": "depth",
+          "type": "int"
+        },
+        {
+          "default": "True",
+          "name": "include_stated",
+          "type": "bool"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "diff": {
+      "name": "diff",
+      "params": [
+        {
+          "default": "None",
+          "name": "since",
+          "type": "str | None"
+        },
+        {
+          "default": "50",
+          "name": "limit",
+          "type": "int"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "doc_asof": {
+      "name": "doc_asof",
+      "params": [
+        {
+          "name": "query",
+          "type": "str"
+        },
+        {
+          "name": "date",
+          "type": "str"
+        },
+        {
+          "default": "20",
+          "name": "limit",
+          "type": "int"
+        },
+        {
+          "default": "None",
+          "name": "kind",
+          "type": "str | None"
+        },
+        {
+          "default": "True",
+          "name": "with_text",
+          "type": "bool"
+        },
+        {
+          "default": "240",
+          "name": "text_width",
+          "type": "int"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "doc_get": {
+      "name": "doc_get",
+      "params": [
+        {
+          "name": "locator",
+          "type": "str"
+        },
+        {
+          "default": "True",
+          "name": "with_provenance",
+          "type": "bool"
+        },
+        {
+          "default": "None",
+          "name": "asof",
+          "type": "str | None"
+        }
+      ],
+      "returns": [
+        "doc_id",
+        "extraction_status",
+        "kind",
+        "locator",
+        "parts",
+        "path",
+        "source",
+        "text",
+        "vector_chars"
+      ],
+      "returns_from": "literal"
+    },
+    "doc_ocr": {
+      "name": "doc_ocr",
+      "params": [
+        {
+          "default": "''",
+          "name": "path",
+          "type": "str"
+        }
+      ],
+      "returns": [
+        "edition",
+        "enabled",
+        "engine",
+        "reason",
+        "state"
+      ],
+      "returns_from": "literal"
+    },
+    "doc_relations": {
+      "name": "doc_relations",
+      "params": [
+        {
+          "default": "None",
+          "name": "doc",
+          "type": "str | None"
+        },
+        {
+          "default": "None",
+          "name": "entity",
+          "type": "str | None"
+        },
+        {
+          "default": "50",
+          "name": "limit",
+          "type": "int"
+        },
+        {
+          "default": "None",
+          "name": "asof",
+          "type": "str | None"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "doc_search": {
+      "name": "doc_search",
+      "params": [
+        {
+          "name": "query",
+          "type": "str"
+        },
+        {
+          "default": "20",
+          "name": "limit",
+          "type": "int"
+        },
+        {
+          "default": "None",
+          "name": "kind",
+          "type": "str | None"
+        },
+        {
+          "default": "None",
+          "name": "doc",
+          "type": "str | None"
+        },
+        {
+          "default": "True",
+          "name": "with_text",
+          "type": "bool"
+        },
+        {
+          "default": "240",
+          "name": "text_width",
+          "type": "int"
+        },
+        {
+          "default": "None",
+          "name": "asof",
+          "type": "str | None"
+        },
+        {
+          "default": "False",
+          "name": "include_superseded",
+          "type": "bool"
+        }
+      ],
+      "returns": [
+        "asof",
+        "count",
+        "doc_hits_before_filter",
+        "filtered_by_validity",
+        "hits",
+        "include_superseded",
+        "query"
+      ],
+      "returns_from": "literal"
+    },
+    "doc_search_levels": {
+      "name": "doc_search_levels",
+      "params": [
+        {
+          "name": "query",
+          "type": "str"
+        },
+        {
+          "default": "20",
+          "name": "limit",
+          "type": "int"
+        },
+        {
+          "default": "'both'",
+          "name": "mode",
+          "type": "str"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "doc_status": {
+      "name": "doc_status",
+      "params": [
+        {
+          "default": "None",
+          "name": "doc_id",
+          "type": "str | None"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "doc_validate": {
+      "name": "doc_validate",
+      "params": [
+        {
+          "default": "None",
+          "name": "doc_id",
+          "type": "str | None"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "drift_ack": {
+      "name": "drift_ack",
+      "params": [
+        {
+          "name": "entry_ids",
+          "type": "list[int]"
+        },
+        {
+          "default": "None",
+          "name": "note",
+          "type": "str | None"
+        },
+        {
+          "default": "'agent'",
+          "name": "by_whom",
+          "type": "str"
+        }
+      ],
+      "returns": [
+        "acked",
+        "requested"
+      ],
+      "returns_from": "literal"
+    },
+    "drift_report": {
+      "name": "drift_report",
+      "params": [
+        {
+          "default": "None",
+          "name": "since",
+          "type": "int | None"
+        },
+        {
+          "default": "500",
+          "name": "limit",
+          "type": "int"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "duplicates": {
+      "name": "duplicates",
+      "params": [
+        {
+          "default": "None",
+          "name": "scope",
+          "type": "str | None"
+        },
+        {
+          "default": "100",
+          "name": "limit",
+          "type": "int"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "edge_evidence": {
+      "name": "edge_evidence",
+      "params": [
+        {
+          "name": "fqn",
+          "type": "str"
+        },
+        {
+          "default": "None",
+          "name": "kind",
+          "type": "str | None"
+        },
+        {
+          "default": "200",
+          "name": "limit",
+          "type": "int"
+        }
+      ],
+      "returns": [
+        "count",
+        "evidence",
+        "in",
+        "kind_filter",
+        "kinds_allowed",
+        "note",
+        "out",
+        "path",
+        "start_line",
+        "target"
+      ],
+      "returns_from": "literal"
+    },
+    "entity_neighbors": {
+      "name": "entity_neighbors",
+      "params": [
+        {
+          "name": "entity",
+          "type": "str"
+        },
+        {
+          "default": "1",
+          "name": "depth",
+          "type": "int"
+        },
+        {
+          "default": "'entity'",
+          "name": "kind",
+          "type": "str"
+        },
+        {
+          "default": "50",
+          "name": "limit",
+          "type": "int"
+        },
+        {
+          "default": "None",
+          "name": "asof",
+          "type": "str | None"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "entrypoints": {
+      "name": "entrypoints",
+      "params": [
+        {
+          "default": "None",
+          "name": "path",
+          "type": "str | None"
+        },
+        {
+          "default": "None",
+          "name": "scope",
+          "type": "str | None"
+        },
+        {
+          "default": "200",
+          "name": "limit",
+          "type": "int"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "excludes": {
+      "name": "excludes",
+      "params": [
+        {
+          "default": "'show'",
+          "name": "action",
+          "type": "str"
+        },
+        {
+          "default": "''",
+          "name": "dirs",
+          "type": "str"
+        },
+        {
+          "default": "False",
+          "name": "force",
+          "type": "bool"
+        }
+      ],
+      "returns": [
+        "current",
+        "dirs",
+        "forced",
+        "impact",
+        "written"
+      ],
+      "returns_from": "literal"
+    },
+    "fact_forget": {
+      "name": "fact_forget",
+      "params": [
+        {
+          "default": "''",
+          "name": "fact_id",
+          "type": "str"
+        },
+        {
+          "default": "''",
+          "name": "reason",
+          "type": "str"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "fact_history": {
+      "name": "fact_history",
+      "params": [
+        {
+          "default": "''",
+          "name": "fact_id",
+          "type": "str"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "fact_recall": {
+      "name": "fact_recall",
+      "params": [
+        {
+          "default": "''",
+          "name": "query",
+          "type": "str"
+        },
+        {
+          "default": "''",
+          "name": "namespace",
+          "type": "str"
+        },
+        {
+          "default": "''",
+          "name": "tags",
+          "type": "str"
+        },
+        {
+          "default": "False",
+          "name": "include_expired",
+          "type": "bool"
+        },
+        {
+          "default": "50",
+          "name": "limit",
+          "type": "int"
+        },
+        {
+          "default": "None",
+          "name": "now",
+          "type": "float | None"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "fact_replace": {
+      "name": "fact_replace",
+      "params": [
+        {
+          "default": "''",
+          "name": "fact_id",
+          "type": "str"
+        },
+        {
+          "default": "''",
+          "name": "value",
+          "type": "str"
+        },
+        {
+          "default": "''",
+          "name": "reason",
+          "type": "str"
+        },
+        {
+          "default": "None",
+          "name": "confidence",
+          "type": "float | None"
+        },
+        {
+          "default": "None",
+          "name": "ttl_days",
+          "type": "int | None"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "fact_store": {
+      "name": "fact_store",
+      "params": [
+        {
+          "default": "''",
+          "name": "subject",
+          "type": "str"
+        },
+        {
+          "default": "''",
+          "name": "predicate",
+          "type": "str"
+        },
+        {
+          "default": "''",
+          "name": "value",
+          "type": "str"
+        },
+        {
+          "default": "'default'",
+          "name": "namespace",
+          "type": "str"
+        },
+        {
+          "default": "1.0",
+          "name": "confidence",
+          "type": "float"
+        },
+        {
+          "default": "0",
+          "name": "ttl_days",
+          "type": "int"
+        },
+        {
+          "default": "''",
+          "name": "tags",
+          "type": "str"
+        },
+        {
+          "default": "''",
+          "name": "path",
+          "type": "str"
+        },
+        {
+          "default": "''",
+          "name": "task",
+          "type": "str"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "freshness": {
+      "name": "freshness",
+      "params": [
+        {
+          "default": "False",
+          "name": "force",
+          "type": "bool"
+        },
+        {
+          "default": "True",
+          "name": "auto_reindex",
+          "type": "bool"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "gate": {
+      "name": "gate",
+      "params": [
+        {
+          "default": "None",
+          "name": "payload",
+          "type": "dict | str | None"
+        },
+        {
+          "default": "None",
+          "name": "mode",
+          "type": "str | None"
+        }
+      ],
+      "returns": [
+        "counters",
+        "hook",
+        "note"
+      ],
+      "returns_from": "literal"
+    },
+    "global_overview": {
+      "name": "global_overview",
+      "params": [
+        {
+          "default": "20",
+          "name": "limit",
+          "type": "int"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "impact": {
+      "name": "impact",
+      "params": [
+        {
+          "name": "target",
+          "type": "str"
+        },
+        {
+          "default": "'full'",
+          "name": "mode",
+          "type": "str"
+        },
+        {
+          "default": "3",
+          "name": "depth",
+          "type": "int"
+        },
+        {
+          "default": "500",
+          "name": "limit",
+          "type": "int"
+        },
+        {
+          "default": "False",
+          "name": "answer",
+          "type": "bool"
+        },
+        {
+          "default": "None",
+          "name": "min_confidence",
+          "type": "float | None"
+        }
+      ],
+      "returns": [
+        "affected_count",
+        "affected_files",
+        "confidence_threshold",
+        "derived",
+        "edge_kinds",
+        "evidence",
+        "heuristic_budget_percent",
+        "heuristic_share",
+        "hidden_by_confidence",
+        "mode",
+        "stated",
+        "target"
+      ],
+      "returns_from": "literal"
+    },
+    "index_status": {
+      "name": "index_status",
+      "params": [],
+      "returns": [
+        "coverage",
+        "drift",
+        "edge_kinds",
+        "embedding_model",
+        "graph_compute",
+        "lexvec",
+        "project",
+        "quality",
+        "rev",
+        "root",
+        "stages",
+        "storage",
+        "vector_available",
+        "vector_library",
+        "vector_note",
+        "vectors_indexed"
+      ],
+      "returns_from": "literal"
+    },
+    "license_offline": {
+      "name": "license_offline",
+      "params": [
+        {
+          "default": "'accept'",
+          "name": "mode",
+          "type": "str"
+        },
+        {
+          "default": "''",
+          "name": "request",
+          "type": "str"
+        },
+        {
+          "default": "''",
+          "name": "license",
+          "type": "str"
+        },
+        {
+          "default": "''",
+          "name": "out",
+          "type": "str"
+        },
+        {
+          "default": "''",
+          "name": "edition_name",
+          "type": "str"
+        },
+        {
+          "default": "''",
+          "name": "licensee",
+          "type": "str"
+        },
+        {
+          "default": "365",
+          "name": "days",
+          "type": "int"
+        },
+        {
+          "default": "''",
+          "name": "note",
+          "type": "str"
+        },
+        {
+          "default": "''",
+          "name": "public_key",
+          "type": "str"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "live_read": {
+      "name": "live_read",
+      "params": [
+        {
+          "name": "path",
+          "type": "str"
+        },
+        {
+          "default": "None",
+          "name": "start",
+          "type": "int | None"
+        },
+        {
+          "default": "None",
+          "name": "end",
+          "type": "int | None"
+        }
+      ],
+      "returns": [
+        "changed_since_index",
+        "path",
+        "requested",
+        "sha256_index",
+        "sha256_now",
+        "text",
+        "total_lines"
+      ],
+      "returns_from": "literal"
+    },
+    "neighbors": {
+      "name": "neighbors",
+      "params": [
+        {
+          "default": "''",
+          "name": "query",
+          "type": "str"
+        },
+        {
+          "default": "''",
+          "name": "name",
+          "type": "str"
+        },
+        {
+          "default": "20",
+          "name": "limit",
+          "type": "int"
+        },
+        {
+          "default": "5",
+          "name": "per_corpus",
+          "type": "int"
+        },
+        {
+          "default": "None",
+          "name": "stack",
+          "type": "str | list[str] | None"
+        },
+        {
+          "default": "1",
+          "name": "min_shared",
+          "type": "int"
+        },
+        {
+          "default": "True",
+          "name": "with_text",
+          "type": "bool"
+        },
+        {
+          "default": "True",
+          "name": "verify",
+          "type": "bool"
+        },
+        {
+          "default": "None",
+          "name": "kinds",
+          "type": "list[str] | None"
+        },
+        {
+          "default": "False",
+          "name": "answer",
+          "type": "bool"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "note": {
+      "name": "note",
+      "params": [
+        {
+          "name": "text",
+          "type": "str"
+        },
+        {
+          "default": "''",
+          "name": "task",
+          "type": "str"
+        },
+        {
+          "default": "None",
+          "name": "tags",
+          "type": "list[str] | None"
+        },
+        {
+          "default": "''",
+          "name": "path",
+          "type": "str"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "notes": {
+      "name": "notes",
+      "params": [
+        {
+          "default": "None",
+          "name": "task",
+          "type": "str | None"
+        },
+        {
+          "default": "None",
+          "name": "query",
+          "type": "str | None"
+        },
+        {
+          "default": "50",
+          "name": "limit",
+          "type": "int"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "policy_trace": {
+      "name": "policy_trace",
+      "params": [
+        {
+          "name": "symbol",
+          "type": "str"
+        },
+        {
+          "default": "None",
+          "name": "action",
+          "type": "str | None"
+        },
+        {
+          "default": "3",
+          "name": "depth",
+          "type": "int"
+        },
+        {
+          "default": "300",
+          "name": "limit",
+          "type": "int"
+        },
+        {
+          "default": "None",
+          "name": "min_confidence",
+          "type": "float | None"
+        }
+      ],
+      "returns": [
+        "action_filter",
+        "allows",
+        "body_read",
+        "callers",
+        "default_behavior",
+        "denies",
+        "lines",
+        "path",
+        "symbol"
+      ],
+      "returns_from": "literal"
+    },
+    "preflight": {
+      "name": "preflight",
+      "params": [
+        {
+          "default": "''",
+          "name": "root",
+          "type": "str"
+        },
+        {
+          "default": "50",
+          "name": "sample",
+          "type": "int"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "quality_diff": {
+      "name": "quality_diff",
+      "params": [
+        {
+          "default": "0",
+          "name": "from_run",
+          "type": "int"
+        },
+        {
+          "default": "0",
+          "name": "to_run",
+          "type": "int"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "quality_pair": {
+      "name": "quality_pair",
+      "params": [
+        {
+          "default": "0",
+          "name": "from_run",
+          "type": "int"
+        },
+        {
+          "default": "0",
+          "name": "to_run",
+          "type": "int"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "quality_prune": {
+      "name": "quality_prune",
+      "params": [
+        {
+          "default": "None",
+          "name": "keep",
+          "type": "int | None"
+        },
+        {
+          "default": "True",
+          "name": "dry_run",
+          "type": "bool"
+        },
+        {
+          "default": "False",
+          "name": "confirm",
+          "type": "bool"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "quality_suite": {
+      "name": "quality_suite",
+      "params": [
+        {
+          "default": "''",
+          "name": "label",
+          "type": "str"
+        },
+        {
+          "default": "True",
+          "name": "record",
+          "type": "bool"
+        },
+        {
+          "default": "''",
+          "name": "session",
+          "type": "str"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "quality_trace": {
+      "name": "quality_trace",
+      "params": [
+        {
+          "default": "'list'",
+          "name": "action",
+          "type": "str"
+        },
+        {
+          "default": "''",
+          "name": "case_id",
+          "type": "str"
+        },
+        {
+          "default": "0",
+          "name": "trace_id",
+          "type": "int"
+        },
+        {
+          "default": "''",
+          "name": "session",
+          "type": "str"
+        },
+        {
+          "default": "''",
+          "name": "label",
+          "type": "str"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "references": {
+      "name": "references",
+      "params": [
+        {
+          "name": "fqn",
+          "type": "str"
+        },
+        {
+          "default": "100",
+          "name": "limit",
+          "type": "int"
+        },
+        {
+          "default": "None",
+          "name": "min_confidence",
+          "type": "float | None"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "repo_map": {
+      "name": "repo_map",
+      "params": [
+        {
+          "default": "None",
+          "name": "scope",
+          "type": "str | None"
+        },
+        {
+          "default": "2000",
+          "name": "budget_tokens",
+          "type": "int"
+        },
+        {
+          "default": "'normal'",
+          "name": "detail",
+          "type": "str"
+        }
+      ],
+      "returns": [
+        "budget_chars",
+        "budget_note",
+        "budget_tokens",
+        "chars_used",
+        "files",
+        "files_included",
+        "files_total",
+        "ranking",
+        "ranking_note",
+        "scope"
+      ],
+      "returns_from": "literal"
+    },
+    "route": {
+      "name": "route",
+      "params": [
+        {
+          "name": "query",
+          "type": "str"
+        },
+        {
+          "default": "10",
+          "name": "limit",
+          "type": "int"
+        },
+        {
+          "default": "True",
+          "name": "verify",
+          "type": "bool"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "routes": {
+      "name": "routes",
+      "params": [
+        {
+          "default": "None",
+          "name": "path",
+          "type": "str | None"
+        },
+        {
+          "default": "200",
+          "name": "limit",
+          "type": "int"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "schema": {
+      "name": "schema",
+      "params": [
+        {
+          "default": "None",
+          "name": "table",
+          "type": "str | None"
+        },
+        {
+          "default": "200",
+          "name": "limit",
+          "type": "int"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "search": {
+      "name": "search",
+      "params": [
+        {
+          "name": "query",
+          "type": "str"
+        },
+        {
+          "default": "20",
+          "name": "limit",
+          "type": "int"
+        },
+        {
+          "default": "None",
+          "name": "kinds",
+          "type": "list[str] | None"
+        },
+        {
+          "default": "False",
+          "name": "with_text",
+          "type": "bool"
+        },
+        {
+          "default": "160",
+          "name": "text_width",
+          "type": "int"
+        },
+        {
+          "default": "False",
+          "name": "answer",
+          "type": "bool"
+        },
+        {
+          "default": "'auto'",
+          "name": "mode",
+          "type": "str"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "search_multi": {
+      "name": "search_multi",
+      "params": [
+        {
+          "name": "queries",
+          "type": "list[str]"
+        },
+        {
+          "default": "20",
+          "name": "limit",
+          "type": "int"
+        },
+        {
+          "default": "None",
+          "name": "scope",
+          "type": "str | None"
+        },
+        {
+          "default": "False",
+          "name": "regex",
+          "type": "bool"
+        },
+        {
+          "default": "False",
+          "name": "answer",
+          "type": "bool"
+        }
+      ],
+      "returns": [
+        "families",
+        "queries",
+        "scope",
+        "summary"
+      ],
+      "returns_from": "literal"
+    },
+    "shared_index_publish": {
+      "name": "shared_index_publish",
+      "params": [
+        {
+          "default": "'open'",
+          "name": "action",
+          "type": "str"
+        },
+        {
+          "default": "''",
+          "name": "label",
+          "type": "str"
+        },
+        {
+          "default": "0",
+          "name": "port",
+          "type": "int"
+        },
+        {
+          "default": "''",
+          "name": "note",
+          "type": "str"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "shared_index_query": {
+      "name": "shared_index_query",
+      "params": [
+        {
+          "name": "operation",
+          "type": "str"
+        },
+        {
+          "default": "None",
+          "name": "params",
+          "type": "dict | None"
+        },
+        {
+          "default": "''",
+          "name": "url",
+          "type": "str"
+        },
+        {
+          "default": "30.0",
+          "name": "timeout",
+          "type": "float"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "shared_index_status": {
+      "name": "shared_index_status",
+      "params": [],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "siem_export": {
+      "name": "siem_export",
+      "params": [
+        {
+          "default": "'all'",
+          "name": "source",
+          "type": "str"
+        },
+        {
+          "default": "0",
+          "name": "limit",
+          "type": "int"
+        },
+        {
+          "default": "False",
+          "name": "dry_run",
+          "type": "bool"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "siem_test": {
+      "name": "siem_test",
+      "params": [],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "skill_catalog": {
+      "name": "skill_catalog",
+      "params": [],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "skill_load": {
+      "name": "skill_load",
+      "params": [
+        {
+          "default": "''",
+          "name": "name",
+          "type": "str"
+        },
+        {
+          "default": "0",
+          "name": "offset",
+          "type": "int"
+        },
+        {
+          "default": "0",
+          "name": "limit",
+          "type": "int"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "skill_reference": {
+      "name": "skill_reference",
+      "params": [
+        {
+          "default": "''",
+          "name": "name",
+          "type": "str"
+        },
+        {
+          "default": "''",
+          "name": "file",
+          "type": "str"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "slice": {
+      "name": "slice",
+      "params": [
+        {
+          "name": "fqn",
+          "type": "str"
+        },
+        {
+          "default": "'back'",
+          "name": "direction",
+          "type": "str"
+        },
+        {
+          "default": "200",
+          "name": "limit",
+          "type": "int"
+        },
+        {
+          "default": "None",
+          "name": "min_confidence",
+          "type": "float | None"
+        }
+      ],
+      "returns": [
+        "direction",
+        "evidence",
+        "node_count",
+        "nodes",
+        "note",
+        "target"
+      ],
+      "returns_from": "literal"
+    },
+    "sso_login": {
+      "name": "sso_login",
+      "params": [
+        {
+          "default": "''",
+          "name": "code",
+          "type": "str"
+        },
+        {
+          "default": "''",
+          "name": "state",
+          "type": "str"
+        },
+        {
+          "default": "''",
+          "name": "provider",
+          "type": "str"
+        },
+        {
+          "default": "''",
+          "name": "redirect_uri",
+          "type": "str"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "sso_map_roles": {
+      "name": "sso_map_roles",
+      "params": [
+        {
+          "default": "None",
+          "name": "groups",
+          "type": "list[str] | None"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "stale_cascade": {
+      "name": "stale_cascade",
+      "params": [
+        {
+          "default": "''",
+          "name": "changed",
+          "type": "str"
+        },
+        {
+          "default": "3",
+          "name": "depth",
+          "type": "int"
+        },
+        {
+          "default": "False",
+          "name": "apply",
+          "type": "bool"
+        },
+        {
+          "default": "False",
+          "name": "clear",
+          "type": "bool"
+        },
+        {
+          "default": "50",
+          "name": "limit",
+          "type": "int"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "symbol": {
+      "name": "symbol",
+      "params": [
+        {
+          "name": "name",
+          "type": "str"
+        },
+        {
+          "default": "None",
+          "name": "path",
+          "type": "str | None"
+        },
+        {
+          "default": "20",
+          "name": "limit",
+          "type": "int"
+        },
+        {
+          "default": "False",
+          "name": "answer",
+          "type": "bool"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "table_usage": {
+      "name": "table_usage",
+      "params": [
+        {
+          "name": "table",
+          "type": "str"
+        },
+        {
+          "default": "200",
+          "name": "limit",
+          "type": "int"
+        },
+        {
+          "default": "'all'",
+          "name": "mode",
+          "type": "str"
+        }
+      ],
+      "returns": [
+        "read_count",
+        "references",
+        "table",
+        "table_in_schema",
+        "unresolved_tables",
+        "write_count"
+      ],
+      "returns_from": "literal"
+    },
+    "task_set": {
+      "name": "task_set",
+      "params": [
+        {
+          "default": "None",
+          "name": "name",
+          "type": "str | None"
+        },
+        {
+          "default": "False",
+          "keyword": true,
+          "name": "clear",
+          "type": "bool"
+        }
+      ],
+      "returns": [
+        "changed",
+        "cleared",
+        "env_var",
+        "previous",
+        "root",
+        "state_file",
+        "task",
+        "ttl_seconds"
+      ],
+      "returns_from": "literal"
+    },
+    "task_stats": {
+      "name": "task_stats",
+      "params": [
+        {
+          "default": "None",
+          "name": "task",
+          "type": "str | None"
+        },
+        {
+          "default": "'markdown'",
+          "name": "fmt",
+          "type": "str"
+        },
+        {
+          "default": "10",
+          "name": "limit",
+          "type": "int"
+        }
+      ],
+      "returns": [
+        "figures",
+        "markdown",
+        "report",
+        "task"
+      ],
+      "returns_from": "literal"
+    },
+    "themes": {
+      "name": "themes",
+      "params": [
+        {
+          "default": "None",
+          "name": "scope",
+          "type": "str | None"
+        },
+        {
+          "default": "20",
+          "name": "limit",
+          "type": "int"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    "write_check": {
+      "name": "write_check",
+      "params": [
+        {
+          "name": "table",
+          "type": "str"
+        },
+        {
+          "default": "None",
+          "name": "columns",
+          "type": "list[str] | None"
+        },
+        {
+          "default": "'insert'",
+          "name": "operation",
+          "type": "str"
+        },
+        {
+          "default": "None",
+          "name": "values",
+          "type": "int | None"
+        }
+      ],
+      "returns": [
+        "all_required_columns",
+        "checked_columns",
+        "column_count",
+        "columns_marks",
+        "default_expression_columns",
+        "generated_columns",
+        "generated_from_live",
+        "generated_from_migrations",
+        "generated_kinds",
+        "generated_requested",
+        "insert_required",
+        "keys_live",
+        "live_only_columns",
+        "note",
+        "operation",
+        "primary_key",
+        "source",
+        "table",
+        "table_found",
+        "unknown_columns",
+        "values_count",
+        "values_mismatch"
+      ],
+      "returns_from": "literal"
+    }
+  },
+  "diverged": [],
+  "ops": {
+    "attest_bundle": "1c5e1b0c6855a6a796f4aa06ab5875f278170eae73177c41bebdbc7b7eeb45f5",
+    "broker_issue": "a437118f8a611c793815a9f81fd1f1ec74d8cf454d24c6be22646abc6dc47a01",
+    "broker_rotate": "4e8568d82b77884a5f20a7c230a519a2826efc69a1a20a6731ac751ed34dcdbc",
+    "calibrate": "b5765fefb6d0ebe3f13e2253bca2b0f50a20f8374b0fe76ef6b2995db6f40dac",
+    "callees": "96cd66b7ecd6983bf5680e35eaebc459477867604649b1de49c29e22ab7f16f4",
+    "callers": "8289a15fbb73e70876782f8ed5cb49ca55b8a5066205468e839a085066ea26f5",
+    "catalog": "43ad6809da6d43f7b64a5cd4fb3907815d5ebd570245c64de0a7b724fb268f00",
+    "class_usage": "985d2189ca161b2f601aabfb766cc14bbb2d2ccb11a7b836f1d822bc7d84fa19",
+    "code": "ffdf94fa63eef6a3cfd5d3321f44cb1d32d31a3b9a4994541fec8f9d0ad3c61e",
+    "compact": "d90bb0562eb263572e8c292d6690979772f09e22b40749dd0b9debffcab3743a",
+    "contract_diff": "71884ff5ac1ba30804eed4502f8a3bf9a01ecc8d4a91112c2b080707e555740f",
+    "contract_drift": "84b2befb1621a959d13e8029e281748ccabfcd02cf32d658e1eca4636a828894",
+    "contract_pin_approve": "429139fa94735583726ef58d48f61a5b58f3558d4e000b07cf81c00d185340ab",
+    "contract_pin_history": "73f7869291238283cbc854f34f6546943c19af1038dc07062a9e506eaed05f52",
+    "contract_pin_sample": "8c17325cea03dbf9ef42ba9063e7ffbf87e8780167855079785adc4f753d87fe",
+    "contract_pin_status": "5997e0f3965f7d938ba9e0fabacd913542801228dc152dea21532066124523d8",
+    "db_cross": "13c45722cb4693ef1bba9f4d9682bf0bcf93ff2ba637c24ded69947de3a60a15",
+    "db_drift": "f9fa37b3e07650a1398c1e1789948879811124206ca4045a0e69e9977caa4a32",
+    "db_relations": "44f3b117f254f2a86be355a8937a68e57bc237c7bcae0f96c94f3be4c0ddf6e2",
+    "db_sample": "add3438c9865e4b1fca8f647a525838513ede0e28e38e92fcee0833653a89d98",
+    "db_schema": "ed47dc63155e19f8173a2279e1b086721a2ddeef85657b48e4e9d75fd56d9043",
+    "db_table": "55c2bb8ca224281bcc169b0dff58a7015cfc1115cea929ad6ef620b7e16019f8",
+    "dead_code": "16637261fe1cc8526cab263b9783213167a0338dd707a52799d82a2aa1e9b9bf",
+    "dependents": "e323ef26f040331e529d53599f56804bc8b67a03519fbf4a694fda4f34ea0515",
+    "diff": "d8f7a591468a3c5fbdbac397c69a066478329a74cf64dc8e170c2d5445297fef",
+    "doc_asof": "9f2cfd74ff0d15ceeb9045a062025b20a856fb7e88999bbea86bf53295e504ad",
+    "doc_get": "1b137b75d3870b55c329cbe16db213a73ead9f2a1f5194feb426089ba8349dee",
+    "doc_ocr": "25bd40a7cec1e17a6cf72394253a7a502871d5b668ccd36072e28fa20f1f0ec7",
+    "doc_relations": "c7ebf863daf83586c0c8b1ca68a8d4499ea389a92195f6a8210e57a9acb6034e",
+    "doc_search": "9f0ed9f0f8d827ff539bdbef0b98b79b69fe8db6787a56759200aa33294ad78a",
+    "doc_search_levels": "f551bf50478c49c70b59a1d83cda66de56343b55ced39bf31f4eed9d7a854968",
+    "doc_status": "b6ef1a4694afdac1a61b80bf86c3c152154653282b161de3ad152369222b25d7",
+    "doc_validate": "911009bcf5c9eac8590a1f3bb99954845fea6de1a22b0d7f78f75a88a6a7eb35",
+    "drift_ack": "ae050b1ea3a0d2e6a6aa997acb647248ad027fcf5f5636e9bdcc3bc76f859c70",
+    "drift_report": "4aaeed11f94bfeaa52a7f98a909055a588ade0cb86d28793e1c885cb6036ac0d",
+    "duplicates": "5e02762e55fc24e4d1fa32cf07c65264de9fed550133d005d6e9590d9dd8f4d6",
+    "edge_evidence": "56ae8b669d95279b3986055a7514f59d46d3f628560f2dc8b808c1522f9f3da4",
+    "entity_neighbors": "bbdfda57db4494cb68766682661f3ba27c8cf8a84392ec8e449a53e5f6eeed30",
+    "entrypoints": "d61cf13fd585989781553a28e9416397e9d1aaea137c68e1f56ef3c2a133c5c0",
+    "excludes": "b8d29bae0b4ce627f35def313d48411fb7e023dcfaba9f7cb6d43bfeb86826f3",
+    "fact_forget": "42d899a347f470b6c6bcab39a1be9c317636da3d364bbbb41d8a1d2e0036a739",
+    "fact_history": "5736dbc81fc9ac6ee1051563013eaea55dbbd25550485c29461743172b108425",
+    "fact_recall": "ede02ae9af07eb1299614f7b54c10290536ea0164b56389b058aa80b030c5c7a",
+    "fact_replace": "1879e718bdb8c951436d0e17d56330e46a8e0f958cf8fb22b98dcd2a57c22cae",
+    "fact_store": "15c66a133ff56fccd9193d53da11bd35685c5ed8aa0a063baa083d317dbc2827",
+    "freshness": "55efe38f4379064af69e87c71e69915e5a04c2ba4c07d741552074dc7a0d317e",
+    "gate": "607530830a60ffbf450cdc0c9a438e6cea6822b06b9957c04a101a918a89a007",
+    "global_overview": "cbeebe086af2b73a342ffd929cf0a5feb4091415e79448656d4532188b26b6f7",
+    "impact": "0b202618f378b4862655f65a51325f1a7d6c023ad11fee720e6e984be8f44b56",
+    "index_status": "5913eb3fda12a0d34b850849723a42c357fe6df54d7af4bad02f8160417243f5",
+    "license_offline": "61d6b5633e4c858767bd80b5d42a2ff9acef3bb5b4de057b36d17cfb256bcdf4",
+    "live_read": "80ccaec3472c700a3cc92c082b7d9b96f94599fec6575643616cb7923fae7004",
+    "neighbors": "6d5784e0d369e9b8f5df97e3e0e01fb640571be6dbd5612627d19887524ed33f",
+    "note": "8a6c206ca67955cbf372e8ed0b7eeabb12ee1e6166cdf500b10b08a5c7546247",
+    "notes": "7c1a3d8f4da95e347b7bd7d25811c65fdcde5cca8bf799a5f9ccb51cdcd38439",
+    "policy_trace": "6431ebc7ad24653ad28fc757ac8c2be5f35963fe8b697dac37f39a04e773186c",
+    "preflight": "66a8e9f30800d84d74f1b333f53148869e17c21c05647c453fb9eb90c32d5dc9",
+    "quality_diff": "ed28e29a1f3cc8bb6cd3341ace748eda1f53c73316eae1211e17deb2adc4a65a",
+    "quality_pair": "72cb05122c69a7b075447a8f6f11aa780743dbe19a9e7bed5ad87925495fd992",
+    "quality_prune": "a375a5f323577abded6d59995d43cfaad5003c2506556cd5594495c4393494da",
+    "quality_suite": "6ac9f564bf199c0b142aea5e6c78b90478e533a4f8d18ede250147782feff8f3",
+    "quality_trace": "cb9f7f517dc4630e651890c7a5bda9b6938f8733c9f9ab409007694afcadbe14",
+    "references": "9b41241d1da3ff9e4d6ba1f59c28c29e23745730405f7366453e595dfe1ba2f0",
+    "repo_map": "b2ca52858dd00092fe5bfbb1b0497279773c6639549d16935f18e75ae592596d",
+    "route": "a2c4687eb61278536b71991989d5f57b6fad87638925c4ae1f3682703b29db97",
+    "routes": "814f9963d11ac80eac4f669ba2e2df41497d3ff2042cd33ab1076b83a6454774",
+    "schema": "e33a89688d1219691a1f5a757c0eb840cb323936c6fe73b196273c733a03bb48",
+    "search": "a8b28ec85165f420b9703af47d6d89dc5eb9427eea5d6741b0512ca0468f0333",
+    "search_multi": "e9d6e95846782e6c5b7e5f2f5bacedcce1f3700b82d3845ff7fc8843a63f61cb",
+    "shared_index_publish": "4bff1810e9d600106d68b8dd799b0030c1d6039fc10583603ab9082c60b0cea9",
+    "shared_index_query": "e05423e6d62ec5691fda3ec079e6e5ffe73fa135a24a768db10cf35f2a2c5cdf",
+    "shared_index_status": "05d77a9b8b1122d6be502c049be445a88478895a6289536dc096780d11ab443c",
+    "siem_export": "30edc80999f7088d9a953898054d7c92a1dec93927fd75c5348768578d2b7970",
+    "siem_test": "338d92357a2909b0db871aa57f0256f301b830c4107bd238c84f178e8551109f",
+    "skill_catalog": "b18a8294904a808a98c90da660a5e5d5ba1683731f4bc1a17d0c7dc3e77496d8",
+    "skill_load": "481b1d18b367b6b51205067c72eaa6320db34e7279155cd2f90727bda3f5c083",
+    "skill_reference": "4334e1023c0587910e36e80313dda681f58a5b3a554daac0fbd5c44d4cd2575b",
+    "slice": "236684cf1189e55830584c4304dd5e90f1c322a5c696eb72ad831d682b359cbe",
+    "sso_login": "996dd221f2702f4e15d03024e90020fcacc2a8b3d47993162863df56e5b67a3c",
+    "sso_map_roles": "c3954906a658bfbb973e03644bf0a8c825f3aaf5687cc66fae8a9e606db70db4",
+    "stale_cascade": "ccfadd47d0666710fee8e4338116803bd0403ae9f03e27e94e0e97ed4de066a9",
+    "symbol": "e646af97eb50353e4f1666a437589c245810af1d25d3a6bef32d07cd570bb653",
+    "table_usage": "a38def355347af05c88f633fe30bb3ab195475160c59dfacf20190ccbc8e17ea",
+    "task_set": "46d6afd524e4a04661b6beb621461dcd2cd7a68fa56af2733eb9bb791fdf74a8",
+    "task_stats": "1cfdfa5c902a140fe6c6d7effa0f1087fcb889367ffa6170ac972a8ff415d851",
+    "themes": "1f6672496cbd1ec432a8524b3928fb2dc5262d2bbe47d59835376a6d551c0886",
+    "write_check": "fa3fd8b37f3384df4c7e18c723b776f21940320ceaa39f48e1a32edcac1d4aff"
+  },
+  "ops_total": 87,
+  "pin_state": "agreed",
+  "pin_state_ops": "agreed",
+  "pin_state_tools": "agreed",
+  "pins": {
+    "attest_bundle": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "1c5e1b0c6855a6a796f4aa06ab5875f278170eae73177c41bebdbc7b7eeb45f5"
+    },
+    "broker_issue": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "a437118f8a611c793815a9f81fd1f1ec74d8cf454d24c6be22646abc6dc47a01"
+    },
+    "broker_rotate": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "4e8568d82b77884a5f20a7c230a519a2826efc69a1a20a6731ac751ed34dcdbc"
+    },
+    "calibrate": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "b5765fefb6d0ebe3f13e2253bca2b0f50a20f8374b0fe76ef6b2995db6f40dac"
+    },
+    "callees": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "96cd66b7ecd6983bf5680e35eaebc459477867604649b1de49c29e22ab7f16f4"
+    },
+    "callers": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "8289a15fbb73e70876782f8ed5cb49ca55b8a5066205468e839a085066ea26f5"
+    },
+    "catalog": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "43ad6809da6d43f7b64a5cd4fb3907815d5ebd570245c64de0a7b724fb268f00"
+    },
+    "class_usage": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "985d2189ca161b2f601aabfb766cc14bbb2d2ccb11a7b836f1d822bc7d84fa19"
+    },
+    "code": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "ffdf94fa63eef6a3cfd5d3321f44cb1d32d31a3b9a4994541fec8f9d0ad3c61e"
+    },
+    "compact": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "d90bb0562eb263572e8c292d6690979772f09e22b40749dd0b9debffcab3743a"
+    },
+    "contract_diff": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "71884ff5ac1ba30804eed4502f8a3bf9a01ecc8d4a91112c2b080707e555740f"
+    },
+    "contract_drift": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "84b2befb1621a959d13e8029e281748ccabfcd02cf32d658e1eca4636a828894"
+    },
+    "contract_pin_approve": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "429139fa94735583726ef58d48f61a5b58f3558d4e000b07cf81c00d185340ab"
+    },
+    "contract_pin_history": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "73f7869291238283cbc854f34f6546943c19af1038dc07062a9e506eaed05f52"
+    },
+    "contract_pin_sample": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "8c17325cea03dbf9ef42ba9063e7ffbf87e8780167855079785adc4f753d87fe"
+    },
+    "contract_pin_status": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "5997e0f3965f7d938ba9e0fabacd913542801228dc152dea21532066124523d8"
+    },
+    "db_cross": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "13c45722cb4693ef1bba9f4d9682bf0bcf93ff2ba637c24ded69947de3a60a15"
+    },
+    "db_drift": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "f9fa37b3e07650a1398c1e1789948879811124206ca4045a0e69e9977caa4a32"
+    },
+    "db_relations": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "44f3b117f254f2a86be355a8937a68e57bc237c7bcae0f96c94f3be4c0ddf6e2"
+    },
+    "db_sample": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "add3438c9865e4b1fca8f647a525838513ede0e28e38e92fcee0833653a89d98"
+    },
+    "db_schema": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "ed47dc63155e19f8173a2279e1b086721a2ddeef85657b48e4e9d75fd56d9043"
+    },
+    "db_table": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "55c2bb8ca224281bcc169b0dff58a7015cfc1115cea929ad6ef620b7e16019f8"
+    },
+    "dead_code": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "16637261fe1cc8526cab263b9783213167a0338dd707a52799d82a2aa1e9b9bf"
+    },
+    "dependents": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "e323ef26f040331e529d53599f56804bc8b67a03519fbf4a694fda4f34ea0515"
+    },
+    "diff": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "d8f7a591468a3c5fbdbac397c69a066478329a74cf64dc8e170c2d5445297fef"
+    },
+    "doc_asof": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "9f2cfd74ff0d15ceeb9045a062025b20a856fb7e88999bbea86bf53295e504ad"
+    },
+    "doc_get": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "1b137b75d3870b55c329cbe16db213a73ead9f2a1f5194feb426089ba8349dee"
+    },
+    "doc_ocr": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "25bd40a7cec1e17a6cf72394253a7a502871d5b668ccd36072e28fa20f1f0ec7"
+    },
+    "doc_relations": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "c7ebf863daf83586c0c8b1ca68a8d4499ea389a92195f6a8210e57a9acb6034e"
+    },
+    "doc_search": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "9f0ed9f0f8d827ff539bdbef0b98b79b69fe8db6787a56759200aa33294ad78a"
+    },
+    "doc_search_levels": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "f551bf50478c49c70b59a1d83cda66de56343b55ced39bf31f4eed9d7a854968"
+    },
+    "doc_status": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "b6ef1a4694afdac1a61b80bf86c3c152154653282b161de3ad152369222b25d7"
+    },
+    "doc_validate": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "911009bcf5c9eac8590a1f3bb99954845fea6de1a22b0d7f78f75a88a6a7eb35"
+    },
+    "drift_ack": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "ae050b1ea3a0d2e6a6aa997acb647248ad027fcf5f5636e9bdcc3bc76f859c70"
+    },
+    "drift_report": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "4aaeed11f94bfeaa52a7f98a909055a588ade0cb86d28793e1c885cb6036ac0d"
+    },
+    "duplicates": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "5e02762e55fc24e4d1fa32cf07c65264de9fed550133d005d6e9590d9dd8f4d6"
+    },
+    "edge_evidence": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "56ae8b669d95279b3986055a7514f59d46d3f628560f2dc8b808c1522f9f3da4"
+    },
+    "entity_neighbors": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "bbdfda57db4494cb68766682661f3ba27c8cf8a84392ec8e449a53e5f6eeed30"
+    },
+    "entrypoints": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "d61cf13fd585989781553a28e9416397e9d1aaea137c68e1f56ef3c2a133c5c0"
+    },
+    "excludes": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "b8d29bae0b4ce627f35def313d48411fb7e023dcfaba9f7cb6d43bfeb86826f3"
+    },
+    "fact_forget": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "42d899a347f470b6c6bcab39a1be9c317636da3d364bbbb41d8a1d2e0036a739"
+    },
+    "fact_history": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "5736dbc81fc9ac6ee1051563013eaea55dbbd25550485c29461743172b108425"
+    },
+    "fact_recall": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "ede02ae9af07eb1299614f7b54c10290536ea0164b56389b058aa80b030c5c7a"
+    },
+    "fact_replace": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "1879e718bdb8c951436d0e17d56330e46a8e0f958cf8fb22b98dcd2a57c22cae"
+    },
+    "fact_store": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "15c66a133ff56fccd9193d53da11bd35685c5ed8aa0a063baa083d317dbc2827"
+    },
+    "freshness": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "55efe38f4379064af69e87c71e69915e5a04c2ba4c07d741552074dc7a0d317e"
+    },
+    "gate": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "607530830a60ffbf450cdc0c9a438e6cea6822b06b9957c04a101a918a89a007"
+    },
+    "global_overview": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "cbeebe086af2b73a342ffd929cf0a5feb4091415e79448656d4532188b26b6f7"
+    },
+    "impact": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "0b202618f378b4862655f65a51325f1a7d6c023ad11fee720e6e984be8f44b56"
+    },
+    "index_status": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "5913eb3fda12a0d34b850849723a42c357fe6df54d7af4bad02f8160417243f5"
+    },
+    "license_offline": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "61d6b5633e4c858767bd80b5d42a2ff9acef3bb5b4de057b36d17cfb256bcdf4"
+    },
+    "live_read": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "80ccaec3472c700a3cc92c082b7d9b96f94599fec6575643616cb7923fae7004"
+    },
+    "neighbors": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "6d5784e0d369e9b8f5df97e3e0e01fb640571be6dbd5612627d19887524ed33f"
+    },
+    "note": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "8a6c206ca67955cbf372e8ed0b7eeabb12ee1e6166cdf500b10b08a5c7546247"
+    },
+    "notes": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "7c1a3d8f4da95e347b7bd7d25811c65fdcde5cca8bf799a5f9ccb51cdcd38439"
+    },
+    "policy_trace": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "6431ebc7ad24653ad28fc757ac8c2be5f35963fe8b697dac37f39a04e773186c"
+    },
+    "preflight": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "66a8e9f30800d84d74f1b333f53148869e17c21c05647c453fb9eb90c32d5dc9"
+    },
+    "quality_diff": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "ed28e29a1f3cc8bb6cd3341ace748eda1f53c73316eae1211e17deb2adc4a65a"
+    },
+    "quality_pair": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "72cb05122c69a7b075447a8f6f11aa780743dbe19a9e7bed5ad87925495fd992"
+    },
+    "quality_prune": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "a375a5f323577abded6d59995d43cfaad5003c2506556cd5594495c4393494da"
+    },
+    "quality_suite": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "6ac9f564bf199c0b142aea5e6c78b90478e533a4f8d18ede250147782feff8f3"
+    },
+    "quality_trace": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "cb9f7f517dc4630e651890c7a5bda9b6938f8733c9f9ab409007694afcadbe14"
+    },
+    "references": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "9b41241d1da3ff9e4d6ba1f59c28c29e23745730405f7366453e595dfe1ba2f0"
+    },
+    "repo_map": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "b2ca52858dd00092fe5bfbb1b0497279773c6639549d16935f18e75ae592596d"
+    },
+    "route": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "a2c4687eb61278536b71991989d5f57b6fad87638925c4ae1f3682703b29db97"
+    },
+    "routes": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "814f9963d11ac80eac4f669ba2e2df41497d3ff2042cd33ab1076b83a6454774"
+    },
+    "schema": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "e33a89688d1219691a1f5a757c0eb840cb323936c6fe73b196273c733a03bb48"
+    },
+    "search": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "a8b28ec85165f420b9703af47d6d89dc5eb9427eea5d6741b0512ca0468f0333"
+    },
+    "search_multi": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "e9d6e95846782e6c5b7e5f2f5bacedcce1f3700b82d3845ff7fc8843a63f61cb"
+    },
+    "shared_index_publish": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "4bff1810e9d600106d68b8dd799b0030c1d6039fc10583603ab9082c60b0cea9"
+    },
+    "shared_index_query": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "e05423e6d62ec5691fda3ec079e6e5ffe73fa135a24a768db10cf35f2a2c5cdf"
+    },
+    "shared_index_status": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "05d77a9b8b1122d6be502c049be445a88478895a6289536dc096780d11ab443c"
+    },
+    "siem_export": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "30edc80999f7088d9a953898054d7c92a1dec93927fd75c5348768578d2b7970"
+    },
+    "siem_test": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "338d92357a2909b0db871aa57f0256f301b830c4107bd238c84f178e8551109f"
+    },
+    "skill_catalog": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "b18a8294904a808a98c90da660a5e5d5ba1683731f4bc1a17d0c7dc3e77496d8"
+    },
+    "skill_load": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "481b1d18b367b6b51205067c72eaa6320db34e7279155cd2f90727bda3f5c083"
+    },
+    "skill_reference": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "4334e1023c0587910e36e80313dda681f58a5b3a554daac0fbd5c44d4cd2575b"
+    },
+    "slice": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "236684cf1189e55830584c4304dd5e90f1c322a5c696eb72ad831d682b359cbe"
+    },
+    "sso_login": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "996dd221f2702f4e15d03024e90020fcacc2a8b3d47993162863df56e5b67a3c"
+    },
+    "sso_map_roles": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "c3954906a658bfbb973e03644bf0a8c825f3aaf5687cc66fae8a9e606db70db4"
+    },
+    "stale_cascade": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "ccfadd47d0666710fee8e4338116803bd0403ae9f03e27e94e0e97ed4de066a9"
+    },
+    "symbol": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "e646af97eb50353e4f1666a437589c245810af1d25d3a6bef32d07cd570bb653"
+    },
+    "table_usage": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "a38def355347af05c88f633fe30bb3ab195475160c59dfacf20190ccbc8e17ea"
+    },
+    "task_set": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "46d6afd524e4a04661b6beb621461dcd2cd7a68fa56af2733eb9bb791fdf74a8"
+    },
+    "task_stats": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "1cfdfa5c902a140fe6c6d7effa0f1087fcb889367ffa6170ac972a8ff415d851"
+    },
+    "themes": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "1f6672496cbd1ec432a8524b3928fb2dc5262d2bbe47d59835376a6d551c0886"
+    },
+    "write_check": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "fa3fd8b37f3384df4c7e18c723b776f21940320ceaa39f48e1a32edcac1d4aff"
+    }
+  },
+  "samples": {
+    "changed": 0,
+    "pin_state": "none",
+    "probes": {},
+    "total": 0
+  },
+  "schema": 3,
+  "source": "src/ragraf/facade.py",
+  "stale_total": 0,
+  "tool_details": {
+    "ragraf_attest_bundle": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "readOnlyHint": false
+      },
+      "name": "ragraf_attest_bundle",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "bundle": {
+            "type": "string"
+          },
+          "gate_report": {
+            "type": "string"
+          },
+          "out": {
+            "type": "string"
+          },
+          "sign": {
+            "type": "boolean"
+          },
+          "tree": {
+            "type": "string"
+          },
+          "verify": {
+            "type": "boolean"
+          },
+          "with_editions": {
+            "type": "boolean"
+          },
+          "with_sbom": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_broker_issue": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "name": "ragraf_broker_issue",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "reveal": {
+            "default": true,
+            "type": "boolean"
+          },
+          "secret": {
+            "type": "string"
+          },
+          "ttl_minutes": {
+            "default": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "secret"
+        ],
+        "type": "object"
+      }
+    },
+    "ragraf_broker_rotate": {
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "name": "ragraf_broker_rotate",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "every_days": {
+            "default": 0,
+            "type": "integer"
+          },
+          "mode": {
+            "default": "status",
+            "enum": [
+              "status",
+              "plan",
+              "run"
+            ],
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "secret": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_callees": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_callees",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "depth": {
+            "default": 1,
+            "type": "integer"
+          },
+          "fqn": {
+            "type": "string"
+          },
+          "hard_only": {
+            "default": false,
+            "type": "boolean"
+          },
+          "limit": {
+            "default": 100,
+            "type": "integer"
+          },
+          "min_confidence": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "fqn"
+        ],
+        "type": "object"
+      }
+    },
+    "ragraf_callers": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_callers",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "answer": {
+            "default": false,
+            "type": "boolean"
+          },
+          "depth": {
+            "default": 1,
+            "type": "integer"
+          },
+          "fqn": {
+            "type": "string"
+          },
+          "hard_only": {
+            "default": false,
+            "type": "boolean"
+          },
+          "limit": {
+            "default": 100,
+            "type": "integer"
+          },
+          "min_confidence": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "fqn"
+        ],
+        "type": "object"
+      }
+    },
+    "ragraf_catalog": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_catalog",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      }
+    },
+    "ragraf_class_usage": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_class_usage",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "limit": {
+            "default": 200,
+            "type": "integer"
+          },
+          "mode": {
+            "default": "all",
+            "enum": [
+              "all",
+              "missing",
+              "unused"
+            ],
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_code": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_code",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "end": {
+            "type": "integer"
+          },
+          "entry_ids": {
+            "type": "string"
+          },
+          "fqn": {
+            "type": "string"
+          },
+          "include_containers": {
+            "default": false,
+            "type": "boolean"
+          },
+          "limit": {
+            "default": 5,
+            "type": "integer"
+          },
+          "path": {
+            "type": "string"
+          },
+          "source": {
+            "default": "auto",
+            "enum": [
+              "auto",
+              "index",
+              "disk"
+            ],
+            "type": "string"
+          },
+          "start": {
+            "type": "integer"
+          },
+          "style": {
+            "default": "compact",
+            "enum": [
+              "compact",
+              "signatures"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_compact": {
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "readOnlyHint": false
+      },
+      "name": "ragraf_compact",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "apply": {
+            "default": false,
+            "type": "boolean"
+          },
+          "retain": {
+            "type": "integer"
+          },
+          "vacuum": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_context": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_context",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "probe": {
+            "default": true,
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_contract_diff": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_contract_diff",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "after": {
+            "type": "string"
+          },
+          "before": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "before",
+          "after"
+        ],
+        "type": "object"
+      }
+    },
+    "ragraf_contract_drift": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_contract_drift",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "manifest_path": {
+            "type": "string"
+          },
+          "source": {
+            "default": "manifest",
+            "enum": [
+              "manifest",
+              "anchors",
+              "both"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_contract_pin_approve": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": false
+      },
+      "name": "ragraf_contract_pin_approve",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "by": {
+            "type": "string"
+          },
+          "everything": {
+            "default": false,
+            "type": "boolean"
+          },
+          "kind": {
+            "default": "op",
+            "enum": [
+              "op",
+              "tool",
+              "all"
+            ],
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "op": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_contract_pin_history": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_contract_pin_history",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "default": "all",
+            "enum": [
+              "op",
+              "tool",
+              "all"
+            ],
+            "type": "string"
+          },
+          "limit": {
+            "default": 50,
+            "type": "integer"
+          },
+          "op": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_contract_pin_sample": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": false
+      },
+      "name": "ragraf_contract_pin_sample",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "by": {
+            "type": "string"
+          },
+          "except_ops": {
+            "type": "string"
+          },
+          "limit": {
+            "default": 50,
+            "type": "integer"
+          },
+          "mode": {
+            "default": "compare",
+            "enum": [
+              "take",
+              "compare",
+              "accept"
+            ],
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "only_changed": {
+            "default": false,
+            "type": "boolean"
+          },
+          "op": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_contract_pin_status": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_contract_pin_status",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "limit": {
+            "default": 50,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_db_cross": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_db_cross",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      }
+    },
+    "ragraf_db_drift": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_db_drift",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "previous_rev": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_db_relations": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_db_relations",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "table": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "table"
+        ],
+        "type": "object"
+      }
+    },
+    "ragraf_db_sample": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_db_sample",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "database": {
+            "type": "string"
+          },
+          "table": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "table"
+        ],
+        "type": "object"
+      }
+    },
+    "ragraf_db_schema": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_db_schema",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "database": {
+            "type": "string"
+          },
+          "limit": {
+            "default": 200,
+            "type": "integer"
+          },
+          "table": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_db_table": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_db_table",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "database": {
+            "type": "string"
+          },
+          "table": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "table"
+        ],
+        "type": "object"
+      }
+    },
+    "ragraf_dead_code": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_dead_code",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "limit": {
+            "default": 200,
+            "type": "integer"
+          },
+          "scope": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_dependents": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_dependents",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "depth": {
+            "default": 3,
+            "type": "integer"
+          },
+          "fact": {
+            "type": "string"
+          },
+          "include_stated": {
+            "default": true,
+            "type": "boolean"
+          },
+          "locator": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_diff": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_diff",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "limit": {
+            "default": 50,
+            "type": "integer"
+          },
+          "since": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_doc_asof": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_doc_asof",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "date": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "limit": {
+            "default": 20,
+            "type": "integer"
+          },
+          "query": {
+            "type": "string"
+          },
+          "text_width": {
+            "default": 240,
+            "type": "integer"
+          },
+          "with_text": {
+            "default": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "query",
+          "date"
+        ],
+        "type": "object"
+      }
+    },
+    "ragraf_doc_get": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_doc_get",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "locator": {
+            "type": "string"
+          },
+          "with_provenance": {
+            "default": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "locator"
+        ],
+        "type": "object"
+      }
+    },
+    "ragraf_doc_ocr": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_doc_ocr",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_doc_relations": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_doc_relations",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "doc": {
+            "type": "string"
+          },
+          "entity": {
+            "type": "string"
+          },
+          "limit": {
+            "default": 50,
+            "maximum": 200,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_doc_search": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_doc_search",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "doc": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "limit": {
+            "default": 20,
+            "type": "integer"
+          },
+          "query": {
+            "type": "string"
+          },
+          "text_width": {
+            "default": 240,
+            "type": "integer"
+          },
+          "with_text": {
+            "default": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      }
+    },
+    "ragraf_doc_search_levels": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_doc_search_levels",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "limit": {
+            "default": 20,
+            "maximum": 200,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "mode": {
+            "default": "both",
+            "enum": [
+              "local",
+              "global",
+              "both"
+            ],
+            "type": "string"
+          },
+          "query": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      }
+    },
+    "ragraf_doc_status": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_doc_status",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "doc": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_doc_validate": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_doc_validate",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "doc": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_drift_ack": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": false
+      },
+      "name": "ragraf_drift_ack",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "entry_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "entry_ids"
+        ],
+        "type": "object"
+      }
+    },
+    "ragraf_drift_report": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_drift_report",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "since": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_duplicates": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_duplicates",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "limit": {
+            "default": 100,
+            "type": "integer"
+          },
+          "scope": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_edge_evidence": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_edge_evidence",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "fqn": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "limit": {
+            "default": 200,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "fqn"
+        ],
+        "type": "object"
+      }
+    },
+    "ragraf_ensure": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "name": "ragraf_ensure",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "force": {
+            "default": false,
+            "type": "boolean"
+          },
+          "no_create": {
+            "default": false,
+            "type": "boolean"
+          },
+          "no_index": {
+            "default": false,
+            "type": "boolean"
+          },
+          "root": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_entity_neighbors": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_entity_neighbors",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "depth": {
+            "default": 1,
+            "maximum": 3,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "entity": {
+            "type": "string"
+          },
+          "kind": {
+            "default": "entity",
+            "enum": [
+              "entity",
+              "theme"
+            ],
+            "type": "string"
+          },
+          "limit": {
+            "default": 50,
+            "maximum": 200,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "entity"
+        ],
+        "type": "object"
+      }
+    },
+    "ragraf_entrypoints": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_entrypoints",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "limit": {
+            "default": 200,
+            "type": "integer"
+          },
+          "path": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_excludes": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": false
+      },
+      "name": "ragraf_excludes",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "default": "show",
+            "enum": [
+              "show",
+              "impact",
+              "apply",
+              "disable"
+            ],
+            "type": "string"
+          },
+          "dirs": {
+            "type": "string"
+          },
+          "force": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_fact_forget": {
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "name": "ragraf_fact_forget",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "fact_id": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "fact_id"
+        ],
+        "type": "object"
+      }
+    },
+    "ragraf_fact_history": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_fact_history",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "fact_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "fact_id"
+        ],
+        "type": "object"
+      }
+    },
+    "ragraf_fact_recall": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_fact_recall",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "include_expired": {
+            "type": "boolean"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "query": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_fact_replace": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "name": "ragraf_fact_replace",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence": {
+            "type": "number"
+          },
+          "fact_id": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "ttl_days": {
+            "type": "integer"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "fact_id",
+          "value"
+        ],
+        "type": "object"
+      }
+    },
+    "ragraf_fact_store": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "name": "ragraf_fact_store",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence": {
+            "type": "number"
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "predicate": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "string"
+          },
+          "task": {
+            "type": "string"
+          },
+          "ttl_days": {
+            "type": "integer"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject",
+          "predicate",
+          "value"
+        ],
+        "type": "object"
+      }
+    },
+    "ragraf_freshness": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "name": "ragraf_freshness",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "force": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_global_overview": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_global_overview",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "limit": {
+            "default": 20,
+            "maximum": 50,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_impact": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_impact",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "answer": {
+            "default": false,
+            "type": "boolean"
+          },
+          "depth": {
+            "default": 3,
+            "type": "integer"
+          },
+          "limit": {
+            "default": 200,
+            "type": "integer"
+          },
+          "min_confidence": {
+            "type": "number"
+          },
+          "mode": {
+            "default": "full",
+            "enum": [
+              "hard",
+              "full"
+            ],
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "type": "object"
+      }
+    },
+    "ragraf_index_status": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_index_status",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      }
+    },
+    "ragraf_license_offline": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "readOnlyHint": false
+      },
+      "name": "ragraf_license_offline",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "days": {
+            "type": "integer"
+          },
+          "edition_name": {
+            "type": "string"
+          },
+          "license": {
+            "type": "string"
+          },
+          "licensee": {
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "request",
+              "issue",
+              "accept",
+              "transfer"
+            ],
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "out": {
+            "type": "string"
+          },
+          "public_key": {
+            "type": "string"
+          },
+          "request": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_live_read": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_live_read",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "end": {
+            "type": "integer"
+          },
+          "path": {
+            "type": "string"
+          },
+          "start": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      }
+    },
+    "ragraf_neighbors": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_neighbors",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "limit": {
+            "default": 20,
+            "type": "integer"
+          },
+          "min_shared": {
+            "default": 1,
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "per_corpus": {
+            "default": 5,
+            "type": "integer"
+          },
+          "query": {
+            "type": "string"
+          },
+          "stack": {
+            "type": "string"
+          },
+          "verify": {
+            "default": true,
+            "type": "boolean"
+          },
+          "with_text": {
+            "default": true,
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_note": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "readOnlyHint": false
+      },
+      "name": "ragraf_note",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "task": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "type": "object"
+      }
+    },
+    "ragraf_notes": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_notes",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "limit": {
+            "default": 50,
+            "type": "integer"
+          },
+          "query": {
+            "type": "string"
+          },
+          "task": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_policy_trace": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_policy_trace",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "depth": {
+            "default": 3,
+            "type": "integer"
+          },
+          "limit": {
+            "default": 300,
+            "type": "integer"
+          },
+          "min_confidence": {
+            "type": "number"
+          },
+          "symbol": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol"
+        ],
+        "type": "object"
+      }
+    },
+    "ragraf_preflight": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_preflight",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "root": {
+            "type": "string"
+          },
+          "sample": {
+            "default": 50,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_quality_diff": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_quality_diff",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "from_run": {
+            "type": "integer"
+          },
+          "to_run": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_quality_pair": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_quality_pair",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "from_run": {
+            "type": "integer"
+          },
+          "to_run": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_quality_prune": {
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "readOnlyHint": false
+      },
+      "name": "ragraf_quality_prune",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm": {
+            "default": false,
+            "type": "boolean"
+          },
+          "dry_run": {
+            "default": true,
+            "type": "boolean"
+          },
+          "keep": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_quality_suite": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": false
+      },
+      "name": "ragraf_quality_suite",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "record": {
+            "default": true,
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_quality_trace": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "name": "ragraf_quality_trace",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "default": "list",
+            "enum": [
+              "save",
+              "list",
+              "replay"
+            ],
+            "type": "string"
+          },
+          "case_id": {
+            "type": "string"
+          },
+          "label": {
+            "default": "",
+            "type": "string"
+          },
+          "session": {
+            "type": "string"
+          },
+          "trace_id": {
+            "default": 0,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_references": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_references",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "fqn": {
+            "type": "string"
+          },
+          "limit": {
+            "default": 100,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "fqn"
+        ],
+        "type": "object"
+      }
+    },
+    "ragraf_repo_map": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_repo_map",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "budget_tokens": {
+            "default": 2000,
+            "type": "integer"
+          },
+          "detail": {
+            "default": "normal",
+            "enum": [
+              "normal",
+              "deep"
+            ],
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_route": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_route",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "limit": {
+            "default": 10,
+            "type": "integer"
+          },
+          "query": {
+            "type": "string"
+          },
+          "verify": {
+            "default": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      }
+    },
+    "ragraf_routes": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_routes",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "limit": {
+            "default": 200,
+            "type": "integer"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_schema": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_schema",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "limit": {
+            "default": 200,
+            "type": "integer"
+          },
+          "table": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_search": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_search",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "answer": {
+            "default": false,
+            "type": "boolean"
+          },
+          "limit": {
+            "default": 20,
+            "type": "integer"
+          },
+          "mode": {
+            "default": "auto",
+            "enum": [
+              "auto",
+              "code",
+              "docs",
+              "themes"
+            ],
+            "type": "string"
+          },
+          "query": {
+            "type": "string"
+          },
+          "text_width": {
+            "default": 160,
+            "type": "integer"
+          },
+          "with_text": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      }
+    },
+    "ragraf_search_multi": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_search_multi",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "answer": {
+            "default": false,
+            "type": "boolean"
+          },
+          "limit": {
+            "default": 20,
+            "type": "integer"
+          },
+          "queries": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "regex": {
+            "default": false,
+            "type": "boolean"
+          },
+          "scope": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "queries"
+        ],
+        "type": "object"
+      }
+    },
+    "ragraf_secret_delete": {
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "readOnlyHint": false
+      },
+      "name": "ragraf_secret_delete",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      }
+    },
+    "ragraf_secret_grant": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": false
+      },
+      "name": "ragraf_secret_grant",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "agents": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "visibility": {
+            "enum": [
+              "all",
+              "listed",
+              "owner_only"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      }
+    },
+    "ragraf_secret_list": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_secret_list",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "limit": {
+            "default": 200,
+            "type": "integer"
+          },
+          "query": {
+            "type": "string"
+          },
+          "tag": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_secret_policy": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_secret_policy",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      }
+    },
+    "ragraf_secret_reveal": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_secret_reveal",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      }
+    },
+    "ragraf_secret_revoke": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": false
+      },
+      "name": "ragraf_secret_revoke",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "agents": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "agents"
+        ],
+        "type": "object"
+      }
+    },
+    "ragraf_secret_set": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": false
+      },
+      "name": "ragraf_secret_set",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "agents": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "captured": {
+            "type": "boolean"
+          },
+          "expires_at": {
+            "type": "string"
+          },
+          "kind": {
+            "default": "password",
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          },
+          "service": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "value": {
+            "type": "string"
+          },
+          "visibility": {
+            "enum": [
+              "all",
+              "listed",
+              "owner_only"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "value"
+        ],
+        "type": "object"
+      }
+    },
+    "ragraf_secret_show": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_secret_show",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      }
+    },
+    "ragraf_siem_export": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "name": "ragraf_siem_export",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "dry_run": {
+            "type": "boolean"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_siem_test": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "name": "ragraf_siem_test",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      }
+    },
+    "ragraf_skill_catalog": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_skill_catalog",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      }
+    },
+    "ragraf_skill_load": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_skill_load",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "limit": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "offset": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      }
+    },
+    "ragraf_skill_reference": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_skill_reference",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "file"
+        ],
+        "type": "object"
+      }
+    },
+    "ragraf_slice": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_slice",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "direction": {
+            "default": "back",
+            "enum": [
+              "back",
+              "forward"
+            ],
+            "type": "string"
+          },
+          "fqn": {
+            "type": "string"
+          },
+          "limit": {
+            "default": 200,
+            "type": "integer"
+          },
+          "min_confidence": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "fqn"
+        ],
+        "type": "object"
+      }
+    },
+    "ragraf_sso_login": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "name": "ragraf_sso_login",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "redirect_uri": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_sso_map_roles": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_sso_map_roles",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "groups": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_stale_cascade": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "name": "ragraf_stale_cascade",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "apply": {
+            "default": false,
+            "type": "boolean"
+          },
+          "changed": {
+            "type": "string"
+          },
+          "clear": {
+            "default": false,
+            "type": "boolean"
+          },
+          "depth": {
+            "default": 3,
+            "type": "integer"
+          },
+          "limit": {
+            "default": 50,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_symbol": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_symbol",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "answer": {
+            "default": false,
+            "type": "boolean"
+          },
+          "limit": {
+            "default": 20,
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      }
+    },
+    "ragraf_table_usage": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_table_usage",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "limit": {
+            "default": 200,
+            "type": "integer"
+          },
+          "mode": {
+            "default": "all",
+            "enum": [
+              "all",
+              "read",
+              "write"
+            ],
+            "type": "string"
+          },
+          "table": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "table"
+        ],
+        "type": "object"
+      }
+    },
+    "ragraf_task": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "readOnlyHint": false
+      },
+      "name": "ragraf_task",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "clear": {
+            "default": false,
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_task_stats": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_task_stats",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "format": {
+            "default": "markdown",
+            "enum": [
+              "markdown",
+              "json"
+            ],
+            "type": "string"
+          },
+          "limit": {
+            "default": 10,
+            "type": "integer"
+          },
+          "task": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_themes": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_themes",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "limit": {
+            "default": 20,
+            "maximum": 50,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "scope": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_usage": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_usage",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "agent_kind": {
+            "enum": [
+              "autoclaw",
+              "external",
+              "internal"
+            ],
+            "type": "string"
+          },
+          "scope": {
+            "default": "all",
+            "enum": [
+              "all",
+              "session",
+              "agent"
+            ],
+            "type": "string"
+          },
+          "session_id": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "ragraf_use_project": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": false
+      },
+      "name": "ragraf_use_project",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "project": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "project"
+        ],
+        "type": "object"
+      }
+    },
+    "ragraf_write_check": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "name": "ragraf_write_check",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "columns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "operation": {
+            "default": "insert",
+            "enum": [
+              "insert",
+              "update",
+              "delete"
+            ],
+            "type": "string"
+          },
+          "table": {
+            "type": "string"
+          },
+          "values": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "table"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  "tool_diverged": [],
+  "tool_pins": {
+    "ragraf_attest_bundle": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "a4949a58dcb4c77e3a1155473b83221133813758d2f0e4c8e6f1821efe105e95"
+    },
+    "ragraf_broker_issue": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "de653c9dc2753bcb1f6e576d6c09207ca5ef6c1920efe14c6a26f0d0d5b2d3c4"
+    },
+    "ragraf_broker_rotate": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "0854696e1f40c22f81a1ccb04b5c56272baa1df8ba81fdfde99462df40bf44ef"
+    },
+    "ragraf_callees": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "035fc405fb9063955805fd22423b6d9becd29e8d36c74db131981c4ea1e0beed"
+    },
+    "ragraf_callers": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "68f955c1ae41dfa148fb05de12308f6dc48a4f17502f0365a76758bc69dd948b"
+    },
+    "ragraf_catalog": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "7a3e9fe3914da36fe4f2dd78abd62a053562a988d5561e0b1f7fd6b88b8094ca"
+    },
+    "ragraf_class_usage": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "c505ef82c112d95f7540955d6937b2889f7ccf9af4d016b5a9af67244ecbd1db"
+    },
+    "ragraf_code": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "27348b7315c97ae3e81649715d5d924601518267e8cf1b293645e2a168ddb920"
+    },
+    "ragraf_compact": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "027b1e7e93b377a822d899e25d37cebcd872edd8aa28ce0322c2fe1464b3790f"
+    },
+    "ragraf_context": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "ef00b3ce6127bd03378e738f538d189793c849b149d2bb6a95c0dbd060d8e87d"
+    },
+    "ragraf_contract_diff": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "d7316f57c8f1cb186eb50d50ef2f4c6e63f4f12bed047f552aa81de1b31beabd"
+    },
+    "ragraf_contract_drift": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "f71003362081e68ff76b379409eaab196ed4b28c7900934d14de38c0dc2ca310"
+    },
+    "ragraf_contract_pin_approve": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "7e4bb69a97ef9400c69062367f3a8354b0e51ee87f79d171c54d914779abfecb"
+    },
+    "ragraf_contract_pin_history": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "3f725f0fe09d65a7b26b70f2b218c7162e11a459b1d1f79e1f7ec5ae15501e93"
+    },
+    "ragraf_contract_pin_sample": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "68763c2a53199ddec2cc380a639eb31c72491c8ff6e568c439e8dfbeb94d61bb"
+    },
+    "ragraf_contract_pin_status": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "9bc1107bea78b9e365d80b507e68e411665d159049f5976c9cc13a8a7e19b6a3"
+    },
+    "ragraf_db_cross": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "dff0a6c1dda0b663662845bfafcaacf416c026323531a52e537031eb4c869f09"
+    },
+    "ragraf_db_drift": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "a61f4eddc8bc4d0ac6380a810b30ecb25dd7d880ce0ea3691f2daaf54504acf8"
+    },
+    "ragraf_db_relations": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "2f6e24d3d06b147fe023444e61ea928410d68a6754d465028b084d401b65e5c8"
+    },
+    "ragraf_db_sample": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "d868212eec926fa4b1cbfadb80d2aa21fc67d4df7145bab839b76517192b3e75"
+    },
+    "ragraf_db_schema": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "32928ead09611e1824a2044d9a3ce3f1647647c1ef09fbc2ba22dd37d08bbb98"
+    },
+    "ragraf_db_table": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "2746d16eb2db62c3f7e2dd4a9a343625717fdf23d468251a8e7243158013686d"
+    },
+    "ragraf_dead_code": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "dbee2bf589c8f28864cda29b3fdec698ac8d041507eb69a42ba472ee5e8896f3"
+    },
+    "ragraf_dependents": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "a93069e3d3753f0c222b4700c8cd39489d442f726c512fc412340f4d942eb39b"
+    },
+    "ragraf_diff": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "8c68a8b5a63f7256701b4272713098d09cc2d92468922767942c573ab981461e"
+    },
+    "ragraf_doc_asof": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "95d457268dd38813ad145a22ad9ff127548338f9674818706cf4e8a71b78a429"
+    },
+    "ragraf_doc_get": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "f1ac5b0a3be469503b1eed251d27be9981419ebd4e4f8f15d08f7001f7a3d786"
+    },
+    "ragraf_doc_ocr": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "f806d445c0ea6fa9bd4098a912ad8fd31dd2648ebe3eca3f0e64f068cb3e2006"
+    },
+    "ragraf_doc_relations": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "96b8366702213caa6ceacd9e573980571e7a3b6a42b5205c99548cf9800d7ad0"
+    },
+    "ragraf_doc_search": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "a8d3ca41119ff2c5f8ed32f7ab3f815096c54bc57a7202762bdd34cb99e9472f"
+    },
+    "ragraf_doc_search_levels": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "82f58666660715831b197135858c3a2c2f3c2cb1fdb06c16eed9c7a58f1332d1"
+    },
+    "ragraf_doc_status": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "48619b6e46d7e1337deb0cdb6bec38c45505659c838160177352f4d0f982cdaf"
+    },
+    "ragraf_doc_validate": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "446f0a324fd99c4cdb6c0d5cf687e013676922499f027bdc7a761551ee0e2b26"
+    },
+    "ragraf_drift_ack": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "a82cf970ee5d8ee54cf187aa3dcbb9864b4ff7bbcfe642c9a49d06e5e6f70199"
+    },
+    "ragraf_drift_report": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "9af3210567026c6f6c709068587ccff5d812ea3524a997263481619bb228480a"
+    },
+    "ragraf_duplicates": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "c0cea6f402c9a363fd810baf881cd78efe5d1f2c558f77c0c498f89781b59827"
+    },
+    "ragraf_edge_evidence": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "5877ee5585f2508261076c8da012a2ff5d07c274d8d11481040582d72fe343c2"
+    },
+    "ragraf_ensure": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "cae7ae97c73def620118ac27b0ff1a61ef050fdc9d0c7b0e714c5e34ff7885b3"
+    },
+    "ragraf_entity_neighbors": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "b0528e3533a030dfde4942b5790ca0a6e243390277bd8c8ebf78f7824dd39ceb"
+    },
+    "ragraf_entrypoints": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "6ee3bed2343aaa84ab85b5228ca324efb29608eb09c986de32ff338585e45d3e"
+    },
+    "ragraf_excludes": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "f5aed93085d6fbf3b102284814388d046b8ceb0855d842a8e784ac0d5ab78015"
+    },
+    "ragraf_fact_forget": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "6e8b0e0e7cbf2f1de0138d7284a0fd453c73bebeb15eadef9ecd042e35d07b3f"
+    },
+    "ragraf_fact_history": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "4018fa2c8a7a8bfafbd98235ce1865dd0f34a5aa44bb9534ebd01c2d5d9e07c5"
+    },
+    "ragraf_fact_recall": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "7c8f0bfad6820d20fce04e2d80d142919be1d1f9a45b2f1c7e8bd2ffe6a037e6"
+    },
+    "ragraf_fact_replace": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "6342e27e5bbca8fdd49d10696ea019563672afcde011bce208ae97b23a00df85"
+    },
+    "ragraf_fact_store": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "01f09a5de66736e913e4c464a4e2d06561c33009a41f660132c25d5f39cf8c22"
+    },
+    "ragraf_freshness": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "b965a84fef1f0b8612963a91b7027646bfda1ef84040a378be40684e786489ad"
+    },
+    "ragraf_global_overview": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "c7bf97894a13f98a955cca303bcefcea2a382863c60e4e43cb475a941fe97d3a"
+    },
+    "ragraf_impact": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "7a5820eacf555e8408a1d7099e766a21228963088a04d1391015bd29716b941e"
+    },
+    "ragraf_index_status": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "49dd36f608573f72ba294788a9322231862a5efe3544f15ac2e9a810eb6e9097"
+    },
+    "ragraf_license_offline": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "0f9f70179ef6da9ceb69692c9cea78af6b31eb07b5417ffe631bd8721d7c7d78"
+    },
+    "ragraf_live_read": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "a27e52bad0786210bd7c5b102560756511e32ee70b9f3e93348173d28e4a3adf"
+    },
+    "ragraf_neighbors": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "07db84643703b23573ff17ece9968405c9ebc97bd4b57a520a8e03458da348bc"
+    },
+    "ragraf_note": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "b5ff96d4e877170999a243794426f49dbfdfc3cc76e513491f8001099e3a4770"
+    },
+    "ragraf_notes": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "065ea2a9f66db9c5a53e4f40cfa34123e492ede628e66be27a2485d5eb2296af"
+    },
+    "ragraf_policy_trace": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "a73e7e3ada29e11518cc1303e325ea4cfe2576cf6470f0162013ae01c6ad91a9"
+    },
+    "ragraf_preflight": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "852ededebd745049beea950287cd3e1a190d73ef8352b17c0fef1f841336a62b"
+    },
+    "ragraf_quality_diff": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "e5a14282c062115fd33569cf8770b1688ec77d2b5efafbac88026bbbd9e5d7f5"
+    },
+    "ragraf_quality_pair": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "ca264210614a78766d7a34aff79cda4e9ffdebbebbbb7ed8e19208a77e5c7f10"
+    },
+    "ragraf_quality_prune": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "6dad7ed81c5941e19110ef82f43e708a85326e92b15a289a535958faf7838302"
+    },
+    "ragraf_quality_suite": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "b16873b493b0dd2bfd79a16382aaebe1f6a8637ceb71d12e071bcc1301bc4143"
+    },
+    "ragraf_quality_trace": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "106d29b1f9a2836e1a4eccf7e15bdb72c369421e9754365cfa451269209a4834"
+    },
+    "ragraf_references": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "59e5d7cc9292c6ac685bf71dea46a361cc4986d2c88e3bdb07bf7a759a605946"
+    },
+    "ragraf_repo_map": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "5f46b2487516b41b6447d49a83cd079e8b36488745a94a10c9760e1b710a4940"
+    },
+    "ragraf_route": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "95bed9e6770d517b9df2f0387e2f2caea3e5e5ff49b5ef9a4e6f412c8f275691"
+    },
+    "ragraf_routes": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "4539991420d1bbece56d0d60b3112da0fa930d9d957ce2ab4cdd4e65f83bca2e"
+    },
+    "ragraf_schema": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "52bd3b4ee6a64f2e1d4caa2453992be79abdd45bc63bad9889fd27ee52165fc7"
+    },
+    "ragraf_search": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "9e2752d115b3bf47612756d17de12d29814220ca58406c8bd48e3dbf45b6ff51"
+    },
+    "ragraf_search_multi": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "fcdbec20e74307e67473ebe696431de997e285ce256fd6573a13863792722cdc"
+    },
+    "ragraf_secret_delete": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "9936f8de52f1203965f49f8ae50d008d3046fa2dd02fca45ba97ca0b91f3ddd1"
+    },
+    "ragraf_secret_grant": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "59249d861f0d8b9acd050814f67b0b34a81b4e41a147c673128599d3e605be8c"
+    },
+    "ragraf_secret_list": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "f1c42cf5db5928333321f3cbe76765e2244c4fbc7926252c269c37cfe3b56bcb"
+    },
+    "ragraf_secret_policy": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "4e548f8d528623ea275439f01fa4bda2a080987321f2d6d4936c5639811f236f"
+    },
+    "ragraf_secret_reveal": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "20c05d9dda688c7bb28fa003f3d9ba14636c501565bee0a21e48eb170b11a015"
+    },
+    "ragraf_secret_revoke": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "5acd3cab15e88d2274c5329ae0dd2ff9b329bdc2fb3ab0986c5e91ef202ca9cc"
+    },
+    "ragraf_secret_set": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "7a6211ca7bf04d9104a136350829427ac608b6392018da1db82fe7b98dabf045"
+    },
+    "ragraf_secret_show": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "772b85c11209aa259c82fcd231097d0ea0ebe4cbb9876a03a047f22ea5fed6ed"
+    },
+    "ragraf_siem_export": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "1ca44d61d4b458296d3db1060903e7d5a79fe599c5064ae16547651239a3e8fb"
+    },
+    "ragraf_siem_test": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "bfa4fa4a55c9053e6d1dfc13a41ab1aeec00e9957b67a82ba6fbfe8e6978df37"
+    },
+    "ragraf_skill_catalog": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "43b138ccc2cad45bbfd96d6ba3d5e27a0f562871462d21a8705f9a65e19e096b"
+    },
+    "ragraf_skill_load": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "c68dcba8d77c6a39347b9e6c127d9e896cda65050450242a715f1ab3cce1f18b"
+    },
+    "ragraf_skill_reference": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "5915d9bbc25b740ad53ce74cf1e8ed4abf3b4836f76f6280cb0bd4b4679e218f"
+    },
+    "ragraf_slice": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "ada7e708a080611c04c602c9ecdfedfdb4475ec8869dae979e6e3b71cbeedc9b"
+    },
+    "ragraf_sso_login": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "032a02713386364743c7c0e596f62e6a8d27c1b5975f057c980b9c0ffdb9bb9a"
+    },
+    "ragraf_sso_map_roles": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "82c4532fc3f12be47c0c8f59ce98306c708c592cfe7fd06c7c235885a413e790"
+    },
+    "ragraf_stale_cascade": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "b90a8cd050dd546ecb6093e16131fb9f57e3d7ae6b8e1b948b6d1ee54550e1ac"
+    },
+    "ragraf_symbol": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "f89688cc8311bbb6119c6a45cd54df5536194c2ff79f97f0e7bc7fdf39af7f21"
+    },
+    "ragraf_table_usage": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "6ca0b5a5b1b95dc8567f812dbb74d797d5b114e08b2af89e6de439c9d49249db"
+    },
+    "ragraf_task": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "873e4d6fae0fd51600ff03aeab33aa1c8f7c4539f3c36810079b239483c103af"
+    },
+    "ragraf_task_stats": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "21ef4acac1a3396e0bdb07b4ccc250791f32e29862cc4b3a287a562916c5d68b"
+    },
+    "ragraf_themes": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "59e12d3d253c2a57a78c3421119dd65f9160375791bb1976a5d1ab4c1f9ca049"
+    },
+    "ragraf_usage": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "81d0e8756833eaecfbe106256c8b745f8447770895b5821b16c289d3319f47f7"
+    },
+    "ragraf_use_project": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "cdc710f4b8f69d2345ae36cbac70f9126e4b55a06b0d01c49ccab1168f5dcc8b"
+    },
+    "ragraf_write_check": {
+      "approved_at": "2026-11-22T04:04:36+03:00",
+      "approved_by": "Mikhail Deynekin",
+      "hash": "55f9512198507b51aadd8d07fdda33401da0ac5a6b24b024aac19d7d9d470e8b"
+    }
+  },
+  "tool_stale_total": 0,
+  "tool_unpinned_total": 0,
+  "tools": {
+    "ragraf_attest_bundle": "a4949a58dcb4c77e3a1155473b83221133813758d2f0e4c8e6f1821efe105e95",
+    "ragraf_broker_issue": "de653c9dc2753bcb1f6e576d6c09207ca5ef6c1920efe14c6a26f0d0d5b2d3c4",
+    "ragraf_broker_rotate": "0854696e1f40c22f81a1ccb04b5c56272baa1df8ba81fdfde99462df40bf44ef",
+    "ragraf_callees": "035fc405fb9063955805fd22423b6d9becd29e8d36c74db131981c4ea1e0beed",
+    "ragraf_callers": "68f955c1ae41dfa148fb05de12308f6dc48a4f17502f0365a76758bc69dd948b",
+    "ragraf_catalog": "7a3e9fe3914da36fe4f2dd78abd62a053562a988d5561e0b1f7fd6b88b8094ca",
+    "ragraf_class_usage": "c505ef82c112d95f7540955d6937b2889f7ccf9af4d016b5a9af67244ecbd1db",
+    "ragraf_code": "27348b7315c97ae3e81649715d5d924601518267e8cf1b293645e2a168ddb920",
+    "ragraf_compact": "027b1e7e93b377a822d899e25d37cebcd872edd8aa28ce0322c2fe1464b3790f",
+    "ragraf_context": "ef00b3ce6127bd03378e738f538d189793c849b149d2bb6a95c0dbd060d8e87d",
+    "ragraf_contract_diff": "d7316f57c8f1cb186eb50d50ef2f4c6e63f4f12bed047f552aa81de1b31beabd",
+    "ragraf_contract_drift": "f71003362081e68ff76b379409eaab196ed4b28c7900934d14de38c0dc2ca310",
+    "ragraf_contract_pin_approve": "7e4bb69a97ef9400c69062367f3a8354b0e51ee87f79d171c54d914779abfecb",
+    "ragraf_contract_pin_history": "3f725f0fe09d65a7b26b70f2b218c7162e11a459b1d1f79e1f7ec5ae15501e93",
+    "ragraf_contract_pin_sample": "68763c2a53199ddec2cc380a639eb31c72491c8ff6e568c439e8dfbeb94d61bb",
+    "ragraf_contract_pin_status": "9bc1107bea78b9e365d80b507e68e411665d159049f5976c9cc13a8a7e19b6a3",
+    "ragraf_db_cross": "dff0a6c1dda0b663662845bfafcaacf416c026323531a52e537031eb4c869f09",
+    "ragraf_db_drift": "a61f4eddc8bc4d0ac6380a810b30ecb25dd7d880ce0ea3691f2daaf54504acf8",
+    "ragraf_db_relations": "2f6e24d3d06b147fe023444e61ea928410d68a6754d465028b084d401b65e5c8",
+    "ragraf_db_sample": "d868212eec926fa4b1cbfadb80d2aa21fc67d4df7145bab839b76517192b3e75",
+    "ragraf_db_schema": "32928ead09611e1824a2044d9a3ce3f1647647c1ef09fbc2ba22dd37d08bbb98",
+    "ragraf_db_table": "2746d16eb2db62c3f7e2dd4a9a343625717fdf23d468251a8e7243158013686d",
+    "ragraf_dead_code": "dbee2bf589c8f28864cda29b3fdec698ac8d041507eb69a42ba472ee5e8896f3",
+    "ragraf_dependents": "a93069e3d3753f0c222b4700c8cd39489d442f726c512fc412340f4d942eb39b",
+    "ragraf_diff": "8c68a8b5a63f7256701b4272713098d09cc2d92468922767942c573ab981461e",
+    "ragraf_doc_asof": "95d457268dd38813ad145a22ad9ff127548338f9674818706cf4e8a71b78a429",
+    "ragraf_doc_get": "f1ac5b0a3be469503b1eed251d27be9981419ebd4e4f8f15d08f7001f7a3d786",
+    "ragraf_doc_ocr": "f806d445c0ea6fa9bd4098a912ad8fd31dd2648ebe3eca3f0e64f068cb3e2006",
+    "ragraf_doc_relations": "96b8366702213caa6ceacd9e573980571e7a3b6a42b5205c99548cf9800d7ad0",
+    "ragraf_doc_search": "a8d3ca41119ff2c5f8ed32f7ab3f815096c54bc57a7202762bdd34cb99e9472f",
+    "ragraf_doc_search_levels": "82f58666660715831b197135858c3a2c2f3c2cb1fdb06c16eed9c7a58f1332d1",
+    "ragraf_doc_status": "48619b6e46d7e1337deb0cdb6bec38c45505659c838160177352f4d0f982cdaf",
+    "ragraf_doc_validate": "446f0a324fd99c4cdb6c0d5cf687e013676922499f027bdc7a761551ee0e2b26",
+    "ragraf_drift_ack": "a82cf970ee5d8ee54cf187aa3dcbb9864b4ff7bbcfe642c9a49d06e5e6f70199",
+    "ragraf_drift_report": "9af3210567026c6f6c709068587ccff5d812ea3524a997263481619bb228480a",
+    "ragraf_duplicates": "c0cea6f402c9a363fd810baf881cd78efe5d1f2c558f77c0c498f89781b59827",
+    "ragraf_edge_evidence": "5877ee5585f2508261076c8da012a2ff5d07c274d8d11481040582d72fe343c2",
+    "ragraf_ensure": "cae7ae97c73def620118ac27b0ff1a61ef050fdc9d0c7b0e714c5e34ff7885b3",
+    "ragraf_entity_neighbors": "b0528e3533a030dfde4942b5790ca0a6e243390277bd8c8ebf78f7824dd39ceb",
+    "ragraf_entrypoints": "6ee3bed2343aaa84ab85b5228ca324efb29608eb09c986de32ff338585e45d3e",
+    "ragraf_excludes": "f5aed93085d6fbf3b102284814388d046b8ceb0855d842a8e784ac0d5ab78015",
+    "ragraf_fact_forget": "6e8b0e0e7cbf2f1de0138d7284a0fd453c73bebeb15eadef9ecd042e35d07b3f",
+    "ragraf_fact_history": "4018fa2c8a7a8bfafbd98235ce1865dd0f34a5aa44bb9534ebd01c2d5d9e07c5",
+    "ragraf_fact_recall": "7c8f0bfad6820d20fce04e2d80d142919be1d1f9a45b2f1c7e8bd2ffe6a037e6",
+    "ragraf_fact_replace": "6342e27e5bbca8fdd49d10696ea019563672afcde011bce208ae97b23a00df85",
+    "ragraf_fact_store": "01f09a5de66736e913e4c464a4e2d06561c33009a41f660132c25d5f39cf8c22",
+    "ragraf_freshness": "b965a84fef1f0b8612963a91b7027646bfda1ef84040a378be40684e786489ad",
+    "ragraf_global_overview": "c7bf97894a13f98a955cca303bcefcea2a382863c60e4e43cb475a941fe97d3a",
+    "ragraf_impact": "7a5820eacf555e8408a1d7099e766a21228963088a04d1391015bd29716b941e",
+    "ragraf_index_status": "49dd36f608573f72ba294788a9322231862a5efe3544f15ac2e9a810eb6e9097",
+    "ragraf_license_offline": "0f9f70179ef6da9ceb69692c9cea78af6b31eb07b5417ffe631bd8721d7c7d78",
+    "ragraf_live_read": "a27e52bad0786210bd7c5b102560756511e32ee70b9f3e93348173d28e4a3adf",
+    "ragraf_neighbors": "07db84643703b23573ff17ece9968405c9ebc97bd4b57a520a8e03458da348bc",
+    "ragraf_note": "b5ff96d4e877170999a243794426f49dbfdfc3cc76e513491f8001099e3a4770",
+    "ragraf_notes": "065ea2a9f66db9c5a53e4f40cfa34123e492ede628e66be27a2485d5eb2296af",
+    "ragraf_policy_trace": "a73e7e3ada29e11518cc1303e325ea4cfe2576cf6470f0162013ae01c6ad91a9",
+    "ragraf_preflight": "852ededebd745049beea950287cd3e1a190d73ef8352b17c0fef1f841336a62b",
+    "ragraf_quality_diff": "e5a14282c062115fd33569cf8770b1688ec77d2b5efafbac88026bbbd9e5d7f5",
+    "ragraf_quality_pair": "ca264210614a78766d7a34aff79cda4e9ffdebbebbbb7ed8e19208a77e5c7f10",
+    "ragraf_quality_prune": "6dad7ed81c5941e19110ef82f43e708a85326e92b15a289a535958faf7838302",
+    "ragraf_quality_suite": "b16873b493b0dd2bfd79a16382aaebe1f6a8637ceb71d12e071bcc1301bc4143",
+    "ragraf_quality_trace": "106d29b1f9a2836e1a4eccf7e15bdb72c369421e9754365cfa451269209a4834",
+    "ragraf_references": "59e5d7cc9292c6ac685bf71dea46a361cc4986d2c88e3bdb07bf7a759a605946",
+    "ragraf_repo_map": "5f46b2487516b41b6447d49a83cd079e8b36488745a94a10c9760e1b710a4940",
+    "ragraf_route": "95bed9e6770d517b9df2f0387e2f2caea3e5e5ff49b5ef9a4e6f412c8f275691",
+    "ragraf_routes": "4539991420d1bbece56d0d60b3112da0fa930d9d957ce2ab4cdd4e65f83bca2e",
+    "ragraf_schema": "52bd3b4ee6a64f2e1d4caa2453992be79abdd45bc63bad9889fd27ee52165fc7",
+    "ragraf_search": "9e2752d115b3bf47612756d17de12d29814220ca58406c8bd48e3dbf45b6ff51",
+    "ragraf_search_multi": "fcdbec20e74307e67473ebe696431de997e285ce256fd6573a13863792722cdc",
+    "ragraf_secret_delete": "9936f8de52f1203965f49f8ae50d008d3046fa2dd02fca45ba97ca0b91f3ddd1",
+    "ragraf_secret_grant": "59249d861f0d8b9acd050814f67b0b34a81b4e41a147c673128599d3e605be8c",
+    "ragraf_secret_list": "f1c42cf5db5928333321f3cbe76765e2244c4fbc7926252c269c37cfe3b56bcb",
+    "ragraf_secret_policy": "4e548f8d528623ea275439f01fa4bda2a080987321f2d6d4936c5639811f236f",
+    "ragraf_secret_reveal": "20c05d9dda688c7bb28fa003f3d9ba14636c501565bee0a21e48eb170b11a015",
+    "ragraf_secret_revoke": "5acd3cab15e88d2274c5329ae0dd2ff9b329bdc2fb3ab0986c5e91ef202ca9cc",
+    "ragraf_secret_set": "7a6211ca7bf04d9104a136350829427ac608b6392018da1db82fe7b98dabf045",
+    "ragraf_secret_show": "772b85c11209aa259c82fcd231097d0ea0ebe4cbb9876a03a047f22ea5fed6ed",
+    "ragraf_siem_export": "1ca44d61d4b458296d3db1060903e7d5a79fe599c5064ae16547651239a3e8fb",
+    "ragraf_siem_test": "bfa4fa4a55c9053e6d1dfc13a41ab1aeec00e9957b67a82ba6fbfe8e6978df37",
+    "ragraf_skill_catalog": "43b138ccc2cad45bbfd96d6ba3d5e27a0f562871462d21a8705f9a65e19e096b",
+    "ragraf_skill_load": "c68dcba8d77c6a39347b9e6c127d9e896cda65050450242a715f1ab3cce1f18b",
+    "ragraf_skill_reference": "5915d9bbc25b740ad53ce74cf1e8ed4abf3b4836f76f6280cb0bd4b4679e218f",
+    "ragraf_slice": "ada7e708a080611c04c602c9ecdfedfdb4475ec8869dae979e6e3b71cbeedc9b",
+    "ragraf_sso_login": "032a02713386364743c7c0e596f62e6a8d27c1b5975f057c980b9c0ffdb9bb9a",
+    "ragraf_sso_map_roles": "82c4532fc3f12be47c0c8f59ce98306c708c592cfe7fd06c7c235885a413e790",
+    "ragraf_stale_cascade": "b90a8cd050dd546ecb6093e16131fb9f57e3d7ae6b8e1b948b6d1ee54550e1ac",
+    "ragraf_symbol": "f89688cc8311bbb6119c6a45cd54df5536194c2ff79f97f0e7bc7fdf39af7f21",
+    "ragraf_table_usage": "6ca0b5a5b1b95dc8567f812dbb74d797d5b114e08b2af89e6de439c9d49249db",
+    "ragraf_task": "873e4d6fae0fd51600ff03aeab33aa1c8f7c4539f3c36810079b239483c103af",
+    "ragraf_task_stats": "21ef4acac1a3396e0bdb07b4ccc250791f32e29862cc4b3a287a562916c5d68b",
+    "ragraf_themes": "59e12d3d253c2a57a78c3421119dd65f9160375791bb1976a5d1ab4c1f9ca049",
+    "ragraf_usage": "81d0e8756833eaecfbe106256c8b745f8447770895b5821b16c289d3319f47f7",
+    "ragraf_use_project": "cdc710f4b8f69d2345ae36cbac70f9126e4b55a06b0d01c49ccab1168f5dcc8b",
+    "ragraf_write_check": "55f9512198507b51aadd8d07fdda33401da0ac5a6b24b024aac19d7d9d470e8b"
+  },
+  "tools_total": 94,
+  "unpinned_total": 0,
+  "version": "0.13.0"
+}

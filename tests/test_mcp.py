@@ -20,7 +20,15 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 SERVER = REPO / "tools" / "ragraf-mcp.py"
-CONFIG = REPO / "config" / "revoap.yaml"
+# Корпус по умолчанию — СВОЙ. Прежняя редакция брала чужой (`revoap.yaml` →
+# C:/AutoClaw/revoap.com): тест индексировал чужое дерево, а когда тот корпус
+# требовал пересборки, вызовы не отвечали 300 с (замер 22.11.2026). Свой выбор
+# можно вернуть осознанно: RAGRAF_MCP_TEST_CONFIG=<путь>.
+CONFIG = Path(os.environ.get("RAGRAF_MCP_TEST_CONFIG")
+                      or (REPO / "config" / "ragraf.yaml"))
+# Цель для `impact`: должна существовать в выбранном корпусе. Умолчание — метод
+# этого дерева; на чужом корпусе задаётся переменной RAGRAF_MCP_TEST_TARGET.
+IMPACT_TARGET = os.environ.get("RAGRAF_MCP_TEST_TARGET") or "Facade::op_search"
 
 #: Сколько ждать ответа сервера. Меняется переменной окружения — нужно, чтобы
 #: проверить сам аварийный путь (короткий срок) и чтобы медленная машина
@@ -169,7 +177,7 @@ def main() -> int:
              "params": {"name": "ragraf_index_status", "arguments": {}}},
             {"jsonrpc": "2.0", "id": 11, "method": "tools/call",
              "params": {"name": "ragraf_impact",
-                        "arguments": {"target": "PipelineEngine::run", "depth": 2}}},
+                        "arguments": {"target": IMPACT_TARGET, "depth": 2}}},
             {"jsonrpc": "2.0", "id": 12, "method": "tools/call",
              "params": {"name": "ragraf_search", "arguments": {"query": "настройки воркера", "limit": 3}}},
             {"jsonrpc": "2.0", "id": 13, "method": "tools/call",

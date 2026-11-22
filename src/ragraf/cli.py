@@ -56,6 +56,10 @@ OPS = [
     "contract_drift",
     # P2: сравнение ревизий и память о решениях.
     "diff", "note", "notes",
+    # Память фактов (уровень pro): версии, история замещений, срок жизни.
+    "fact_store", "fact_recall", "fact_replace", "fact_forget", "fact_history",
+    # Каталог навыков (уровень pro): что есть и что читать по требованию.
+    "skill_catalog", "skill_load", "skill_reference",
     # Управление списком исключений (уровень pro): что не считать в корпус.
     "excludes",
     # P3 (§3.2/§3.4): гейт использования индекса и отчёт по задаче.
@@ -416,6 +420,19 @@ def cmd_index(args: argparse.Namespace, cfg: ProjectConfig) -> int:
     from .catalog import Catalog
     from .indexer import Indexer
     from .watch import category_for
+
+    # Место индекса задано корнем проекта, и перенести его нельзя: от него
+    # считаются контрольная сумма корпуса и самоисключение `**/.ragraf/**`.
+    # Если корень защищён от записи, об этом надо сказать прямо, а не отдавать
+    # «control.sqlite не существует» из недр sqlite.
+    from .util import dir_blocker
+
+    blocker = dir_blocker(cfg.ragraf_dir)
+    if blocker:
+        print(f"индекс не создан: {blocker}. RAGRAF хранит состояние в каталоге "
+              f"`.ragraf` внутри корня проекта — индексируйте копию проекта в "
+              f"доступном каталоге или освободите путь.")
+        return EXIT_UNAVAILABLE
 
     category = category_for(cfg)
     # Замок ПО КОРПУСУ на всю индексацию. Проверка 06.11.2026: без него два
@@ -1132,6 +1149,59 @@ def dispatch_op(fc, args: argparse.Namespace) -> dict:
             dry_run=True if raw_dry is None else bool(raw_dry),
             confirm=bool(getattr(args, "confirm", False)),
         )
+    # --- память фактов (возможность memory-facts, уровень pro) ---
+    if op == "fact_store":
+        confidence = getattr(args, "confidence", None)
+        return fc.op_fact_store(
+            subject=getattr(args, "subject", "") or "",
+            predicate=getattr(args, "predicate", "") or "",
+            value=getattr(args, "value", "") or (args.text or ""),
+            namespace=(getattr(args, "namespace", "") or "default"),
+            confidence=1.0 if confidence is None else float(confidence),
+            ttl_days=int(getattr(args, "ttl_days", None) or 0),
+            tags=getattr(args, "tags", "") or "",
+            path=getattr(args, "path", None) or "",
+            task=getattr(args, "task", "") or "",
+        )
+    if op == "fact_recall":
+        return fc.op_fact_recall(
+            query=args.text or getattr(args, "name", None) or "",
+            namespace=getattr(args, "namespace", "") or "",
+            tags=getattr(args, "tags", "") or "",
+            include_expired=bool(getattr(args, "include_expired", False)),
+            limit=args.limit,
+        )
+    if op == "fact_replace":
+        confidence = getattr(args, "confidence", None)
+        return fc.op_fact_replace(
+            fact_id=getattr(args, "fact_id", "") or "",
+            value=getattr(args, "value", "") or (args.text or ""),
+            reason=getattr(args, "reason", "") or "",
+            # None — параметр не указан: достоверность и срок жизни НЕ меняются.
+            confidence=None if confidence is None else float(confidence),
+            ttl_days=getattr(args, "ttl_days", None),
+        )
+    if op == "fact_forget":
+        return fc.op_fact_forget(
+            fact_id=getattr(args, "fact_id", "") or "",
+            reason=getattr(args, "reason", "") or "",
+        )
+    if op == "fact_history":
+        return fc.op_fact_history(fact_id=getattr(args, "fact_id", "") or "")
+    # --- каталог навыков (возможность skills-catalog, уровень pro) ---
+    if op == "skill_catalog":
+        return fc.op_skill_catalog()
+    if op == "skill_load":
+        return fc.op_skill_load(
+            name=args.name or "",
+            offset=int(getattr(args, "offset", 0) or 0),
+            limit=int(getattr(args, "chars", 0) or 0),
+        )
+    if op == "skill_reference":
+        return fc.op_skill_reference(
+            name=args.name or "",
+            file=getattr(args, "file", "") or "",
+        )
     raise SystemExit(EXIT_USAGE)
 
 
@@ -1530,7 +1600,11 @@ def cmd_catalog(args: argparse.Namespace, cfg: ProjectConfig | None = None) -> i
     from . import catalog as catalog_mod
     from .config import load as load_config
 
-    summary = catalog_mod.Catalog().summary()
+    try:
+        summary = catalog_mod.Catalog().summary()
+    except catalog_mod.CatalogError as exc:
+        print(f"ОШИБКА: {exc}")
+        return 2
     print(f"разработок в реестре: {summary['count']}")
     if not summary["entries"]:
         print("  (реестр пуст; зарегистрируйте разработку командой: ragraf register)")
@@ -2634,6 +2708,31 @@ def build_parser() -> argparse.ArgumentParser:
                     help="dependents: только выводы (derived), без утверждений человека")
     pq.add_argument("--tags", default="", help="note: метки через запятую")
     pq.add_argument("--task", default=None, help="note/notes: метка задачи")
+    # Память фактов: поля ключа и значения — отдельными аргументами, а не JSON.
+    # Причина: ответ должен собираться из явных значений, чтобы журнал вызова
+    # (и разбор `pin_break`) видел операцию, а не разобранный произвол.
+    pq.add_argument("--subject", default="", help="fact_store: subject ключа факта")
+    pq.add_argument("--predicate", default="", help="fact_store: predicate ключа факта")
+    pq.add_argument("--value", default="", help="fact_store/fact_replace: значение факта")
+    pq.add_argument("--namespace", default="", help="факты: пространство имён")
+    pq.add_argument("--confidence", type=float, default=None,
+                    help="факты: достоверность 0..1")
+    pq.add_argument("--ttl-days", dest="ttl_days", type=int, default=None,
+                    help="факты: срок жизни в сутках (0 — бессрочно)")
+    pq.add_argument("--fact-id", dest="fact_id", default="",
+                    help="факты: идентификатор записи")
+    pq.add_argument("--include-expired", dest="include_expired", action="store_true",
+                    help="fact_recall: показать истёкшие")
+    pq.add_argument("--reason", default="",
+                    help="fact_replace/fact_forget: причина действия")
+    # Каталог навыков. Отдельные `--chars` и `--offset`, а не общий `--limit`:
+    # у `--limit` умолчание 50 (его ждут операции чтения), и страница навыка по
+    # умолчанию в 50 символов — тихая обрезка вместо явного выбора.
+    pq.add_argument("--file", default="", help="skill_reference: имя файла справки")
+    pq.add_argument("--offset", type=int, default=0,
+                    help="skill_load: с какого символа тела читать")
+    pq.add_argument("--chars", type=int, default=0,
+                    help="skill_load: сколько символов отдать (0 — всё тело)")
     # P2-2: готовый ответ вместо структурного результата. Оболочка (op, ревизия,
     # capability, found) остаётся — это контракт, по которому клиент понимает,
     # на какую ревизию опирается ответ.

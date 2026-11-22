@@ -245,6 +245,9 @@ def main() -> int:
           "нуждающаяся в корпусе операция отказывает с понятной подсказкой",
           f"текст: {body[:200]!r}")
 
+    # Корпус в проверке — СВОЙ (`ragraf` в реестре). Прежняя редакция
+    # переключалась на чужой `revoap.com`, который на этой машине требует
+    # пересборки: вызов не отвечал, и три проверки получали пустую строку.
     print("\n=== переключение корпуса на живом сервере (один сервер — много проектов) ===")
     responses, stderr, _code = run_session(
         [
@@ -252,7 +255,7 @@ def main() -> int:
              "params": {"protocolVersion": "2024-11-05", "capabilities": {}}},
             {"jsonrpc": "2.0", "method": "notifications/initialized"},
             {"jsonrpc": "2.0", "id": 2, "method": "tools/call",
-             "params": {"name": "ragraf_use_project", "arguments": {"project": "revoap.com"}}},
+             "params": {"name": "ragraf_use_project", "arguments": {"project": "ragraf"}}},
             {"jsonrpc": "2.0", "id": 3, "method": "tools/call",
              "params": {"name": "ragraf_use_project", "arguments": {"project": str(REPO)}}},
             {"jsonrpc": "2.0", "id": 4, "method": "tools/call",

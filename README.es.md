@@ -12,7 +12,7 @@
 [![License](https://img.shields.io/badge/license-BUSL--1.1-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.13%2B-informational)](pyproject.toml)
 
-![RAGRAF — base de conocimiento grafo-vectorial sobre el código fuente para agentes LLM: 86 herramientas MCP, hechos verificables con referencia archivo:línea, totalmente local](assets/social-preview.png)
+![RAGRAF — base de conocimiento grafo-vectorial sobre el código fuente para agentes LLM: 94 herramientas MCP, hechos verificables con referencia archivo:línea, totalmente local](assets/social-preview.png)
 
 [**Inicio rápido**](#primeros-pasos) · [**Documentación**](#documentación) · [**Wiki**](https://github.com/paulmann/RAGRAF/wiki) · [**Registro de cambios**](CHANGELOG.md) · [**English version**](README.md)
 
@@ -34,6 +34,7 @@ Un asistente que responde a las preguntas de un agente sobre la base de código 
 - [Desarrollo](#desarrollo)
 - [Contribuir](#contribuir)
 - [El proyecto en cifras y el banco de pruebas medido](#el-proyecto-en-cifras-y-el-banco-de-pruebas-medido)
+- [Cómo comprar](#cómo-comprar)
 - [Licencia](#licencia)
 
 ---
@@ -63,7 +64,7 @@ Una advertencia que suele omitirse: **la ventaja de 2 a 3 veces se refiere a las
 
 ## Capacidades
 
-<!-- surface:ops_heading -->**79 operaciones** sobre un repositorio<!-- /surface:ops_heading --> — un conjunto fijo, sin lenguaje de consultas al grafo:
+<!-- surface:ops_heading -->**87 operaciones** sobre un repositorio<!-- /surface:ops_heading --> — un conjunto fijo, sin lenguaje de consultas al grafo:
 
 | Operación | Responde a la pregunta |
 |---|---|
@@ -103,6 +104,8 @@ Una advertencia que suele omitirse: **la ventaja de 2 a 3 veces se refiere a las
 | `quality_suite` / `quality_diff` / `quality_prune` | el bucle de calidad (edición pro): ejecutar las comprobaciones del índice, comparar dos ejecuciones, aligerar el registro de ejecuciones con copia y confirmación |
 | `shared_index_status` / `shared_index_publish` / `shared_index_query` | el índice de equipo (edición pro): publicar un corpus para lecturas en red, admitir un cliente, consultar el índice publicado |
 | `broker_issue` / `broker_rotate` | el bróker de secretos (edición pro): emitir un secreto a petición — un préstamo con plazo, custodio y motivo — y rotar el valor según un plan (la rotación revoca los préstamos) |
+| `fact_store` / `fact_recall` / `fact_replace` / `fact_forget` / `fact_history` | memoria de hechos (edición pro): un hecho con la clave `namespace` + `subject` + `predicate`, con versiones, con una vida útil que oculta en lugar de borrar, y con el motivo del olvido en el diario de notas |
+| `skill_catalog` / `skill_load` / `skill_reference` | el catálogo de habilidades del corpus (edición pro): qué habilidades hay y cuánto cuesta leer cada una, el cuerpo por páginas (`offset`, `limit`, `sha256`, `next_offset`) y `reference/<name>.md` por nombre — con los rechazos `bad_name` y `path_jail` para todo lo que queda fuera del catálogo |
 
 Otros dos modos no son operaciones sino una forma de respuesta: **`answer=true`** devuelve una respuesta redactada con referencias en lugar del resultado estructural (P2-2), y `brief=true` devuelve una envoltura breve de respuesta. `usage` informa de las métricas del efecto (`saved_calls`, `hit_rate`, `avg_ms`, `misses`, `stale_served`).
 
@@ -122,7 +125,7 @@ lugar de fingir que no se encontró nada.
 
 **Temas y el mapa del grafo.** `themes` devuelve las agrupaciones del grafo documental — deterministas: la misma capa da siempre los mismos `theme_id` — con dirección de cita para cada participante y, si hubo modelo, un resumen sobre citas; sin modelo el tema permanece y `summary=null` nombra la causa. `global_overview` responde «qué hay aquí en general»: documentos, entidades, relaciones, temas, resúmenes y los temas principales con direcciones. Ambas leen el grafo documental y se rechazan sin la posibilidad `doc-graph`; las agrupaciones se construyen sin modelo (`ragraf docgraph themes`).
 
-Las mismas operaciones se exponen como <!-- surface:tools_mcp -->**86 herramientas MCP** (`ragraf_*`)<!-- /surface:tools_mcp --> — para conectarlas a un agente como servidor — y a través de la CLI. Un grupo de herramientas es la capa viva de bases de datos: `ragraf_db_schema`, `ragraf_db_table`, `ragraf_db_relations`, `ragraf_db_sample`, `ragraf_db_drift`, `ragraf_db_cross`. Una operación del nivel cerrado (edición enterprise) compara el diseño declarado con el grafo calculado por FQN: `contract_drift` (módulos, dependencias, contratos; cada divergencia del lado del código lleva `archivo:línea`) — y se declara como herramienta `ragraf_contract_drift` (capacidad `contract-drift`). Dos operaciones del nivel cerrado (edición enterprise) se declaran como herramientas: `ragraf_license_offline` (licencia sin conexión: solicitud, emisión, aceptación, transferencia) y `ragraf_attest_bundle` (atestación de la entrega: un paquete de pruebas firmado y su verificación). El bucle de calidad (edición pro) es `ragraf_quality_suite` (una batería de comprobaciones del índice más una ejecución registrada), `ragraf_quality_diff` (divergencias entre dos ejecuciones) y `ragraf_quality_prune` (aligerar el registro de ejecuciones: ensayo por defecto, borrado solo con confirmación y tras una copia del registro). La procedencia (pro) añade dos herramientas: `ragraf_doc_asof` (la versión vigente en una fecha, con su intervalo de validez y el identificador de versión) y `ragraf_dependents` (qué se apoyaba en un hecho: recorrido transitivo, `outside_cap` y separación entre «recalcular la derivación» y «decisión humana»). Tres operaciones del índice compartido (también pro) quedan fuera del conjunto MCP: gestionan la publicación y el canal de red, no lecturas del índice, y se ejecutan como `python -m ragraf.shared_index` (véase `docs/03_implementation/SHARED-INDEX.md`). El bróker de secretos (pro) está representado por dos herramientas — `ragraf_broker_issue` (préstamo: plazo, custodio, motivo, canje único) y `ragraf_broker_rotate` (estado del plan, programación, rotación con revocación de préstamos); el estado de los préstamos vive en `catalog/broker.json`, y el esquema de almacenamiento no cambia.
+Las mismas operaciones se exponen como <!-- surface:tools_mcp -->**94 herramientas MCP** (`ragraf_*`)<!-- /surface:tools_mcp --> — para conectarlas a un agente como servidor — y a través de la CLI. Un grupo de herramientas es la capa viva de bases de datos: `ragraf_db_schema`, `ragraf_db_table`, `ragraf_db_relations`, `ragraf_db_sample`, `ragraf_db_drift`, `ragraf_db_cross`. Una operación del nivel cerrado (edición enterprise) compara el diseño declarado con el grafo calculado por FQN: `contract_drift` (módulos, dependencias, contratos; cada divergencia del lado del código lleva `archivo:línea`) — y se declara como herramienta `ragraf_contract_drift` (capacidad `contract-drift`). Dos operaciones del nivel cerrado (edición enterprise) se declaran como herramientas: `ragraf_license_offline` (licencia sin conexión: solicitud, emisión, aceptación, transferencia) y `ragraf_attest_bundle` (atestación de la entrega: un paquete de pruebas firmado y su verificación). El bucle de calidad (edición pro) es `ragraf_quality_suite` (una batería de comprobaciones del índice más una ejecución registrada), `ragraf_quality_diff` (divergencias entre dos ejecuciones) y `ragraf_quality_prune` (aligerar el registro de ejecuciones: ensayo por defecto, borrado solo con confirmación y tras una copia del registro). La procedencia (pro) añade dos herramientas: `ragraf_doc_asof` (la versión vigente en una fecha, con su intervalo de validez y el identificador de versión) y `ragraf_dependents` (qué se apoyaba en un hecho: recorrido transitivo, `outside_cap` y separación entre «recalcular la derivación» y «decisión humana»). Tres operaciones del índice compartido (también pro) quedan fuera del conjunto MCP: gestionan la publicación y el canal de red, no lecturas del índice, y se ejecutan como `python -m ragraf.shared_index` (véase `docs/03_implementation/SHARED-INDEX.md`). El bróker de secretos (pro) está representado por dos herramientas — `ragraf_broker_issue` (préstamo: plazo, custodio, motivo, canje único) y `ragraf_broker_rotate` (estado del plan, programación, rotación con revocación de préstamos); el estado de los préstamos vive en `catalog/broker.json`, y el esquema de almacenamiento no cambia.
 La vigésima cuarta es `use_project`: elegir un corpus cuando un solo servidor atiende varios proyectos. `context` responde qué corpus está seleccionado y con qué fundamento — sin ella, las respuestas sobre un proyecto ajeno eran indistinguibles de las respuestas sobre el propio.
 
 **Veintinueve lenguajes** se analizan en un árbol de sintaxis (nodos y aristas del grafo). Dieciséis tienen su mapa de nodos descrito por un perfil: PHP, Python, JavaScript, TypeScript, Java, C#, C, C++, Ruby, Lua, Go, Perl, bash, PowerShell, CSS y HTML. Los trece restantes (Rust, Kotlin, Swift, Scala, Dart, R, F#, OCaml, Solidity, Fortran, MATLAB, Elm, Lisp) lo toman de la consulta de etiquetas de la propia gramática: sus nombres de nodo no coinciden con los habituales, y un perfil por lenguaje significaría inventar nombres. Cada lenguaje se comprueba sobre un archivo de muestra — al menos un símbolo encontrado (`tests/test_new_languages.py`).
@@ -317,6 +320,16 @@ La página de valor — `http://127.0.0.1:8777/value`: llamadas de 30 días, hec
 
 ---
 
+### TypeScript, JavaScript y Astro: qué cuenta aquí como hecho
+
+Una llamada desde otro archivo se vincula a su definición **por la línea de importación**, y la arista lo dice: `evidence_kind="import"`, confianza 0.9 y la dirección de la llamada (`path:line`) tomada del marcador reemplazado. Los especificadores de paquete (`react`, `@scope/pkg`) no se vinculan — no hay archivo al que vincular —, y los alias de `tsconfig.paths` son un hueco nombrado, no una aproximación silenciosa.
+
+`dead_code` separa «no hay referencia» de «la referencia no se construyó». Un archivo que se importa no se declara muerto. Un archivo con llamadas sin vincular pasa a `unproven` con los nombres de las llamadas y el motivo; al veredicto no llega. Borrar código por una pista es el único error al que esta operación no debe invitar.
+
+Los archivos `.astro` se indexan: el frontmatter y cada bloque `<script>` se analizan como TypeScript con el marcado enmascarado, por eso `path:line` apunta a la línea real de la página. El marcado no se convierte en símbolos: una plantilla no es un grafo de llamadas. El formato `astro` está en el registro como cualquier otro: visible y desactivable en el panel, y al desactivarlo se cuenta en `skipped_formats`.
+
+Dónde vive el índice no es una opción: es `.ragraf/` **dentro de la raíz del proyecto**, porque de esa raíz se calculan la suma de control del corpus y la autoexclusión `**/.ragraf/**`. Si el directorio está protegido, `ragraf index` termina con código 3 y explica el motivo, en lugar de fallar dentro de sqlite con «el archivo no existe»: indexe una copia en una ubicación escribible.
+
 ## Requisitos y límites
 
 | Aspecto | Valor |
@@ -406,11 +419,11 @@ El proyecto se construye para tareas concretas, por eso las propuestas de arquit
 
 ## El proyecto en cifras y el banco de pruebas medido
 
-Cifras publicadas (comprobadas el 07.11.2026; tamaños del índice según la entrada de la revisión activa): <!-- surface:figures -->**79 operaciones** en la fachada, **86 herramientas MCP**, **26** subcomandos de CLI, **29** lenguajes analizados por árbol y **40** conectados como texto (incluido `document`), **84** formatos de datos en el registro (61 lenguajes, 9 familias de documentos, 10 tipos de datos, 4 sin analizador)<!-- /surface:figures -->; el índice propio de RAGRAF — 984 archivos, 7 079 nodos y 99 267 aristas (el retrato se compara con la entrada de revisión activa mediante `Test-DocumentedNumbers`: las cifras de una revisión pasada producen un aviso que nombra su `rev_id` y su fecha, y en la publicación eso es una negativa — `tools/release/gate_release.py`; las cifras vivas salen de `python tools/ragraf.py -p config/ragraf.yaml status`).
+Cifras publicadas (comprobadas el 23.11.2026; tamaños del índice según la entrada de la revisión activa): <!-- surface:figures -->**87 operaciones** en la fachada, **94 herramientas MCP**, **26** subcomandos de CLI, **29** lenguajes analizados por árbol y **41** conectados como texto (incluido `document`), **87** formatos de datos en el registro (61 lenguajes, 9 familias de documentos, 10 tipos de datos, 4 sin analizador)<!-- /surface:figures -->; el índice propio de RAGRAF — 1 002 archivos, 7 415 nodos y 104 556 aristas (el retrato se compara con la entrada de revisión activa mediante `Test-DocumentedNumbers`: las cifras de una revisión pasada producen un aviso que nombra su `rev_id` y su fecha, y en la publicación eso es una negativa — `tools/release/gate_release.py`; las cifras vivas salen de `python tools/ragraf.py -p config/ragraf.yaml status`).
 
 **El banco de pruebas, anonimizado** (nombres de proyecto, rutas y dominios eliminados). Las cifras de esta sección son un **retrato del 16.10.2026**, no el estado actual: en ese momento el registro tenía **28 corpus, 25 indexados** — 10 con la capa CPG, 15 en modo `degraded`. Para 16 de ellos la entrada de revisión se leyó el mismo día: **7 527 archivos, 94 528 símbolos, 791 844 aristas, 86 790 fragmentos**.
 
-El tamaño actual del registro se mantiene aparte del retrato a propósito: cambia con cada proyecto conectado, y ponerlo en la tabla de abajo sería presentar la medición de ayer como la de hoy. Se nombra en su propia línea y se compara con `catalog/catalog.json` — **según el registro el 10.11.2026: 56 corpus, 43 indexados**. Una comprobación vigila esta cifra: si diverge del registro, es una observación, no una línea obsoleta.
+El tamaño actual del registro se mantiene aparte del retrato a propósito: cambia con cada proyecto conectado, y ponerlo en la tabla de abajo sería presentar la medición de ayer como la de hoy. Se nombra en su propia línea y se compara con `catalog/catalog.json` — **según el registro el 22.11.2026: 60 corpus, 48 indexados**. Una comprobación vigila esta cifra: si diverge del registro, es una observación, no una línea obsoleta.
 
 | Corpus | Tipo | Archivos | Símbolos | Aristas | Modo |
 |---|---|---|---|---|---|
@@ -423,6 +436,30 @@ El tamaño actual del registro se mantiene aparte del retrato a propósito: camb
 La tabla completa de 16 filas, las reglas de anonimización y la advertencia sobre el recuento están en [la wiki → Benchmarks and Limits](https://github.com/paulmann/RAGRAF/wiki/11-Benchmarks-and-Limits). La advertencia: el registro de corpus y una entrada de revisión dan totales distintos para la misma revisión (8 721 frente a 4 498 símbolos, 41 201 frente a 56 106 aristas), así que las cifras se toman de la entrada de revisión. El mapa privado de las etiquetas `C-*` a proyectos queda fuera del repositorio: pertenece al autor y no forma parte de la entrega.
 
 ---
+
+## Cómo comprar
+
+Una entrega, dos niveles de licencia, tres periodos: mes, año o perpetua. La
+factura la emite el empresario individual y se paga por transferencia; el
+sitio no acepta datos de tarjeta. Tras el pago se entrega una **clave de
+activación**, y `ragraf edition license-offline` la convierte en un archivo de
+licencia **en su máquina**: el sitio nunca firma una licencia ni guarda la clave de
+firma.
+
+| Paso | Dónde |
+|---|---|
+| Elegir edición y periodo | <https://ragraf.ru/pricing/> |
+| Pagar la factura | su banco, con el PDF de la factura |
+| Recoger la clave | <https://ragraf.ru/portal/> — acceso por correo, sin contraseña |
+| Emitir la licencia | `ragraf edition license-offline` en su máquina |
+
+**Estado actual:** `PAYMENTS_MODE=off` — el sitio aún no emite facturas
+automáticamente y dice con honestidad «según acuerdo» en lugar de mostrar un
+precio. Escriba a la dirección de `SUPPORT.md` y la factura se emite a mano.
+
+Lo que se promete y lo que no: [`docs/03_implementation/LICENSING-AND-BILLING.md`](docs/03_implementation/LICENSING-AND-BILLING.md).
+Los recibos fiscales rusos (Federal Law 54-FZ) **no** están integrados: la factura es un
+documento de pago, no un recibo fiscal.
 
 ## Licencia
 

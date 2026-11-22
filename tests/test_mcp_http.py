@@ -184,10 +184,12 @@ def main() -> int:
         head = content[0].get("text", "").splitlines()[0] if content else ""
         check("rev=" in head, "вызов инструмента вернул факт", f"ответ: {head!r}")
 
+        # Свой корпус (`ragraf` в реестре): прежний выбор `revoap.com` на этой
+        # машине требует пересборки, и HTTP-вызов не отвечал (TimeoutError).
         code, data, _ = call("/mcp", method="POST", headers=auth,
                              body={"jsonrpc": "2.0", "id": 4, "method": "tools/call",
                                    "params": {"name": "ragraf_use_project",
-                                              "arguments": {"project": "revoap.com"}}})
+                                              "arguments": {"project": "ragraf"}}})
         text = ((data.get("result") or {}).get("content") or [{}])[0].get("text", "")
         check("op=use_project" in text, "переключение корпуса работает по HTTP",
               text.splitlines()[0] if text else "")

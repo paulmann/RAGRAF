@@ -158,10 +158,61 @@ def scan_drift(
                 )
             )
 
-        # --- запись в журнал (append-only, с дедупликацией) ---
+        # --- возврат к проиндексированному состоянию -----------------------
+        # Файл, у которого в этой ревизии уже есть запись, но расхождения больше
+        # нет, раньше оставлял предупреждение навсегда: журнал append-only, а
+        # потребители читали его как «расхождение не закрыто». Возврат — тоже
+        # расхождение, только со знаком «снято», и он заслуживает записи.
         inserted: list[dict] = []
+        changed_paths = {d.path for d in deltas}
+        for row in control.conn.execute(
+                "SELECT DISTINCT path FROM drift_entry WHERE index_rev = ?", (rev,)
+        ).fetchall():
+            path = str(row["path"])
+            if path in changed_paths:
+                continue
+            known_pair = known.get(path)
+            cur = current.get(path)
+            if known_pair is None or cur is None:
+                continue
+            if cur.sha256 != known_pair[0]:
+                continue
+            dedupe = util.stable_id(path, known_pair[0], known_pair[0], "restored")
+            if control.conn.execute(
+                    "SELECT id FROM drift_entry WHERE dedupe_key = ?", (dedupe,)
+            ).fetchone():
+                continue
+            entry = control.conn.execute(
+                """INSERT INTO drift_entry(index_rev, ts, path, kind, old_hash, new_hash,
+                                           symbols_added, symbols_removed, symbols_changed,
+                                           edges_invalidated, detected_by, note, dedupe_key)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (rev, util.now_iso(), path, "restored", known_pair[0], known_pair[0],
+                 util.dumps([]), util.dumps([]), util.dumps([]), 0, detected_by,
+                 "файл вернулся к проиндексированному состоянию: предупреждение снято",
+                 dedupe),
+            )
+            control.conn.execute(
+                "UPDATE stale_edge SET acked_at = ? WHERE index_rev = ? AND path = ?"
+                " AND acked_at IS NULL",
+                (util.now_iso(), rev, path),
+            )
+            inserted.append({
+                "id": int(entry.lastrowid),
+                "path": path,
+                "kind": "restored",
+                "note": "файл вернулся к проиндексированному состоянию",
+            })
+        control.conn.commit()
+
+        # --- запись в журнал (append-only, с дедупликацией) ---
         for d in deltas:
-            kind_effective = "modify"
+            # Вид изменения берётся у самого расхождения: удаление и добавление
+            # файла до 22.11.2026 записывались как «modify», и журнал отвечал
+            # «файл изменён» там, где файла больше нет. Патч клиента (замер на
+            # проекте «Михалыч») — тот же; здесь он закреплён проверкой
+            # `tests/test_drift_kinds.py`.
+            kind_effective = d.kind or "modify"
             if d.slice_boundary:
                 # I4: вынос кода в функцию — отдельный вид, самый опасный для срезов.
                 kind_effective = "slice_boundary"
@@ -466,7 +517,7 @@ def _build_archive_report(cfg: ProjectConfig, from_rev: str, to_rev: str, rows: 
     # знаниях, как изменение схемы БД: слой, собранный по другому входу, нельзя
     # сравнивать со старым молча — поэтому вид назван в отчёте отдельной строкой.
     for kind in ("add", "modify", "delete", "rename", "schema_change",
-                 "slice_boundary", "docgraph_fingerprint"):
+                 "slice_boundary", "docgraph_fingerprint", "restored"):
         items = by_kind.get(kind) or []
         if not items:
             continue

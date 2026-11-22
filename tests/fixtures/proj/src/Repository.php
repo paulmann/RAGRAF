@@ -26,3 +26,5 @@ class Repository
         return ['sql' => $sql, 'id' => $id];
     }
 }
+
+// изменённый комментарий

@@ -18,7 +18,7 @@
     результат Ok=$true при нулевом осмотре считается ложным PASS и валит прогон.
 
     Ожидаемый baseline на момент передачи проекта: 0 ошибок, 0 предупреждений,
-    46 проверок — ровно столько, сколько записей в реестре `$script:CheckFunctions`;
+    49 проверок — ровно столько, сколько записей в реестре `$script:CheckFunctions`;
     это сверяет Test-DocumentedNumbers. Прежние две ошибки («запись прогона в реестр
     не покрывала путь ensure» и «документы называли 18 и 16 инструментов там, где
     в коде 23») закрыты
@@ -4638,6 +4638,107 @@ function Test-AgentIntegrations {
     return New-CheckResult -Name $checkTitle -Ok ($problems.Count -eq 0) -Examined $examined -Details $problems
 }
 
+function Get-ProFeatureWiring {
+    <#
+    .SYNOPSIS
+        Общая часть проверки платной возможности: один механизм на все.
+
+    .DESCRIPTION
+        Механика одна (`tools/check_pro_features.py`), различие — имя возможности.
+        Две копии одной проверки разошлись бы молча: так уже расходились списки
+        языков и числа в документах.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Feature,
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][string]$Label
+    )
+    $probe = Join-Path $script:ProjectRoot 'tools/check_pro_features.py'
+    if (-not (Test-Path -LiteralPath $probe)) {
+        return New-CheckResult -Name $Name -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: нет tools/check_pro_features.py')
+    }
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $python) {
+        return New-CheckResult -Name $Name -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: python не найден в PATH')
+    }
+    $output = & $python.Source $probe --feature $Feature 2>&1
+    $code = $LASTEXITCODE
+    $text = ($output | Out-String).Trim()
+    Write-Host "    проверка $Label`: $text"
+
+    $examined = 0
+    if ($text -match 'осмотрено:\s*(\d+)') { $examined = [int]$Matches[1] }
+    $details = @($output | ForEach-Object { "$_".Trim() } |
+        Where-Object { $_ -like 'FAIL:*' })
+    if ($code -eq 0 -and $examined -lt 1) {
+        return New-CheckResult -Name $Name -Ok $false -Examined 0 `
+            -Details @('проверка ничего не осмотрела: число осмотренных 0')
+    }
+    return New-CheckResult -Name $Name -Ok ($code -eq 0) -Examined $examined -Details $details
+}
+
+function Test-FactMemoryWiring {
+    <#
+    .SYNOPSIS
+        Возможность memory-facts объявлена так же, как исполнена.
+
+    .DESCRIPTION
+        Возможность объявляется данными (`src/ragraf/edition_baseline.json`),
+        исполняется кодом фасада, отдаётся агенту через MCP и запирается
+        изданием — строкой в `pro_only`. Расхождение любой из четырёх частей
+        само по себе ошибки не даёт: объявленная операция без кода выглядит
+        работающей, а платный модуль, забытый в `pro_only`, уезжает в публичную
+        сборку — ровно так в 0.11.0 уехал `contract_diff.py`.
+
+        Свойства, а не написание: список операций сверяется через
+        `ragraf.surface` (второго разбора фасада нет), список `OPS` в CLI —
+        разбором AST, `pro_only` — разбором TOML, а не регуляркой по тексту.
+
+        Молчаливый пропуск запрещён: нет скрипта или нет python — это провал,
+        а не «нечего проверять».
+    #>
+    $name = 'fact memory is declared as it is wired'
+    return Get-ProFeatureWiring -Feature 'memory-facts' -Name $name -Label 'памяти фактов'
+}
+
+function Test-SkillsCatalogWiring {
+    <#
+    .SYNOPSIS
+        Возможность skills-catalog объявлена так же, как исполнена.
+
+    .DESCRIPTION
+        Каталог навыков — служба, которая отдаёт тело и справку по требованию;
+        тексты навыка остаются публичными. Проверяется тем же механизмом, что и
+        память фактов: объявление, код в фасаде, инструменты MCP, путь в CLI,
+        граница издания файлом и непустой тест.
+    #>
+    $name = 'skills catalog is declared as it is wired'
+    return Get-ProFeatureWiring -Feature 'skills-catalog' -Name $name -Label 'каталога навыков'
+}
+
+function Test-ContractPinWiring {
+    <#
+    .SYNOPSIS
+        Возможность contract-pin объявлена так же, как исполнена.
+
+    .DESCRIPTION
+        Это третья проверка одного механизма, и она появилась из своего дефекта:
+        в 0.11.0 модуль `src/ragraf/contract_diff.py` лежал в общем дереве и
+        уезжал в Community-сборку, хотя капability `contract-pin` — enterprise.
+        Дефект был виден только в гейте выпуска, потому что проверки двух
+        новых возможностей смотрели каждая свой модуль, а у уже объявленных
+        возможностей такой проверки не было вовсе.
+
+        Закрытый слой здесь — `contract_diff.py` (сравнение двух подписей) и
+        его тест; `pin.py` остаётся в Community: колонка `observed_hash` в
+        журнале вызовов — базовая телеметрия, а не платная часть.
+    #>
+    $name = 'contract pin layer is declared as it is wired'
+    return Get-ProFeatureWiring -Feature 'contract-pin' -Name $name -Label 'пиннинга контракта'
+}
+
 $script:CheckFunctions = @(
     'Test-ProjectLayout'
     'Test-SecretHygiene'
@@ -4655,6 +4756,9 @@ $script:CheckFunctions = @(
     'Test-ModeHasProbe'
     'Test-ExternalOpsAreRecorded'
     'Test-DocumentedNumbers'
+    'Test-FactMemoryWiring'
+    'Test-SkillsCatalogWiring'
+    'Test-ContractPinWiring'
     'Test-PowerShellVintage'
     'Test-SourceMaterialHygiene'
     'Test-DatabaseLayerHonesty'

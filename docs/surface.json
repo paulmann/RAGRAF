@@ -1,15 +1,15 @@
 {
   "schema": 1,
   "counts": {
-    "ops": 79,
-    "tools": 86,
+    "ops": 87,
+    "tools": 94,
     "cli": 26,
     "tree": 29,
-    "text": 40,
-    "formats": 84,
-    "caps": 20,
-    "caps_pro": 14,
-    "caps_enterprise": 20
+    "text": 41,
+    "formats": 87,
+    "caps": 22,
+    "caps_pro": 16,
+    "caps_enterprise": 22
   },
   "ops": [
     {
@@ -1016,6 +1016,156 @@
       "returns_from": "literal"
     },
     {
+      "name": "fact_forget",
+      "params": [
+        {
+          "name": "fact_id",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "reason",
+          "type": "str",
+          "default": "''"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "fact_history",
+      "params": [
+        {
+          "name": "fact_id",
+          "type": "str",
+          "default": "''"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "fact_recall",
+      "params": [
+        {
+          "name": "query",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "namespace",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "tags",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "include_expired",
+          "type": "bool",
+          "default": "False"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "default": "50"
+        },
+        {
+          "name": "now",
+          "type": "float | None",
+          "default": "None"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "fact_replace",
+      "params": [
+        {
+          "name": "fact_id",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "value",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "reason",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "confidence",
+          "type": "float | None",
+          "default": "None"
+        },
+        {
+          "name": "ttl_days",
+          "type": "int | None",
+          "default": "None"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "fact_store",
+      "params": [
+        {
+          "name": "subject",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "predicate",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "value",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "namespace",
+          "type": "str",
+          "default": "'default'"
+        },
+        {
+          "name": "confidence",
+          "type": "float",
+          "default": "1.0"
+        },
+        {
+          "name": "ttl_days",
+          "type": "int",
+          "default": "0"
+        },
+        {
+          "name": "tags",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "path",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "task",
+          "type": "str",
+          "default": "''"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
       "name": "freshness",
       "params": [
         {
@@ -1130,7 +1280,10 @@
         "root",
         "stages",
         "storage",
-        "vector_available"
+        "vector_available",
+        "vector_library",
+        "vector_note",
+        "vectors_indexed"
       ],
       "returns_from": "literal"
     },
@@ -1762,6 +1915,51 @@
       "returns_from": "variable"
     },
     {
+      "name": "skill_catalog",
+      "params": [],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "skill_load",
+      "params": [
+        {
+          "name": "name",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "offset",
+          "type": "int",
+          "default": "0"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "default": "0"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
+      "name": "skill_reference",
+      "params": [
+        {
+          "name": "name",
+          "type": "str",
+          "default": "''"
+        },
+        {
+          "name": "file",
+          "type": "str",
+          "default": "''"
+        }
+      ],
+      "returns": [],
+      "returns_from": "variable"
+    },
+    {
       "name": "slice",
       "params": [
         {
@@ -2082,6 +2280,11 @@
     "ragraf_entity_neighbors",
     "ragraf_entrypoints",
     "ragraf_excludes",
+    "ragraf_fact_forget",
+    "ragraf_fact_history",
+    "ragraf_fact_recall",
+    "ragraf_fact_replace",
+    "ragraf_fact_store",
     "ragraf_freshness",
     "ragraf_global_overview",
     "ragraf_impact",
@@ -2115,6 +2318,9 @@
     "ragraf_secret_show",
     "ragraf_siem_export",
     "ragraf_siem_test",
+    "ragraf_skill_catalog",
+    "ragraf_skill_load",
+    "ragraf_skill_reference",
     "ragraf_slice",
     "ragraf_sso_login",
     "ragraf_sso_map_roles",
@@ -2375,6 +2581,28 @@
       "operations": [
         "contract_drift"
       ]
+    },
+    {
+      "name": "memory-facts",
+      "edition": "pro",
+      "status": "shipped",
+      "operations": [
+        "fact_forget",
+        "fact_history",
+        "fact_recall",
+        "fact_replace",
+        "fact_store"
+      ]
+    },
+    {
+      "name": "skills-catalog",
+      "edition": "pro",
+      "status": "shipped",
+      "operations": [
+        "skill_catalog",
+        "skill_load",
+        "skill_reference"
+      ]
     }
   ],
   "sources": {
@@ -2385,16 +2613,14 @@
     "formats": "src/ragraf/formats.py",
     "features": "src/ragraf/edition_baseline.json"
   },
-  "digest": "78789dc4707881a1e2a9cd5c26b807480015ed08ccf2440bfc23479ca9e8eca2",
+  "digest": "2008c1a519eff6758d8b1304e35b0374517b560cb2e4bf63cde499116fc4c9ab",
   "revision": {
-    "rev_id": null,
-    "files": null,
-    "nodes": null,
-    "edges": null,
-    "sealed_at": "",
-    "source": "",
-    "notes": [
-      "индекс не найден: размеры ревизии неизвестны"
-    ]
+    "rev_id": "rev-1531",
+    "files": 1001,
+    "nodes": 7410,
+    "edges": 104525,
+    "sealed_at": "2026-11-22T03:47:26+03:00",
+    "source": "graph",
+    "notes": []
   }
 }

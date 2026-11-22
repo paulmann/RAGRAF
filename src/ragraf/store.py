@@ -615,7 +615,7 @@ CREATE TABLE IF NOT EXISTS drift_entry (
   index_rev TEXT NOT NULL,
   ts TEXT NOT NULL,
   path TEXT NOT NULL,
-  kind TEXT NOT NULL,               -- add|modify|delete|rename|schema_change|slice_boundary
+  kind TEXT NOT NULL,               -- add|modify|delete|rename|schema_change|slice_boundary|restored
   old_hash TEXT, new_hash TEXT,
   symbols_added TEXT, symbols_removed TEXT, symbols_changed TEXT,
   edges_invalidated INTEGER DEFAULT 0,

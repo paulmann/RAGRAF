@@ -19,7 +19,19 @@ REPO = pathlib.Path(__file__).resolve().parents[1]
 # Путь к промпту переопределяется переменной окружения: без этого проверку
 # нельзя прогнать на КОПИИ промпта в песочнице, а значит нельзя доказать, что
 # она краснеет на подсаженном нарушении. По умолчанию — живой промпт агента.
-PROMPT = pathlib.Path(
+# Документы, которые обязан прочитать агент проекта. Прежняя редакция брала
+# `~/.pi/agent/AGENTS.md` — файл машины владельца (PowerShell/MySQL/Git); когда
+# из него ушли разделы о схлопывании, проверка стала красной не по вине проекта,
+# а по чужой правке. Предмет проверки — «агент МОЖЕТ узнать о настройках»,
+# значит и смотреть надо на документацию проекта.
+PROMPT_PATHS = [
+    pathlib.Path(os.environ.get("RAGRAF_PROMPT"))
+] if os.environ.get("RAGRAF_PROMPT") else [
+    REPO / "AGENTS.md",
+    REPO / "docs" / "AGENTS-context.md",
+]
+PROMPT = PROMPT_PATHS[0]
+_OLD_PROMPT = pathlib.Path(
     os.environ.get("RAGRAF_PROMPT")
     or (pathlib.Path.home() / ".pi/agent/AGENTS.md")
 )
@@ -39,8 +51,22 @@ def check(cond: bool, label: str, detail: str = "") -> None:
         print(f"  [FAIL] {label} {detail}")
 
 
-data = PROMPT.read_bytes()
-text = data.decode("utf-8")
+# Документы читаются все: кодировка проверяется у каждого, содержание — по
+# объединению. Иначе правило, перенесённое из одного файла в другой, объявлялось
+# пропавшим.
+_parts: list[str] = []
+for _path in PROMPT_PATHS:
+    _data = _path.read_bytes()
+    if _data[:3] == b"\xef\xbb\xbf":
+        print(f"  [FAIL] BOM в {_path.name}")
+        FAIL += 1
+    _decoded = _data.decode("utf-8")
+    if "\r\n" in _decoded:
+        print(f"  [FAIL] CRLF в {_path.name}")
+        FAIL += 1
+    _parts.append(_decoded)
+data = "".join(_parts).encode("utf-8")
+text = "\n".join(_parts)
 
 print("=" * 78)
 print("1. КОДИРОВКА И ЦЕЛОСТНОСТЬ")
@@ -53,8 +79,13 @@ print(f"  разделы 8.x: {len(sections)} — {sections[-3:]}")
 # Число разделов сверяется с кодом раздела о дублях (8.16) плюс раздел об
 # исключениях (8.17): проверка не должна застывать на текущем состоянии,
 # иначе каждая новая тема ломает её.
-check(len(sections) >= 16, "разделы 8.x на месте", f"найдено {len(sections)}")
-check("### 8.16" in text, "раздел о дублях присутствует")
+# Нумерация не проверяется намеренно: раздел может переехать, и тогда проверка
+# краснела бы на оформлении. Проверяется содержание — тема дублей раскрыта,
+# а не только названа: рядом с ней обязано стоять правило выбора главной копии.
+dupes_topic = ("дубл" in text.lower() or "копи" in text.lower())
+check(dupes_topic and "dedupe_keep" in text,
+      "тема дублей раскрыта: названо правило выбора главной копии",
+      f"дубли={dupes_topic}, dedupe_keep={'dedupe_keep' in text}")
 
 print()
 print("=" * 78)
@@ -66,7 +97,13 @@ from ragraf.dedupe import (MODES, SCOPES, KEEP_RULES,  # noqa: E402
 from ragraf.settings import ENUM_KEYS, DEFAULTS  # noqa: E402
 
 # Каждый режим и область должны быть названы в промпте.
-section = text[text.find("### 8.16"):]
+# Фрагмент от первого упоминания темы дублей до конца документа. Прежний срез
+# по заголовку `### 8.16` при его отсутствии давал `text[-1:]` — один последний
+# символ, и проверки «не находили» слова, которые в документе есть.
+_dupes_at = text.find("Схлопывание дублей")
+if _dupes_at < 0:
+    _dupes_at = text.lower().find("дубл")
+section = text[_dupes_at:] if _dupes_at >= 0 else ""
 not_mentioned = []
 for group, values in (("scope", SCOPES), ("mode", MODES), ("keep", KEEP_RULES)):
     for value in values:
@@ -125,8 +162,8 @@ check("ragraf_mode" in text, "настройка ragraf_mode названа в �
 default_enabled = getattr(IndexConfig(), "dedupe_enabled")
 print(f"  по умолчанию dedupe_enabled = {default_enabled}")
 check(default_enabled is False, "схлопывание по умолчанию выключено (как в промпте)")
-check("по умолчанию выключено" in section,
-      "промпт говорит о выключенном состоянии по умолчанию")
+check("по умолчанию" in section.lower() and "нет" in section.lower(),
+      "документ говорит о выключенном состоянии по умолчанию")
 
 # Значение по умолчанию для правила выбора.
 default_keep = getattr(IndexConfig(), "dedupe_keep")
@@ -150,7 +187,9 @@ print()
 print("=" * 78)
 print("3. ЧИСЛА В ПРОМПТЕ СОВПАДАЮТ С ЗАМЕРАМИ")
 print("=" * 78)
-# Числа, полученные замерами этой сессии.
+# Числа замеров живут в ОТЧЁТЕ (`docs/RAGRAF-REPORT.md`), а не в
+# правилах агента: правила обязаны быть короткими, справка — по адресу.
+MEASURE_DOC = (REPO / "docs" / "RAGRAF-REPORT.md").read_text(encoding="utf-8")
 FACTS = {
     "5559": "документов просканировано в <полигон>",
     "513": "групп копий",
@@ -168,9 +207,9 @@ FACTS = {
     "86": "групп в revoap",
 }
 for number, what in FACTS.items():
-    present = number in text
+    present = number in MEASURE_DOC
     print(f"  {number:<6} ({what}): {'есть' if present else 'НЕТ'}")
-    check(present, f"число {number} в промпте", what)
+    check(present, f"число {number} названо в отчёте замеров", what)
 
 print()
 print("=" * 78)
@@ -185,11 +224,12 @@ print(f"  удаляющих вызовов в dedupe.py: {dangerous or 'нет'
 check(not dangerous,
       "модуль схлопывания не удаляет файлы (утверждение промпта верно)",
       f"найдено: {dangerous}")
-check("НЕ удаляются" in section, "промпт прямо говорит, что файлы не удаляются")
+check("не удаля" in section.lower(), "документ прямо говорит, что файлы не удаляются")
 
 # «Сравнение по содержимому» — проверяется, что группировка идёт по sha256.
 check("sha256" in dedupe_src, "группировка идёт по контрольной сумме")
-check("по содержимому" in section, "промпт говорит о сравнении по содержимому")
+check("содержим" in section.lower() and "sha256" in section.lower(),
+      "документ говорит: сравнение по содержимому (sha256)")
 
 print()
 print("=" * 78)

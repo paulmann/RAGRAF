@@ -351,6 +351,30 @@ def append_text(path: str | Path, text: str) -> None:
 # --------------------------------------------------------------------------
 
 
+def dir_blocker(path: Path) -> str | None:
+    """Почему в каталог нельзя писать: ``None`` — можно.
+
+    Проверка нужна там, где путь известен заранее: иначе sqlite отвечает
+    «файла не существует», и человек ищет причину не там (измерено 22.11.2026
+    на защищённой папке: `OperationalError: ...control.sqlite не существует`).
+    Проверяется именно запись: `mkdir` без исключения ещё не значит, что файл
+    создастся (каталог только для чтения, занятый путь, чужая учётная запись).
+    """
+    try:
+        if path.exists() and not path.is_dir():
+            return f"путь занят файлом: {to_posix(path)}"
+        path.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        return f"каталог не создаётся: {exc}"
+    probe = path / ".ragraf-write-probe"
+    try:
+        probe.write_bytes(b"")
+        probe.unlink()
+    except OSError as exc:
+        return f"каталог недоступен для записи: {exc}"
+    return None
+
+
 def now_iso() -> str:
     """Метка времени для журналов. В идентификаторы НЕ попадает (НФТ-5)."""
     from datetime import datetime, timezone

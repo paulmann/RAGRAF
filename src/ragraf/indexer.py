@@ -239,6 +239,14 @@ class Indexer:
     def run(self, *, with_vectors: bool = True, limit_files: int | None = None,
             budget_seconds: float | None = None,
             doc_graph: bool = False) -> IndexReport:
+        # Другие пути (ensure, сторож, панель) приходят сюда, минуя cli:
+        # проверка повторяется, чтобы отказ был одинаковым и понятным.
+        blocker = util.dir_blocker(self.cfg.ragraf_dir)
+        if blocker:
+            raise RuntimeError(
+                f"индекс не создан: {blocker}. Каталог состояния `.ragraf` живёт "
+                f"внутри корня проекта; индексируйте копию проекта в доступном "
+                f"каталоге или освободите путь.")
         """Полный прогон. `doc_graph` включает проход извлечения фактов.
 
         Флаг, а не настройка: это единственная стадия, которая ходит в сеть и
@@ -390,7 +398,15 @@ class Indexer:
         # достоверность. Замер: на revoap все 29 рёбер `extends` вели на
         # заглушки, то есть наследование в графе было невидимым.
         inherit_resolved, inherit_ambiguous = self._resolve_inheritance_names(rev_id)
+        # Импорты JS/TS: связь задаётся строкой импорта, а не совпадением имён,
+        # поэтому стадия идёт после разрешения имён и не пересекается с ним.
+        import_bound, import_ambiguous = self._resolve_js_imports(rev_id)
         self._stage(rev_id, "resolve", round(time.perf_counter() - t0, 3), resolved_cnt)
+        if import_bound or import_ambiguous:
+            self.report.notes.append(
+                f"импорты JS/TS: привязано вызовов {import_bound}, "
+                f"не привязано из-за неоднозначности {import_ambiguous}"
+            )
         if inherit_resolved or inherit_ambiguous:
             self.report.notes.append(
                 f"наследование: привязано к классам {inherit_resolved} рёбер, "
@@ -1432,6 +1448,127 @@ class Indexer:
             self.graph.commit()
         return resolved, ambiguous
 
+    def _resolve_js_imports(self, rev_id: str) -> tuple[int, int]:
+        """Привязать вызовы JS/TS к определениям по строке импорта.
+
+        Возвращает `(привязано, неоднозначно)`. Внешние пакеты (`react`,
+        `@scope/pkg`) не привязываются никогда: их кода в корпусе нет.
+        """
+        from . import imports_js
+
+        JS_EXT = (".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs",
+                  ".astro")
+        files = {str(row[0]) for row in self.graph.conn.execute(
+            "SELECT path FROM file WHERE rev_id = ?", (rev_id,))}
+        js_files = {path for path in files if path.lower().endswith(JS_EXT)}
+        if not js_files:
+            return 0, 0
+
+        # Определения: имя → [(node_id, path)] только по файлам JS/TS.
+        by_name: dict[str, list[tuple[str, str]]] = {}
+        for node_id, name, path in self.graph.conn.execute(
+                "SELECT node_id, name, path FROM node WHERE rev_id = ?"
+                " AND kind NOT IN ('file','external','namespace')"
+                " AND name IS NOT NULL AND path IS NOT NULL", (rev_id,)):
+            if str(path).lower().endswith(JS_EXT):
+                by_name.setdefault(str(name), []).append((str(node_id), str(path)))
+
+        # Заглушки внешних вызовов: имя → [(edge_uid, src, dst)].
+        stubs: dict[str, list[tuple[str, str, str, int | None]]] = {}
+        for edge_uid, src, dst, name, line in self.graph.conn.execute(
+                "SELECT e.edge_uid, e.src, e.dst, n.name, e.evidence_line FROM edge e"
+                " JOIN node n ON n.rev_id = e.rev_id AND n.node_id = e.dst"
+                " WHERE e.rev_id = ? AND e.kind IN ('calls', 'calls_heuristic')"
+                " AND e.evidence_kind = 'external_call' AND n.kind = 'external'",
+                (rev_id,)):
+            stubs.setdefault(str(name), []).append(
+                (str(edge_uid), str(src), str(dst), line))
+        if not stubs:
+            return 0, 0
+
+        src_path = dict(self.graph.conn.execute(
+            "SELECT node_id, path FROM node WHERE rev_id = ? AND path IS NOT NULL",
+            (rev_id,)).fetchall())
+
+        # Файловые узлы нужны для рёбер `imports`: `dead_code` считает входящие
+        # связи по файлу, и без них подключённый файл выглядел неподключённым —
+        # именно так живые модули попадали в приговор вместе с вызовами.
+        file_nodes = {str(path): str(node_id) for node_id, path in
+                      self.graph.conn.execute(
+                          "SELECT node_id, path FROM node WHERE rev_id = ?"
+                          " AND kind = 'file' AND path IS NOT NULL", (rev_id,))}
+
+        bound = ambiguous = 0
+        rows: list[tuple] = []
+        drop: list[str] = []
+        file_rows: list[tuple] = []
+        for importer in sorted(js_files):
+            try:
+                source = (self.cfg.root / importer).read_text(encoding="utf-8",
+                                                              errors="replace")
+            except OSError:
+                continue
+            imports = imports_js.parse_imports(source)
+            if not imports:
+                continue
+            for record in imports:
+                target = imports_js.resolve_module(
+                    importer, str(record.get("module") or ""), files)
+                if target is None:
+                    continue
+                src_file = file_nodes.get(importer)
+                dst_file = file_nodes.get(target)
+                if src_file and dst_file:
+                    file_rows.append((
+                        rev_id,
+                        util.stable_id(src_file, dst_file, "imports",
+                                       str(record.get("module"))),
+                        src_file, dst_file, "imports", "stated", importer, None,
+                        1.0, util.dumps(["imports_js"]),
+                        util.dumps({"module": record.get("module"),
+                                    "kind": record.get("kind")}),
+                        "import",
+                    ))
+                pairs = list(record.get("names") or [])
+                if record.get("default"):
+                    pairs.append(("default", str(record["default"])))
+                for imported, local in pairs:
+                    candidates = [item for item in by_name.get(str(imported), [])
+                                  if item[1] == target]
+                    if len(candidates) != 1:
+                        if len(candidates) > 1:
+                            ambiguous += 1
+                        continue
+                    node_id, _path = candidates[0]
+                    for edge_uid, src, _dst, line in stubs.get(str(local), []):
+                        if src_path.get(src) != importer:
+                            continue
+                        uid = util.stable_id(src, node_id, "calls", importer, str(local))
+                        rows.append((rev_id, uid, src, node_id, "calls", "derived",
+                                     importer, line, 0.9,
+                                     util.dumps(["tree-sitter", "imports_js"]),
+                                     util.dumps({"resolver": "import",
+                                                 "module": record.get("module")}),
+                                     "import"))
+                        drop.append(edge_uid)
+                        bound += 1
+        if drop:
+            self.graph.conn.executemany(
+                "DELETE FROM edge WHERE rev_id = ? AND edge_uid = ?",
+                [(rev_id, edge_uid) for edge_uid in drop])
+        if file_rows:
+            self.graph.conn.executemany(
+                "INSERT OR IGNORE INTO edge (rev_id, edge_uid, src, dst, kind,"
+                " provenance, evidence_path, evidence_line, confidence, sources,"
+                " props, evidence_kind) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", file_rows)
+        if rows:
+            self.graph.conn.executemany(
+                "INSERT OR IGNORE INTO edge (rev_id, edge_uid, src, dst, kind,"
+                " provenance, evidence_path, evidence_line, confidence, sources,"
+                " props, evidence_kind) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", rows)
+        self.graph.conn.commit()
+        return bound, ambiguous
+
     def _resolve_inheritance_names(self, rev_id: str) -> tuple[int, int]:
         """Разрешить рёбра наследования, ведущие на заглушки `@ext:…`.
 
@@ -1546,6 +1683,16 @@ class Indexer:
         и попытка подключиться к СУБД на каждой индексации была бы и медленной, и
         бессмысленной. Отсутствие базы — нормальное состояние, а не ошибка прогона.
         """
+        # Флаг корпуса спрашивается ПЕРВЫМ: до 22.11.2026 он читался в конфиг и
+        # не использовался нигде, поэтому `db: enabled: false` не выключал ничего,
+        # а сбор решался глобальным хранилищем доступа. Замер: на корпусе с
+        # выключенным флагом операция отдавала живую схему, а индексация
+        # сообщала «таблиц 0» — два разных ответа на один вопрос.
+        if not getattr(self.cfg.db, "enabled", False):
+            return {
+                "collected": False,
+                "reason": "структура баз выключена в конфиге корпуса (db.enabled: false)",
+            }
         try:
             from . import db_access as access_mod
 
@@ -2295,7 +2442,12 @@ class Indexer:
         """
         from .extract.generic import PROFILES
 
-        return {"php", "css", "html"} | set(PROFILES)
+        # `astro` — не профиль грамматики, а собственный извлекатель
+        # (`extract/astro.py`): frontmatter и `<script>` разбираются профилем
+        # TypeScript. Без этой строки файл шёл текстовым путём, и страницы
+        # сайта не давали ни одного символа (замер 22.11.2026: 4 файла в
+        # корпусе, узлов столько же, сколько у трёх).
+        return {"php", "css", "html", "astro"} | set(PROFILES)
 
     def _text_chunks(self, path: str, data: bytes, cfg: ProjectConfig,
                      lang: str | None = None) -> list[ChunkRec]:

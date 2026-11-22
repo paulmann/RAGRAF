@@ -144,7 +144,7 @@ try:
     # (цена и границы до старта, этап X5) и `contract_pin_status` /
     # `contract_pin_approve` (пиннинг подписи операций, этап X6):
     # действующее число — 74.
-    check(len(BUILD_OPS) == 76, "операций в сборке — 76 (как в документах текущего состояния)",
+    check(len(BUILD_OPS) == 87, "операций в сборке — 87 (как в документах текущего состояния)",
           str(len(BUILD_OPS)))
     ops_in_two = [op for op, names in edition.operations_index(BASE).items() if len(names) > 1]
     check(not ops_in_two, "ни одна операция не объявлена в двух возможностях", str(ops_in_two[:3]))
@@ -609,7 +609,10 @@ print(json.dumps(out, ensure_ascii=False))
               f"строка возможности {name} в EDITIONS-PRO.md одна и её статус = {status}",
               f"строк {rows_found}, статус в документе {row.group(1) if row else None}")
 
-    stated_enterprise = re.search(r"у \*\*enterprise\*\* действуют \*\*(\d+) возможностей\*\*",
+    # Формы слова разные: «21 возможность» — правильный русский, «14 возможностей» —
+    # тоже. Предмет проверки — ЧИСЛО, а не падеж, и прежний шаблон требовал ровно
+    # «возможностей», то есть валил документ за грамотную формулировку.
+    stated_enterprise = re.search(r"у \*\*enterprise\*\* действуют \*\*(\d+) возможност\w*\*\*",
                                   pro_text)
     check(stated_enterprise is not None and int(stated_enterprise.group(1)) == enterprise_count,
           "число возможностей enterprise в EDITIONS-PRO.md равно объявлению",
@@ -619,7 +622,7 @@ print(json.dumps(out, ensure_ascii=False))
     check(stated_pro is not None and int(stated_pro.group(1)) == pro_count,
           "число возможностей Pro в EDITIONS-PRO.md равно объявлению",
           f"документ {stated_pro.group(1) if stated_pro else None}, объявление {pro_count}")
-    check(f"**{pro_count} возможностей**" in delivery_text,
+    check(re.search(rf"\*\*{pro_count} возможност\w*\*\*", delivery_text) is not None,
           f"enterprise/PRO-TIER.md называет {pro_count} возможностей Pro")
     check(delivery_text.count("| `shared-index` | pro |") == 1,
           "в enterprise/PRO-TIER.md ровно одна строка shared-index",

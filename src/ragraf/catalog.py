@@ -65,6 +65,15 @@ LOCK_HEARTBEAT_SEC = 900.0
 # какие поля появились позже и требуют досчёта.
 CATALOG_VERSION = 1
 
+
+class CatalogError(RuntimeError):
+    """Реестр не годен: повреждён или не читается.
+
+    Отдельный вид ошибки, а не `ValueError`: вызывающий обязан показать причину
+    человеку и НЕ продолжать с пустым реестром — иначе 60 корпусов исчезают из
+    выдачи молча (дефект измерен 22.11.2026).
+    """
+
 # Ограничение на длину журнала прогонов в записи разработки: реестр должен
 # оставаться читаемым, а полная история прогонов есть в `.ragraf/logs`.
 MAX_RUNS = 20
@@ -225,7 +234,26 @@ class Catalog:
             raw.setdefault("version", CATALOG_VERSION)
             raw.setdefault("entries", {})
             if not isinstance(raw["entries"], dict):
-                raw["entries"] = {}
+                # До 22.11.2026 здесь стояло `raw["entries"] = {}`: файл с
+                # неверной формой молча превращался в пустой реестр, и все 60
+                # корпусов исчезали из выдачи без единого сообщения (дефект
+                # измерен на себе: ручная правка списка вместо словаря). Битый
+                # реестр — это потеря состояния, и она обязана быть видна.
+                broken = self.path.with_name(
+                    f"{self.path.name}.broken-{time.strftime('%Y%m%d-%H%M%S')}"
+                )
+                try:
+                    broken.write_bytes(self.path.read_bytes())
+                except OSError:
+                    broken = None
+                raise CatalogError(
+                    "реестр повреждён: поле entries не словарь — "
+                    f"{self.path}. Ожидался объект «имя корпуса → запись». "
+                    "Файл не изменён"
+                    + (f", копия для разбора: {broken}" if broken else "")
+                    + "; восстановление — `python tools/ragraf.py register -p <config>` "
+                      "для нужных корпусов, удалять реестр нельзя."
+                )
             self._data = raw
         return self._data
 
@@ -948,16 +976,45 @@ def _pid_alive(pid: int) -> bool:
 
         if sys.platform == "win32":
             import ctypes
+            from ctypes import wintypes
 
             PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
-            kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+            ERROR_ACCESS_DENIED = 5
+            ERROR_INVALID_PARAMETER = 87
+            STILL_ACTIVE = 259  # код выхода живого процесса
+            # use_last_error=True обязателен: без него get_last_error() не связан
+            # с этим вызовом и возвращает 0 — тогда «процесса нет» неотличимо от
+            # «не хватило прав». Замер 22.11.2026: несуществующий pid считался
+            # живым, брошенный замок не снимался.
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
+            kernel32.OpenProcess.restype = wintypes.HANDLE
+            kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
             handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, int(pid))
             if handle:
-                kernel32.CloseHandle(handle)
+                # Дескриптор ещё не доказывает жизнь: замер 22.11.2026 — для
+                # завершившихся pid 24500 и 49844 OpenProcess тоже дал дескриптор.
+                # Настоящий признак — код выхода STILL_ACTIVE.
+                try:
+                    code = wintypes.DWORD()
+                    kernel32.GetExitCodeProcess.argtypes = (
+                        wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD))
+                    if kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+                        return int(code.value) == STILL_ACTIVE
+                    # Код не прочитан: считаем неизвестностью, а не жизнью.
+                    return False
+                finally:
+                    kernel32.CloseHandle(handle)
+            error = int(ctypes.get_last_error() or 0)
+            if error == ERROR_ACCESS_DENIED:
+                # Дескриптор не выдан из-за прав: процесс существует и он чужой.
                 return True
-            # Дескриптор не получен: либо процесс завершился, либо прав не хватило.
-            # Ошибка доступа (5) — почти наверняка живой чужой процесс.
-            return int(ctypes.get_last_error() or 0) == 5
+            if error == ERROR_INVALID_PARAMETER:
+                # Такого pid нет — это и есть ответ.
+                return False
+            # Неизвестная ошибка: называем неизвестностью, а не жизнью. Ветка
+            # вызывающего (`lock_verdict`) трактует исключение как «unknown», и
+            # такой замок снимается штатной уборкой.
+            raise OSError(error, f"OpenProcess({pid}) не дал ответа: ошибка {error}")
         os.kill(int(pid), 0)
         return True
     except ProcessLookupError:
@@ -965,4 +1022,6 @@ def _pid_alive(pid: int) -> bool:
     except PermissionError:
         return True
     except Exception:
-        return True
+        # Неизвестность не равна жизни: раньше здесь возвращалось True, и любой
+        # сбой проверки оставлял брошенный замок навсегда.
+        return False

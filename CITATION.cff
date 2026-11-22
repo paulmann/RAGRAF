@@ -32,8 +32,8 @@ authors:
 repository-code: "https://github.com/paulmann/RAGRAF"
 url: "https://ragraf.ru"
 license: BUSL-1.1
-version: "0.11.0"
-date-released: "2026-11-07"
+version: "0.13.0"
+date-released: "2026-11-23"
 
 keywords:
   - code knowledge base

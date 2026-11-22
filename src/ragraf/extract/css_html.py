@@ -423,6 +423,8 @@ class MultiExtractor:
         self.php = PhpExtractor()
         self.css = CssExtractor()
         self.html = HtmlExtractor()
+        # Astro создаётся лениво: на корпусе без .astro парсер не нужен.
+        self.astro = None
         self._generic: dict[str, object] = {}
 
     # --- выбор языка ---
@@ -464,6 +466,14 @@ class MultiExtractor:
             return self.html.extract(path, data)
         if low.endswith((".php", ".phtml", ".inc")):
             return self.php.extract(path, data)
+        if low.endswith(".astro"):
+            # Astro: frontmatter и <script> разбираются профилем TypeScript,
+            # разметка остаётся разметкой (см. extract/astro.py).
+            if self.astro is None:
+                from .astro import AstroExtractor
+
+                self.astro = AstroExtractor()
+            return self.astro.extract(path, data)
         # Остальные языки — по профилю грамматики.
         lang = self.lang_for(path)
         extractor = self.generic_for(lang)

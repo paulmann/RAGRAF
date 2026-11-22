@@ -467,6 +467,26 @@ pattern = "src/ragraf/license_offline.py"
 state = "active"
 why = "закрытый модуль Enterprise: офлайн-лицензия и её выпуск. Объявлен в pro_only манифестов pro и enterprise"
 
+[[exclude]]
+pattern = "src/ragraf/facts.py"
+state = "active"
+why = "закрытый модуль Pro: память фактов (версии, срок жизни, запрет противоречий). Объявлен в pro_only манифеста enterprise; в фасаде вызывается только через `_feature_module`, поэтому без файла отвечает причиной"
+
+[[exclude]]
+pattern = "tests/test_facts.py"
+state = "active"
+why = "проверка закрытого модуля Pro: поднимает `ragraf.facts`, которого в Community нет"
+
+[[exclude]]
+pattern = "src/ragraf/skills_catalog.py"
+state = "active"
+why = "закрытый модуль Pro: каталог навыков (тело и справка по требованию). Тексты навыка (`docs/skills/**`) остаются в Community — платна служба, а не текст"
+
+[[exclude]]
+pattern = "tests/test_skills_catalog.py"
+state = "active"
+why = "проверка закрытого модуля Pro: поднимает `ragraf.skills_catalog`, которого в Community нет"
+
 
 
 
@@ -514,6 +534,16 @@ why = "проверка закрытого модуля: импортирует 
 pattern = "src/ragraf/contracts.py"
 state = "active"
 why = "закрытый модуль Enterprise: сверка замысла и кода по FQN (манифест, разрешение FQN, детектор дрейфа). Возвращается объявлением pro_only в manifest-enterprise.toml"
+
+[[exclude]]
+pattern = "src/ragraf/contract_diff.py"
+state = "active"
+why = "полезная нагрузка операции contract_diff (возможность contract-pin, издание enterprise): сравнение двух подписей по ключам ответа. Возвращается объявлением pro_only в manifest-enterprise.toml"
+
+[[exclude]]
+pattern = "tests/test_contract_pin.py"
+state = "active"
+why = "проверка закрытого слоя пиннинга: разделы загружают src/ragraf/contract_diff.py по пути, в Community файла нет — тест уезжает вместе с кодом, как tests/test_contracts.py"
 
 [[exclude]]
 pattern = "tests/test_contracts.py"
