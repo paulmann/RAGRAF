@@ -29,10 +29,12 @@ sys.path.insert(0, str(REPO / "src"))
 from ragraf import server_control  # noqa: E402
 
 failures = 0
+checks = 0
 
 
 def check(cond: bool, label: str, detail: str = "") -> None:
-    global failures
+    global failures, checks
+    checks += 1
     if cond:
         print(f"  [OK ] {label}")
     else:
@@ -95,11 +97,8 @@ def main() -> int:
 
     print()
     print("=" * 78)
-    if failures:
-        print(f"ИТОГ: провалов {failures}")
-        return 1
-    print("ИТОГ: все свойства выполнены")
-    return 0
+    print(f"ИТОГ: проверок {checks}: пройдено {checks - failures}, провалено {failures}")
+    return 0 if failures == 0 else 1
 
 
 if __name__ == "__main__":

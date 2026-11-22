@@ -350,7 +350,7 @@ def main() -> int:
 
     print()
     print("=" * 78)
-    print(f"ИТОГ: проверок {PASS}, успешно {PASS - FAIL}, провалов {FAIL}")
+    print(f"ИТОГ: проверок {PASS + FAIL}: пройдено {PASS}, провалено {FAIL}")
     print("=" * 78)
     return 0 if FAIL == 0 else 1
 

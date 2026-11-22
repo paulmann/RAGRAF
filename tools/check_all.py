@@ -437,10 +437,16 @@ def run_one(name: str, timeout: int) -> dict:
     match = re.search(r"пройдено[:\s]+(\d+)[^\n]*?провалено[:\s]+(\d+)", out)
     passed = int(match.group(1)) if match else 0
     failed = int(match.group(2)) if match else 0
+    # Контракт набора с раннером: код 0 И РАЗБИРАЕМЫЙ ИТОГ. Набор, который вышел
+    # с кодом 0, но не назвал ни одной проверки, ничего не проверил для сводки:
+    # раньше он печатался как «ok  0 пройдено, 0 провалено», и это читалось как
+    # успех (замер 22.11.2026: девять наборов, сто проверок невидимы).
+    silent = code == 0 and not timed_out and (passed + failed) == 0
     tail = [ln.strip() for ln in out.strip().splitlines() if ln.strip()]
     return {
         "name": name, "exit": code, "seconds": round(seconds, 2),
         "timed_out": timed_out, "passed": passed, "failed": failed,
+        "silent": silent,
         "summary": tail[-1][:100] if tail else "",
         "live_changed": live_changed,
         # Файлы, у которых сдвинулась только отметка времени: набор их не менял.
@@ -545,10 +551,12 @@ def main() -> int:
         results.append(result)
         if result["timed_out"]:
             flag = "ПРЕДЕЛ"
-        elif result["exit"] == 0:
-            flag = "ok"
-        else:
+        elif result["exit"] != 0:
             flag = f"ПРОВАЛ({result['exit']})"
+        elif result.get("silent"):
+            flag = "МОЛЧИТ"
+        else:
+            flag = "ok"
         print(f"  {flag:12} {name:42} {result['seconds']:7.1f} с  "
               f"{result['passed']} пройдено, {result['failed']} провалено",
               flush=True)
@@ -563,8 +571,9 @@ def main() -> int:
             # (долгоживущий MCP-сервер). Набору это не приписывается.
             print("      | отметка времени обновлена другим процессом: "
                   + ", ".join(result["live_touched"]))
-        if result["exit"] != 0:
+        if result["exit"] != 0 or result.get("silent"):
             # Хвост вывода провалившегося набора: без него причина не видна.
+            # Молчащий набор показывается по той же причине: искать формат итога.
             for line in (result.get("tail_output") or "").splitlines():
                 print(f"      | {line[:160]}")
 
@@ -573,8 +582,8 @@ def main() -> int:
                                        keep=bool(getattr(args, "keep_sandboxes", False)))
     if dropped or left:
         print(f"песочниц убрано: {dropped}" + (f", осталось: {left}" if left else ""))
-    ok = [r for r in results if r["exit"] == 0]
-    bad = [r for r in results if r["exit"] != 0]
+    ok = [r for r in results if r["exit"] == 0 and not r.get("silent")]
+    bad = [r for r in results if r["exit"] != 0 or r.get("silent")]
     checks_passed = sum(r["passed"] for r in results)
     checks_failed = sum(r["failed"] for r in results)
     print()
@@ -584,6 +593,10 @@ def main() -> int:
           f"{total_seconds:.1f} с")
     for result in bad:
         note = result["summary"] or ("предел времени" if result["timed_out"] else "")
+        if result.get("silent"):
+            note = ("набор вышел с кодом 0 и не назвал ни одной проверки: "
+                    "итог не разобран — печатайте строку "
+                    "«пройдено N … провалено M»; последняя строка: " + note)
         print(f"  ПРОВАЛ: {result['name']}: {note}")
     stale_states = [r["name"] for r in results if r.get("state_left")]
     if stale_states:

@@ -18,7 +18,7 @@
     результат Ok=$true при нулевом осмотре считается ложным PASS и валит прогон.
 
     Ожидаемый baseline на момент передачи проекта: 0 ошибок, 0 предупреждений,
-    49 проверок — ровно столько, сколько записей в реестре `$script:CheckFunctions`;
+    50 проверок — ровно столько, сколько записей в реестре `$script:CheckFunctions`;
     это сверяет Test-DocumentedNumbers. Прежние две ошибки («запись прогона в реестр
     не покрывала путь ensure» и «документы называли 18 и 16 инструментов там, где
     в коде 23») закрыты
@@ -4739,6 +4739,54 @@ function Test-ContractPinWiring {
     return Get-ProFeatureWiring -Feature 'contract-pin' -Name $name -Label 'пиннинга контракта'
 }
 
+function Test-TrapCatalog {
+    <#
+    .SYNOPSIS
+        Счёт ловушек сходится: шапка, оглавление и указатель называют одно число.
+
+    .DESCRIPTION
+        Измеренный дефект (22.11.2026): шапка `AGENTS-TRAPS.md` говорила «57 ловушек»,
+        оглавление уже шло 1–60, а `AGENTS.md` повторял «Список 57». Счёт не сверяла
+        ни одна проверка, поэтому тело файла пополнялось, а шапка и указатель
+        оставались прежними. Свойства проверяет `tools/check_trap_catalog.py`;
+        здесь — вызов и разбор, чтобы не держать второе правило.
+    #>
+    $checkName = 'trap catalogue names one number in header, contents and pointer'
+    $toolPath = Join-Path $script:ProjectRoot 'tools/check_trap_catalog.py'
+    if (-not (Test-Path -LiteralPath $toolPath)) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: нет tools/check_trap_catalog.py')
+    }
+
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $python) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: python не найден в PATH')
+    }
+
+    $output = & $python.Source $toolPath $script:ProjectRoot 2>&1
+    $code = $LASTEXITCODE
+    $text = ($output | Out-String).Trim()
+    Write-Host "    счёт ловушек: $text"
+
+    $examined = 0
+    $examinedMatch = [regex]::Match($text, 'осмотрено:\s*(\d+)')
+    if ($examinedMatch.Success) { $examined = [int]$examinedMatch.Groups[1].Value }
+
+    $problems = [System.Collections.Generic.List[string]]::new()
+    if ($code -ne 0) {
+        foreach ($line in @($output | Where-Object { $_ -is [string] })) {
+            if ($line -match '^\s*FAIL:') { $problems.Add(($line -replace '^\s*FAIL:\s*', '')) }
+        }
+        if ($problems.Count -eq 0) {
+            $problems.Add("проверка счёта ловушек завершилась кодом $code без расшифровки")
+        }
+    }
+
+    return New-CheckResult -Name $checkName -Ok ($problems.Count -eq 0) `
+        -Examined $examined -Details $problems.ToArray()
+}
+
 $script:CheckFunctions = @(
     'Test-ProjectLayout'
     'Test-SecretHygiene'
@@ -4789,6 +4837,7 @@ $script:CheckFunctions = @(
     'Test-ListItems'
     'Test-SettingsDeclaration'
     'Test-AgentIntegrations'
+    'Test-TrapCatalog'
 )
 
 $script:CheckNames = @()

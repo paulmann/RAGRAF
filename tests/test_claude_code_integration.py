@@ -492,7 +492,7 @@ def main() -> int:
 
     shutil.rmtree(base, ignore_errors=True)
     plugin_checks()
-    print(f"\nпроверок: {PASS + FAIL}, провалов: {FAIL}")
+    print(f"\nИТОГ: проверок {PASS + FAIL}: пройдено {PASS}, провалено {FAIL}")
     return 0 if FAIL == 0 else 1
 
 
