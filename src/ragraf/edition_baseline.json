@@ -240,6 +240,10 @@
       "status": "shipped",
       "operations": [
         "license_offline"
+      ],
+      "buyer_modes": [
+        "request",
+        "accept"
       ]
     },
     {

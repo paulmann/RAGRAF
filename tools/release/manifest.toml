@@ -468,6 +468,11 @@ state = "active"
 why = "закрытый модуль Enterprise: офлайн-лицензия и её выпуск. Объявлен в pro_only манифестов pro и enterprise"
 
 [[exclude]]
+pattern = "tools/offline_license.py"
+state = "active"
+why = "вход правообладателя (выпуск и перенос), а не покупателя: требует закрытого модуля src/ragraf/license_offline.py, которого в Community нет. Сторона покупателя живёт в базе: `ragraf edition --fingerprint`"
+
+[[exclude]]
 pattern = "src/ragraf/facts.py"
 state = "active"
 why = "закрытый модуль Pro: память фактов (версии, срок жизни, запрет противоречий). Объявлен в pro_only манифеста enterprise; в фасаде вызывается только через `_feature_module`, поэтому без файла отвечает причиной"
@@ -706,7 +711,11 @@ gate = "tools/Invoke-ProjectDoctrine.ps1"
 # 07.11.2026: 351 — добавлен tools/measure_contract_drift.py (замер выгоды
 # contract-drift: binds/resolved/unresolved, заменённые чтения, precision/recall
 # на planted). Класс `measure_` — замер, а не ворота.
-oneoff_shipped_now = 351
+# 22.11.2026: 350 — tools/offline_license.py выведен из поставки Community
+# правилом манифеста (вход правообладателя: требует закрытого модуля
+# src/ragraf/license_offline.py). Сторона покупателя живёт в базе:
+# `ragraf edition --fingerprint`.
+oneoff_shipped_now = 350
 note = """Разовый инструмент объявлен группой темы; класс рабочего определяется
 достижимостью от гейта, поэтому «рабочий по имени» невозможен по построению."""
 

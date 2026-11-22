@@ -180,7 +180,7 @@
 | подсказка «в каком конфиге дело» | `src/ragraf/facade.py:8296` |
 | отказ «индекса нет» | `src/ragraf/facade.py:8305` |
 | инструмент `ragraf_preflight` | `src/ragraf/mcp_server.py:742` |
-| флаг выборки в командной строке | `src/ragraf/cli.py:2822` |
+| флаг выборки в командной строке | `src/ragraf/cli.py:2840` |
 | набор проверок (34 свойства) | `tests/test_preflight.py` |
 | документ возможности | `docs/03_implementation/PREFLIGHT.md` |
 

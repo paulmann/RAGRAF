@@ -432,7 +432,7 @@ The project is built for concrete tasks, so architecture proposals get a hearing
 
 ## The project in numbers and the measured test bed
 
-Published figures (checked on 23.11.2026; index sizes from the active revision record): <!-- surface:figures -->**87 operations** on the facade, **94 MCP tools**, **26** CLI subcommands, **29** tree-parsed languages and **41** text-attached ones (including `document`), **87** data formats in the registry (61 languages, 9 document families, 10 data kinds, 4 without a parser)<!-- /surface:figures -->; the RAGRAF index itself — 1 002 files, 7 415 nodes and 104 556 edges (the snapshot is compared with the active revision record by `Test-DocumentedNumbers`: figures from a past revision raise a warning naming its `rev_id` and date, and at publication that is a refusal — `tools/release/gate_release.py`; the live figures come from `python tools/ragraf.py -p config/ragraf.yaml status`).
+Published figures (checked on 23.11.2026; index sizes from the active revision record): <!-- surface:figures -->**87 operations** on the facade, **94 MCP tools**, **26** CLI subcommands, **29** tree-parsed languages and **41** text-attached ones (including `document`), **87** data formats in the registry (61 languages, 9 document families, 10 data kinds, 4 without a parser)<!-- /surface:figures -->; the RAGRAF index itself — 1 002 files, 7 418 nodes and 104 668 edges (the snapshot is compared with the active revision record by `Test-DocumentedNumbers`: figures from a past revision raise a warning naming its `rev_id` and date, and at publication that is a refusal — `tools/release/gate_release.py`; the live figures come from `python tools/ragraf.py -p config/ragraf.yaml status`).
 
 **The test bed, depersonalised** (project names, paths and domains removed). The figures in this section are a **snapshot of 16.10.2026**, not the current state: at that moment the registry held **28 corpora, 25 indexed** — 10 with the CPG layer, 15 in `degraded` mode. For 16 of them the revision record was read the same day: **7 527 files, 94 528 symbols, 791 844 edges, 86 790 chunks**.
 
@@ -454,16 +454,19 @@ The full 16-row table, the depersonalisation rules and the counting caveat live 
 
 One delivery, two licence levels, three periods — monthly, yearly or perpetual.
 The invoice is issued by the sole proprietor (ИП) and paid by bank transfer; the
-site does not take card details. After payment you get an **activation key**, and
-`ragraf edition license-offline` turns it into a licence file **on your machine** —
-the site never signs a licence and never holds the signing key.
+site does not take card details. After payment you get an **activation key**: it
+proves the payment, it is not the licence. The licence file is signed by the rights
+holder and bound to your installation, so the version you run names itself first —
+`ragraf edition --fingerprint` works on every edition, Community included. The site
+never signs a licence and never holds the signing key.
 
 | Step | Where |
 |---|---|
 | Choose the edition and period | <https://ragraf.ru/pricing/> |
 | Pay the invoice | your bank, using the invoice PDF |
 | Take the key | <https://ragraf.ru/portal/> — sign-in by e-mail, no password |
-| Issue the licence | `ragraf edition license-offline` on your machine |
+| Name your installation | `ragraf edition --fingerprint` on your machine |
+| Get the licence file | from the rights holder, bound to that fingerprint |
 
 **State today:** `PAYMENTS_MODE=off` — the site does not issue invoices
 automatically yet, and honestly says "under an agreement" instead of showing a

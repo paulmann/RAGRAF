@@ -43,14 +43,21 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import pathlib
+import platform
+import socket
 import time
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
 from . import paths, signing, util
+
+#: Схема отпечатка установки. Одна для заявки и для лицензии: две значили бы
+#: вторую правду о том, чем установка себя называет.
+INSTALL_SCHEMA = 1
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 BASE_DIR = pathlib.Path(__file__).resolve().parent
@@ -281,6 +288,70 @@ def rank(baseline: dict[str, Any], name: str) -> int:
 
 def feature_index(baseline: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return {str(item["name"]): item for item in baseline.get("features") or []}
+
+
+# ---------------------------------------------------------------------------
+# Отпечаток установки — СТОРОНА ПОКУПАТЕЛЯ
+#
+# Почему это живёт в базовом слое, а не в `license_offline.py`. Отпечаток — это
+# то, чем покупатель называет себя правообладателю, чтобы получить купленную
+# лицензию. Пока он считался только в закрытом модуле, сборка Community не могла
+# назвать свой отпечаток: `license_offline.py` в неё не входит, а `license_offline`
+# как операция отказывала по изданию. Покупка была невыполнима кодом — измерено
+# 22.11.2026: чтобы получить платное издание, требовалось уже иметь его.
+#
+# Граница: база умеет СКАЗАТЬ отпечаток и ПРОЧИТАТЬ подписанный файл
+# (`read_license`), но не подписать его. Выпуск и перенос остаются в закрытом
+# модуле: подпись — это и есть платное, а не имя установки.
+
+
+def canonical(payload: dict[str, Any]) -> bytes:
+    """Каноническая запись объекта: от неё считаются `request_id` и подпись."""
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True,
+                      separators=(",", ":")).encode("utf-8")
+
+
+def digest_of(payload: dict[str, Any]) -> str:
+    return hashlib.sha256(canonical(payload)).hexdigest()
+
+
+def product_version() -> str:
+    """Версия продукта. Нет версии — не повод падать: отпечаток её назовёт."""
+    try:
+        from . import __version__ as value
+
+        return str(value)
+    except Exception:  # noqa: BLE001 — версия нужна для отчёта, а не для работы
+        return "0.0.0"
+
+
+def root_digest(root: str | pathlib.Path | None = None) -> str:
+    """Хэш корневого каталога установки.
+
+    Каталог входит хэшем, а не путём: файл лицензии уезжает на другую машину и не
+    должен нести машино-локальный путь. Регистр на Windows понижается: файловая
+    система там регистронезависима, и `C:/Apps/RAGRAF` с `c:/apps/ragraf` — одна
+    установка.
+    """
+    path = pathlib.Path(root or REPO).resolve()
+    text = path.as_posix()
+    if platform.system() == "Windows":
+        text = text.lower()
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def install_fingerprint(*, root: str | pathlib.Path | None = None,
+                        host: str | None = None,
+                        version: str | None = None) -> dict[str, Any]:
+    """Отпечаток установки: продукт, версия, хост, вид машины, хэш корня."""
+    core = {
+        "product": "ragraf",
+        "version": str(version or product_version()),
+        "host": str(socket.gethostname() if host is None else host),
+        "machine": f"{platform.system()}/{platform.machine()}",
+        "root_digest": root_digest(root),
+    }
+    return {"schema": INSTALL_SCHEMA, **core, "digest": digest_of(core)}
 
 
 def operations_index(baseline: dict[str, Any]) -> dict[str, list[str]]:
@@ -546,16 +617,27 @@ class EditionState:
         item = feature_index(self._baseline).get(feature) or {}
         return str(item.get("edition") or "")
 
-    def decide(self, operation: str) -> dict[str, Any]:
+    def decide(self, operation: str, mode: str = "") -> dict[str, Any]:
         """Разрешена ли операция. Возвращает решение с причиной в любом случае.
 
         Причина нужна и при разрешении: она попадает в отчёт и объясняет,
         ПОЧЕМУ операция доступна (`feature`), а не оставляет читателя
         догадываться.
+
+        `mode` нужен там, где одна операция держит ДВЕ СТОРОНЫ одной сделки.
+        Офлайн-лицензия — ровно такой случай: `issue` и `transfer` выпускает
+        правообладатель (закрытый контур), а `request` и `accept` выполняет
+        ПОКУПАТЕЛЬ на своей установке. Гейт по одному имени операции требовал
+        платного издания, чтобы получить платное издание: отпечаток установки
+        называет `request`, и на Community покупатель не мог его назвать.
+        Замер 22.11.2026: заявка на покупку была невыполнима кодом. Сторона
+        покупателя названа в ДАННЫХ (`buyer_modes`), а не выведена здесь по
+        имени операции: второй такой операции имя не поможет.
         """
         op = str(operation or "").strip()
         if op.startswith("op_"):
             op = op[3:]
+        wanted = str(mode or "").strip().lower()
         if not self.resolved:
             return {
                 "allowed": False,
@@ -577,6 +659,24 @@ class EditionState:
                 "requires_edition": None,
             }
         available = set(self.features)
+        if wanted:
+            for name in claims:
+                feature = feature_index(self._baseline).get(name) or {}
+                buyer_modes = [str(x).strip().lower()
+                               for x in (feature.get("buyer_modes") or [])]
+                if wanted in buyer_modes:
+                    return {
+                        "allowed": True,
+                        "operation": op,
+                        "reason": (
+                            f"режим «{wanted}» — сторона покупателя возможности "
+                            f"«{name}»: он выполняется на любой установке, "
+                            "издание открывает сторону правообладателя"
+                        ),
+                        "feature": None,
+                        "requires_edition": None,
+                        "buyer_side": True,
+                    }
         for name in claims:
             if name in available:
                 return {

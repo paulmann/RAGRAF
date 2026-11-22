@@ -2502,6 +2502,24 @@ def cmd_edition(args: argparse.Namespace) -> int:
     """
     from . import edition as edition_mod
 
+    # Отпечаток установки — сторона покупателя, и она НЕ гейтована изданием:
+    # этим установка называет себя, чтобы получить купленную лицензию. Требовать
+    # платное издание, чтобы попросить платное издание, — замкнутый круг
+    # (измерено 22.11.2026). Подпись остаётся в закрытом модуле.
+    if getattr(args, "fingerprint", False):
+        install = edition_mod.install_fingerprint()
+        text = json.dumps(install, ensure_ascii=False, indent=2)
+        target = str(getattr(args, "out", "") or "").strip()
+        if target:
+            path = Path(target)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text + "\n", encoding="utf-8", newline="\n")
+            print(f"отпечаток записан: {path}")
+            print(f"digest: {install['digest']}")
+        else:
+            print(text)
+        return EXIT_OK
+
     declared = (args.declared or "").strip() or None
     state = edition_mod.resolve(
         declared=declared,
@@ -3167,6 +3185,11 @@ def build_parser() -> argparse.ArgumentParser:
     ped.add_argument("--public-key", default=None,
                      help="доверенный открытый ключ лицензии (base64); "
                           "\"-\" — не доверять ни одному ключу")
+    ped.add_argument("--fingerprint", action="store_true",
+                     help="отпечаток установки для заявки на лицензию "
+                          "(работает на любом издании, включая Community)")
+    ped.add_argument("--out", default="",
+                     help="edition --fingerprint: записать отпечаток в файл")
     # --json здесь НЕ объявляется: он уже есть у главного разбора, а значение
     # подпарсера перебило бы его, и машиночитаемый вывод молча не включался.
     ped.set_defaults(func=cmd_edition, needs_config=False)

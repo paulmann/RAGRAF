@@ -413,7 +413,7 @@ python tools/ragraf.py ensure .
 
 ## 用数字看项目与实测基准
 
-公开发表的数字（2026-11-23 核对；索引规模取自活动修订记录）：<!-- surface:figures -->外观上的 **87 个操作**、**94 个 MCP 工具**、**26** 个 CLI 子命令、**29** 种语法树语言与 **41** 种文本接入语言（包括 `document`）、登记表中 **87** 种数据格式（61 种语言、9 类文档家族、10 类数据、4 种无解析器）<!-- /surface:figures -->；RAGRAF 自身索引—— 1 002 个文件、7 415 个节点、104 556 条边（快照由 `Test-DocumentedNumbers` 与活动修订记录比对：属于过去修订的数字会给出带其 `rev_id` 与日期的警告，而在发布时这就是拒绝——`tools/release/gate_release.py`；活动数字来自 `python tools/ragraf.py -p config/ragraf.yaml status`）。
+公开发表的数字（2026-11-23 核对；索引规模取自活动修订记录）：<!-- surface:figures -->外观上的 **87 个操作**、**94 个 MCP 工具**、**26** 个 CLI 子命令、**29** 种语法树语言与 **41** 种文本接入语言（包括 `document`）、登记表中 **87** 种数据格式（61 种语言、9 类文档家族、10 类数据、4 种无解析器）<!-- /surface:figures -->；RAGRAF 自身索引—— 1 002 个文件、7 418 个节点、104 668 条边（快照由 `Test-DocumentedNumbers` 与活动修订记录比对：属于过去修订的数字会给出带其 `rev_id` 与日期的警告，而在发布时这就是拒绝——`tools/release/gate_release.py`；活动数字来自 `python tools/ragraf.py -p config/ragraf.yaml status`）。
 
 **试验场，已去个人化**（去掉项目名、路径和域名）。本节的数字是 **2026-10-16 的快照**，不是当前状态：当时登记册里有 **28 个语料、25 个已索引**—— 10 个带 CPG 层，15 个处于 `degraded` 模式。其中 16 个的修订记录在同一天读过：**7 527 个文件、94 528 个符号、791 844 条边、86 790 个分块**。
 
@@ -435,7 +435,8 @@ python tools/ragraf.py ensure .
 
 同一套产品，两个许可证级别，三种周期——月、年或永久。发票由个体经营者
 开具，通过银行转账支付；网站不接收银行卡信息。付款后获得**激活密钥**，
-`ragraf edition license-offline` 会在**您自己的机器上**把它变成许可证文件：
+它证明已付款，但它本身不是许可证。许可证文件由权利人签署，并与安装绑定，所以您的
+安装先要自报身份：`ragraf edition --fingerprint` 在任何级别都可用，包括 Community。
 网站从不签署许可证，也不持有签名密钥。
 
 | 步骤 | 位置 |
@@ -443,7 +444,8 @@ python tools/ragraf.py ensure .
 | 选择版本与周期 | <https://ragraf.ru/pricing/> |
 | 支付发票 | 用您的银行，按发票 PDF 转账 |
 | 领取密钥 | <https://ragraf.ru/portal/> — 电子邮件登录，无需密码 |
-| 生成许可证 | 在您的机器上运行 `ragraf edition license-offline` |
+| 报出安装身份 | 在您的机器上运行 `ragraf edition --fingerprint` |
+| 取得许可证文件 | 由权利人提供，与该指纹绑定 |
 
 **当前状态：** `PAYMENTS_MODE=off`——网站暂不自动开票，会如实写「面议」而不是
 显示价格。请写信到 `SUPPORT.md` 中的地址，我们会手工开票。

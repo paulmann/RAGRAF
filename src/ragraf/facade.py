@@ -1091,10 +1091,10 @@ class Facade:
             setattr(self, name, self._wrap_edition(name, method))
 
     def _wrap_edition(self, name: str, method):
-        """Обёртка одной операции: сначала издание, потом работа."""
-
+        """Обёртка операции: сначала издание, потом работа (режим — из именованного `mode`: у офлайн-лицензии две стороны, и заявка покупателя не требует платного издания)."""
         def wrapped(*args, **kwargs):
-            decision = self.edition_state().decide(name[3:])
+            decision = self.edition_state().decide(
+                name[3:], mode=str(kwargs.get("mode") or ""))
             if decision.get("allowed"):
                 return method(*args, **kwargs)
             return self._edition_refusal(name, decision)
