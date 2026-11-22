@@ -419,7 +419,7 @@ El proyecto se construye para tareas concretas, por eso las propuestas de arquit
 
 ## El proyecto en cifras y el banco de pruebas medido
 
-Cifras publicadas (comprobadas el 23.11.2026; tamaños del índice según la entrada de la revisión activa): <!-- surface:figures -->**87 operaciones** en la fachada, **94 herramientas MCP**, **26** subcomandos de CLI, **29** lenguajes analizados por árbol y **41** conectados como texto (incluido `document`), **87** formatos de datos en el registro (61 lenguajes, 9 familias de documentos, 10 tipos de datos, 4 sin analizador)<!-- /surface:figures -->; el índice propio de RAGRAF — 1 002 archivos, 7 418 nodos y 104 668 aristas (el retrato se compara con la entrada de revisión activa mediante `Test-DocumentedNumbers`: las cifras de una revisión pasada producen un aviso que nombra su `rev_id` y su fecha, y en la publicación eso es una negativa — `tools/release/gate_release.py`; las cifras vivas salen de `python tools/ragraf.py -p config/ragraf.yaml status`).
+Cifras publicadas (comprobadas el 23.11.2026; tamaños del índice según la entrada de la revisión activa): <!-- surface:figures -->**87 operaciones** en la fachada, **94 herramientas MCP**, **26** subcomandos de CLI, **29** lenguajes analizados por árbol y **41** conectados como texto (incluido `document`), **87** formatos de datos en el registro (61 lenguajes, 9 familias de documentos, 10 tipos de datos, 4 sin analizador)<!-- /surface:figures -->; el índice propio de RAGRAF — 1 002 archivos, 7 418 nodos y 104 687 aristas (el retrato se compara con la entrada de revisión activa mediante `Test-DocumentedNumbers`: las cifras de una revisión pasada producen un aviso que nombra su `rev_id` y su fecha, y en la publicación eso es una negativa — `tools/release/gate_release.py`; las cifras vivas salen de `python tools/ragraf.py -p config/ragraf.yaml status`).
 
 **El banco de pruebas, anonimizado** (nombres de proyecto, rutas y dominios eliminados). Las cifras de esta sección son un **retrato del 16.10.2026**, no el estado actual: en ese momento el registro tenía **28 corpus, 25 indexados** — 10 con la capa CPG, 15 en modo `degraded`. Para 16 de ellos la entrada de revisión se leyó el mismo día: **7 527 archivos, 94 528 símbolos, 791 844 aristas, 86 790 fragmentos**.
 
@@ -445,7 +445,7 @@ sitio no acepta datos de tarjeta. Tras el pago se entrega una **clave de
 activación**: confirma el pago, pero no es la licencia. El archivo de licencia lo
 firma el titular de los derechos y va ligado a la instalación, así que su instalación
 se nombra primero: `ragraf edition --fingerprint` funciona en cualquier nivel,
-Community incluido. El sitio nunca firma una licencia ni guarda la clave de firma.
+Community incluido. Sin el `edition.pub` de confianza la licencia se lee como `untrusted`: la firmaprueba la integridad, la clave el autor. El sitio nunca firma una licencia ni guarda la clave de firma.
 
 | Paso | Dónde |
 |---|---|
@@ -453,7 +453,7 @@ Community incluido. El sitio nunca firma una licencia ni guarda la clave de firm
 | Pagar la factura | su banco, con el PDF de la factura |
 | Recoger la clave | <https://ragraf.ru/portal/> — acceso por correo, sin contraseña |
 | Nombrar la instalación | `ragraf edition --fingerprint` en su máquina |
-| Recibir el archivo de licencia | del titular, ligado a esa huella |
+| Recibir los archivos de licencia | del titular: `edition.license`, su `.sig` y el `edition.pub` de confianza — los tres al catálogo de estado |
 
 **Estado actual:** `PAYMENTS_MODE=off` — el sitio aún no emite facturas
 automáticamente y dice con honestidad «según acuerdo» en lugar de mostrar un

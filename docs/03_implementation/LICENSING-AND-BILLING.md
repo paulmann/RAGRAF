@@ -71,9 +71,15 @@ python tools/offline_license.py --mode request --install fingerprint.json \
 python tools/offline_license.py --mode issue --request request.json \
   --out edition.license            # ключ подписи — только у правообладателя
 
-# 3. покупатель: положить файл на место и посмотреть, что открылось
+# 3. покупатель: положить файлы на место и посмотреть, что открылось
 ragraf edition --license edition.license
 ```
+
+Файлов **три**: `edition.license`, `edition.license.sig` и доверенный `edition.pub`.
+Подпись без доверенного ключа доказывает только целостность файла, поэтому без
+`edition.pub` продукт честно отвечает `лицензия: untrusted` — «авторство не
+подтверждено, платное издание не действует» (замер 22.11.2026 на чистой установке из
+архива 0.13.1). Ключ публичный: он и должен ехать к покупателю вместе с лицензией.
 
 Два свойства, которые нельзя нарушать молча (проверка —
 `tests/test_offline_attest.py`):

@@ -419,7 +419,7 @@ Das Projekt wird für konkrete Aufgaben entwickelt, deshalb werden Vorschläge z
 
 ## Das Projekt in Zahlen und der gemessene Prüfstand
 
-Die veröffentlichten Zahlen (abgeglichen am 23.11.2026; die Größen des Index — nach dem Eintrag der aktiven Revision): <!-- surface:figures -->**87 Operationen** der Fassade, **94 MCP-Werkzeuge**, **26** CLI-Unterbefehle, **29** Sprachen über den Syntaxbaum und **41** als Text (einschließlich `document`), **87** Datenformate im Register (61 Sprachen, 9 Familien von Dokumenten, 10 Arten von Daten, 4 ohne Parser)<!-- /surface:figures -->; der eigene Index von RAGRAF — 1 002 Dateien, 7 418 Knoten und 104 668 Kanten (der Stand wird mit dem aktiven Revisionseintrag durch die Prüfung `Test-DocumentedNumbers` abgeglichen — Zahlen einer vergangenen Revision ergeben eine Warnung mit ihrer `rev_id` und ihrem Datum, bei der Veröffentlichung ist das eine Ablehnung: `tools/release/gate_release.py`; die geltenden Zahlen — `python tools/ragraf.py -p config/ragraf.yaml status`).
+Die veröffentlichten Zahlen (abgeglichen am 23.11.2026; die Größen des Index — nach dem Eintrag der aktiven Revision): <!-- surface:figures -->**87 Operationen** der Fassade, **94 MCP-Werkzeuge**, **26** CLI-Unterbefehle, **29** Sprachen über den Syntaxbaum und **41** als Text (einschließlich `document`), **87** Datenformate im Register (61 Sprachen, 9 Familien von Dokumenten, 10 Arten von Daten, 4 ohne Parser)<!-- /surface:figures -->; der eigene Index von RAGRAF — 1 002 Dateien, 7 418 Knoten und 104 687 Kanten (der Stand wird mit dem aktiven Revisionseintrag durch die Prüfung `Test-DocumentedNumbers` abgeglichen — Zahlen einer vergangenen Revision ergeben eine Warnung mit ihrer `rev_id` und ihrem Datum, bei der Veröffentlichung ist das eine Ablehnung: `tools/release/gate_release.py`; die geltenden Zahlen — `python tools/ragraf.py -p config/ragraf.yaml status`).
 
 **Der Prüfstand, entpersonalisiert** (Namen der Projekte, Pfade und Domänen sind verborgen). Die Zahlen dieses Abschnitts sind eine **Momentaufnahme vom 16.10.2026**, nicht der heutige Zustand: zu jenem Zeitpunkt standen **28 Korpora im Register, 25 indiziert** — 10 mit der CPG-Schicht, 15 im Modus `degraded`. Bei 16 von ihnen wurde der Revisionseintrag am selben Tag gelesen: **7 527 Dateien, 94 528 Symbole, 791 844 Kanten, 86 790 Chunks**.
 
@@ -445,8 +445,9 @@ Kartendaten nimmt die Website nicht entgegen. Nach der Zahlung gibt es einen
 **Aktivierungsschlüssel**: er belegt die Zahlung, ist aber keine Lizenz. Die
 Lizenzdatei signiert der Rechteinhaber, und sie ist an die Installation gebunden —
 deshalb nennt sich Ihre Installation zuerst selbst: `ragraf edition --fingerprint`
-funktioniert in jeder Edition, auch Community. Die Website signiert keine Lizenz und
-hält den Signaturschlüssel nicht.
+funktioniert in jeder Edition, auch Community. Ohne vertrauenswürdiges `edition.pub` liest sich eine Lizenz als `untrusted`:
+die Signatur belegt Integrität, der Schlüssel die Urheberschaft. Die Website
+signiert keine Lizenz und hält den Signaturschlüssel nicht.
 
 | Schritt | Wo |
 |---|---|
@@ -454,7 +455,7 @@ hält den Signaturschlüssel nicht.
 | Rechnung bezahlen | Ihre Bank, mit dem PDF aus der Rechnung |
 | Schlüssel abholen | <https://ragraf.ru/portal/> — Anmeldung per E-Mail, ohne Passwort |
 | Installation benennen | `ragraf edition --fingerprint` auf Ihrem Rechner |
-| Lizenzdatei erhalten | vom Rechteinhaber, an diesen Fingerabdruck gebunden |
+| Lizenzdateien erhalten | vom Rechteinhaber: `edition.license`, deren `.sig` und das vertrauenswürdige `edition.pub` — alle drei in den Zustandskatalog |
 
 **Stand heute:** `PAYMENTS_MODE=off` — die Website stellt noch keine Rechnungen
 automatisch aus und sagt ehrlich „nach Vereinbarung“, statt einen Preis zu zeigen.
