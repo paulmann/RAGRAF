@@ -639,7 +639,14 @@ if n_cur == 0:
               f" изоляция ревизий проверяется на {schema_rev}:"
               f" таблиц {int(row['c'])}. Пустота названа в ответе:"
               " db_schema → info.collected=false")
-check(n_cur > 0 or schema_rev != active_rev,
+synthetic = False
+if n_cur == 0 and schema_rev == active_rev:
+    # Живого слоя нет ни у одной ревизии: корпус собран с выключенным доступом к базам, а
+    # прежние ревизии с ним удалены. Свойство изоляции ревизий от этого не исчезает —
+    # набор строит слой сам и проверяет его на своей базе.
+    synthetic = True
+    print("  ! живого слоя баз в корпусе нет (db.enabled=false): слой строится в наборе")
+check(n_cur > 0 or schema_rev != active_rev or synthetic,
       "живой слой есть у активной ревизии либо у предыдущей (иначе проверять нечего)",
       f"активная {active_rev}: строк {n_cur}, образец {schema_rev}")
 
@@ -656,41 +663,66 @@ check(op_names == sql_names,
 tmpdir = pathlib.Path(tempfile.mkdtemp(prefix="i40-live-",
                                       dir=str(REPO / ".ragraf" / "tmp")))
 tmp_path = tmpdir / "two-revs.sqlite"
+clean_path = tmpdir / "two-revs-clean.sqlite"
 try:
     t = sqlite3.connect(f"file:{tmp_path}?mode=rwc", uri=True)
     t.row_factory = sqlite3.Row
     # DDL берётся из одного места (`db_writer.DB_LIVE_DDL`), а не копируется в тест:
     # второй схемы быть не должно.
     t.executescript(db_writer.DB_LIVE_DDL)
-    t.execute(f"ATTACH DATABASE 'file:{graph_path.as_posix()}?mode=ro' AS src")
-    for name in LIVE_TABLES:
-        t.execute(f"INSERT INTO {name} SELECT * FROM src.{name} WHERE rev_id = ?",
-                  (schema_rev,))
+    if synthetic:
+        # Синтетический слой: имена совпадают с теми, что запрашивают проверки ниже
+        # (`users`), чтобы свойство проверялось на реальном пути ответа.
+        for db_name, table in (("shop", "users"), ("shop", "orders"), ("crm", "clients")):
+            table_id = f"tbl-{db_name}-{table}"
+            t.execute(
+                "INSERT INTO db_live_table(rev_id, database_name, table_name, table_id, kind,"
+                " engine, row_estimate, data_bytes, index_bytes, comment)"
+                " VALUES(?,?,?,?, 'table', 'InnoDB', 100, 1024, 512, '')",
+                (rev, db_name, table, table_id))
+            for ordinal, column in enumerate(("id", "email", "created_at")):
+                t.execute(
+                    "INSERT INTO db_live_column(rev_id, table_id, column_name, data_type, ordinal)"
+                    " VALUES(?,?,?,?,?)",
+                    (rev, table_id, column, "text", ordinal + 1))
+        t.commit()
+        # Образец для приманки — та же ревизия, что наполнили.
+        schema_rev = rev
+    if not synthetic:
+        t.execute(f"ATTACH DATABASE 'file:{graph_path.as_posix()}?mode=ro' AS src")
+    if not synthetic:
+        for name in LIVE_TABLES:
+            t.execute(f"INSERT INTO {name} SELECT * FROM src.{name} WHERE rev_id = ?",
+                      (schema_rev,))
     # ПРИМАНКА: то же самое под чужой ревизией — шире по составу, с другим
     # размером и с колонками `__decoy`.
     t.execute(
         "INSERT INTO db_live_table(rev_id, database_name, table_name, table_id, kind,"
         " engine, row_estimate, data_bytes, index_bytes, comment)"
         " SELECT ?, database_name, table_name, table_id, kind, engine, 999999, 1, 1,"
-        " 'ПРИМАНКА' FROM src.db_live_table WHERE rev_id = ?", (DECOY, rev))
+        " 'ПРИМАНКА' FROM db_live_table WHERE rev_id = ?", (DECOY, schema_rev))
     t.execute(
         "INSERT INTO db_live_column(rev_id, table_id, column_name, data_type, ordinal)"
         " SELECT ?, table_id, column_name || '__decoy', 'text', 999"
-        " FROM src.db_live_column WHERE rev_id = ?", (DECOY, schema_rev))
+        " FROM db_live_column WHERE rev_id = ?", (DECOY, schema_rev))
     t.execute(
         "INSERT INTO db_live_index(rev_id, table_id, index_name, unique_flag,"
         " index_type, columns) SELECT ?, table_id, index_name || '__decoy', 0,"
-        " 'BTREE', '[]' FROM src.db_live_index WHERE rev_id = ?", (DECOY, rev))
+        " 'BTREE', '[]' FROM db_live_index WHERE rev_id = ?", (DECOY, schema_rev))
     t.execute(
         "INSERT INTO db_live_relation(rev_id, from_table, from_column, to_database,"
         " to_table, to_column, kind, confidence, note, from_database)"
         " SELECT ?, from_table, from_column, to_database, to_table, to_column,"
-        " 'stated', 1.0, 'ПРИМАНКА', from_database FROM src.db_live_relation"
+        " 'stated', 1.0, 'ПРИМАНКА', from_database FROM db_live_relation"
         " WHERE rev_id = ?", (DECOY, schema_rev))
     t.execute(
         "INSERT OR REPLACE INTO db_live_meta(rev_id, dialect, via, databases, tables)"
         " VALUES(?, 'mysql', 'ПРИМАНКА', 99, 999)", (DECOY,))
     t.commit()
+    if synthetic:
+        # Копия БЕЗ приманки: сравнивать ответы надо с ней, живая база при синтетическом
+        # слое пуста, и сравнение с ней проверяло бы наличие данных, а не изоляцию ревизий.
+        clean_path.write_bytes(tmp_path.read_bytes())
     n_all = t.execute("SELECT COUNT(*) AS c FROM db_live_table").fetchone()["c"]
     n_all_cols = t.execute("SELECT COUNT(*) AS c FROM db_live_column").fetchone()["c"]
     n_cur_cols = t.execute(
@@ -699,7 +731,8 @@ try:
     check(n_all > n_cur and n_all_cols > n_cur_cols,
           "приманка записана: без ограничения rev_id строк больше",
           f"таблиц {n_all} против {n_cur}, колонок {n_all_cols} против {n_cur_cols}")
-    tid_row = real.execute(
+    tid_source = t if synthetic else real
+    tid_row = tid_source.execute(
         "SELECT table_id FROM db_live_column WHERE rev_id = ? LIMIT 1",
         (schema_rev,)).fetchone()
     tid = str(tid_row["table_id"]) if tid_row else ""
@@ -714,6 +747,7 @@ try:
     t.close()
 
     temp = _ro(tmp_path)
+    compare = _ro(clean_path) if synthetic and clean_path.is_file() else real
     for label, call in (
         ("db_schema", lambda c_: db_ops.schema(c_, rev, limit=500)),
         ("db_table", lambda c_: db_ops.table_detail(c_, rev, "users")),
@@ -722,12 +756,14 @@ try:
         ("db_drift", lambda c_: db_ops.drift(c_, rev, "rev-0001")),
     ):
         try:
-            same_answer = call(temp) == call(real)
+            same_answer = call(temp) == call(compare)
         except Exception as exc:  # noqa: BLE001 — отказ тоже провал проверки
             same_answer = False
             print(f"  ! {label}: исключение {exc}")
         check(same_answer, f"{label}: ответ по базе с приманкой тот же", label)
     temp.close()
+    if compare is not real:
+        compare.close()
 finally:
     real.close()
     shutil.rmtree(tmpdir, ignore_errors=True)

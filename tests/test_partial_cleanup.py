@@ -98,6 +98,20 @@ def main() -> int:
         check(before.get(first.rev_id) == after.get(first.rev_id),
               f"закреплённая ревизия потеряла узлы: {before.get(first.rev_id)} → {after.get(first.rev_id)}")
 
+        # Запись ревизии тоже уходит: иначе план вечно обещает удалить то, чего нет.
+        conn = sqlite3.connect(cfg.graph_db)
+        try:
+            states = dict(conn.execute("SELECT rev_id, state FROM rev").fetchall())
+        finally:
+            conn.close()
+        check(second.rev_id not in states,
+              f"запись прерванной ревизии осталась в rev: {states}")
+        check(states.get(first.rev_id) == "ready",
+              f"запись закреплённой ревизии потеряна или изменилась: {states}")
+        plan_after = storage_mod.plan(cfg)
+        check(not (plan_after.get("revisions_unsealed") or []),
+              f"план после уборки снова называет незапечатанные: {plan_after.get('revisions_unsealed')}")
+
     if problems:
         for problem in problems:
             print(f"FAIL: {problem}")

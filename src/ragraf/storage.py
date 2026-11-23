@@ -708,6 +708,26 @@ def apply(
     }
 
     removed_rows = _purge_revisions(cfg, orphan_ids, progress=progress)
+    # Записи незапечатанных ревизий удаляются отдельно: строк у них уже может не быть, и
+    # тогда в `orphan_ids` они не попадают, оставаясь вечным «мусором» в плане.
+    unsealed_ids = [str(x) for x in (current.get("revisions_unsealed") or [])]
+    if active and active in unsealed_ids:
+        raise StoragePolicyError(
+            f"активная ревизия {active} названа незапечатанной: план неверен, ничего не удалено"
+        )
+    if unsealed_ids:
+        conn = store_mod.connect(cfg.graph_db)
+        try:
+            if store_mod.table_exists(conn, "rev"):
+                marks = ",".join("?" for _ in unsealed_ids)
+                cur = conn.execute(
+                    f"DELETE FROM rev WHERE rev_id IN ({marks}) AND state != 'ready'", unsealed_ids)
+                removed_rows.setdefault("graph", {})["rev"] = int(cur.rowcount or 0)
+                conn.commit()
+        except sqlite3.Error as exc:
+            raise StoragePolicyError(f"записи незапечатанных ревизий не удалены: {exc}") from exc
+        finally:
+            conn.close()
     cpg_removed = {"bins": 0, "workspaces": 0, "exports": 0, "bytes": 0}
     if remove_cpg:
         cpg_removed = _remove_cpg_artifacts(cfg, set(current["cpg"]["keep_revs"]))
@@ -858,6 +878,17 @@ def _purge_revisions(cfg: ProjectConfig, revs: list[str], *, batch: int = 25,
                         continue
                     if cur.rowcount and cur.rowcount > 0:
                         counters[table] = counters.get(table, 0) + int(cur.rowcount)
+                # Запись ревизии удаляется вместе с данными: иначе `plan` снова и снова
+                # называет её сиротой, хотя удалять уже нечего (замер 23.11.2026: 86
+                # записей `building` остались после уборки 7,13 млн строк).
+                if label == "graph" and store_mod.table_exists(conn, "rev"):
+                    try:
+                        cur = conn.execute(
+                            f"DELETE FROM rev WHERE rev_id IN ({marks}) AND state != 'ready'", chunk)
+                        if cur.rowcount and cur.rowcount > 0:
+                            counters["rev"] = counters.get("rev", 0) + int(cur.rowcount)
+                    except sqlite3.Error:
+                        pass
                 conn.commit()
                 try:
                     conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
