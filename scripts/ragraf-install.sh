@@ -246,59 +246,74 @@ fi
 if [ "${SAME}" -eq 1 ] && [ "${UPGRADE}" -eq 0 ]; then
   step skip Установка "уже установлено: версия ${INSTALLED} в ${PREFIX}"
 else
-  if [ -n "${INSTALLED}" ]; then
-    BACKUP="${PREFIX}.bak-$(date +%Y%m%d-%H%M%S)"
-    mv -- "${PREFIX}" "${BACKUP}"
-    step ok Прежняя версия "${INSTALLED} → ${BACKUP}"
-  fi
-  mkdir -p -- "${PREFIX}"
-  # Копируется содержимое поставки; .venv прежней установки уехал в бэкап вместе с ней.
-  # Служебные каталоги живого дерева в установку не переносятся: состояние (.ragraf),
-  # песочницы (.staging, .work, .zwork), окружение (.venv) принадлежат разработке.
+  # Новый каталог собирается рядом и подменяет старый двумя переименованиями:
+  # так окно недоступности измеряется миллисекундами, а не секундами (замер 23.11.2026:
+  # 2 678 мс и 5 из 5 неудачных параллельных обращений при переносе «уносим и ставим»).
+  NEW="${PREFIX}.new-$$"
+  rm -rf -- "${NEW}"
+  mkdir -p -- "${NEW}"
   ( cd -- "${SOURCE}" && tar -cf - \
       --exclude='./.git' --exclude='./.ragraf' --exclude='./.venv' \
       --exclude='./.work' --exclude='./.zwork' --exclude='./.staging' \
       --exclude='./.tools' --exclude='./node_modules' --exclude='*/__pycache__' \
       --exclude='./.pytest_cache' --exclude='./.mypy_cache' . ) |
-    ( cd -- "${PREFIX}" && tar -xf - )
-  COPIED="$(installed_version)"
-  [ "${COPIED}" = "${VERSION}" ] || fail Распаковка "после копирования версия ${COPIED} вместо ${VERSION}"
-  step ok Распаковка "версия ${COPIED}"
+    ( cd -- "${NEW}" && tar -xf - )
+  COPIED="$(sed -n 's/^__version__ *= *"\([^"]*\)".*/\1/p' "${NEW}/src/ragraf/__init__.py" | head -1)"
+  [ "${COPIED}" = "${VERSION}" ] || { rm -rf -- "${NEW}"; fail Распаковка "в новом каталоге версия ${COPIED} вместо ${VERSION}"; }
 
-  # Состояние — не часть программы: реестр, хранилище секретов, лицензия и индекс
-  # переезжают из бэкапа в новую установку, иначе обновление теряет лицензию и
-  # заставляет пересобирать индекс (измерено 23.11.2026).
-  if [ -n "${BACKUP:-}" ]; then
+  if [ -n "${INSTALLED}" ]; then
+    # Состояние переезжает в НОВЫЙ каталог: реестр, хранилище секретов, индекс, лицензия
+    # и конфиги корпусов. Окружение — только если его ставили.
     MOVED=""
     for name in ${STATE_NAMES}; do
-      if [ -e "${BACKUP}/${name}" ]; then
-        # Поставка содержит пустой каталог catalog/; без снятия mv положил бы
-        # состояние ВНУТРЬ него (catalog/catalog) — проверено глазами на прогоне.
-        rm -rf -- "${PREFIX:?}/${name}"
-        mv -- "${BACKUP}/${name}" "${PREFIX}/"
+      if [ -e "${PREFIX}/${name}" ]; then
+        rm -rf -- "${NEW:?}/${name}"
+        mv -- "${PREFIX}/${name}" "${NEW}/"
         MOVED="${MOVED} ${name}"
       fi
     done
-    # venv переезжает вместе с кодом только если его ставили: иначе pip снова
-    # тянул бы всё с сети, а «обновление» длилось бы как установка с нуля.
-    if [ -d "${BACKUP}/.venv" ] && [ "${SKIP_DEPS}" -eq 0 ]; then
-      rm -rf -- "${PREFIX}/.venv"
-      mv -- "${BACKUP}/.venv" "${PREFIX}/"
+    if [ -d "${PREFIX}/config" ]; then
+      # Конфиги корпусов, созданные ensure/init, живут в config/ установки: новый
+      # набор выигрывает по совпадающим именам, остальные переносятся как есть.
+      # Каталог создаётся ДО копирования: в поставке его может не быть вовсе
+      # (измерено 23.11.2026: cp падал «Нет такого файла или каталога», и обновление
+      # обрывалось, оставляя маркер состояния в осиротевшем .new-каталоге).
+      mkdir -p -- "${NEW}/config"
+      for cfg_file in "${PREFIX}/config/"*; do
+        [ -e "${cfg_file}" ] || continue
+        base="$(basename -- "${cfg_file}")"
+        [ -e "${NEW}/config/${base}" ] || cp -a -- "${cfg_file}" "${NEW}/config/${base}"
+      done
+      MOVED="${MOVED} config"
+    fi
+    if [ -d "${PREFIX}/.venv" ] && [ "${SKIP_DEPS}" -eq 0 ]; then
+      rm -rf -- "${NEW}/.venv"
+      mv -- "${PREFIX}/.venv" "${NEW}/"
       MOVED="${MOVED} .venv"
     fi
-    if [ -n "${MOVED}" ]; then
-      step ok Состояние "перенесено:${MOVED}"
-    else
-      step skip Состояние "переносить было нечего (свежая установка)"
-    fi
+    if [ -n "${MOVED}" ]; then step ok Состояние "перенесено:${MOVED}"; fi
+
+    BACKUP="${PREFIX}.bak-$(date +%Y%m%d-%H%M%S)"
+    mv -- "${PREFIX}" "${BACKUP}" || { rm -rf -- "${NEW}"; fail Распаковка "не удалось отложить прежнюю установку"; }
+    mv -- "${NEW}" "${PREFIX}" || { mv -- "${BACKUP}" "${PREFIX}"; fail Распаковка "подмена не удалась, прежняя установка возвращена"; }
+    step ok Прежняя версия "${INSTALLED} → ${BACKUP}"
+  else
+    rm -rf -- "${PREFIX}"
+    mv -- "${NEW}" "${PREFIX}"
   fi
+  step ok Распаковка "версия ${COPIED}"
+
 fi
 
 # --- 6. окружение ---------------------------------------------------------
 if [ -x "${PREFIX}/.venv/bin/ragraf" ] && [ "${SKIP_DEPS}" -eq 0 ] && [ -n "${BACKUP:-}" ]; then
-  # Окружение переехало из прежней установки: пакет лежит в режиме editable, новая
-  # версия видна сразу — ставить заново нечего (проверяется ниже).
-  step ok Окружение "перенесено из прежней установки"
+  # Окружение переехало из прежней установки. Но editable-установка запоминает
+  # ПУТЬ к src/: после переезда она указывала в старый каталог, и `--version`
+  # показывал прежнюю версию (измерено 23.11.2026: установка падала на своей же
+  # проверке). Перепривязываем без сети: --no-deps ничего не скачивает.
+  ( cd -- "${PREFIX}" && "${PREFIX}/.venv/bin/python" -m pip install -e . --no-deps --quiet \
+      >/dev/null 2>&1 ) || step warn Окружение "перепривязка editable-пакета не удалась"
+  step ok Окружение "перенесено из прежней установки (перепривязано)"
 elif [ "${SKIP_DEPS}" -eq 0 ]; then
   VENV="${PREFIX}/.venv"
   if [ ! -x "${VENV}/bin/python" ]; then

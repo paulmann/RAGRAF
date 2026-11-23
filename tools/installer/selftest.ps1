@@ -168,6 +168,32 @@ if ($first.Code -eq 0) {
     $script:failed++
 }
 
+# --- порча 7: диагностика обязана назвать причину -------------------------
+# Блок диагностики бесполезен, если он говорит «всё хорошо» на сломанном окружении.
+# Ломаем сами: ставим дерево без окружения и требуем, чтобы диагностика это сказала.
+$diagTarget = Join-Path $Sandbox 'diag-target'
+$diagInstall = Invoke-Setup -Arguments @('-Prefix', $diagTarget, '-NoPath', '-SkipDeps', '-SkipVerify', '-Source', $Source)
+if ($diagInstall.Code -eq 0) {
+    $venvDir = Join-Path $diagTarget '.venv'
+    if (Test-Path -LiteralPath $venvDir) { Remove-Item -LiteralPath $venvDir -Recurse -Force }
+    $diag = Invoke-Setup -Arguments @('-Prefix', $diagTarget, '-Diagnose', '-Source', $Source)
+    $diagText = $diag.Output
+    $saysMissing = ($diagText -match 'ragraf\.exe нет') -or ($diagText -match 'зависимости не встали')
+    $saysVersion = $diagText -match 'версия:'
+    if ($diag.Code -eq 0 -and $saysMissing -and $saysVersion) {
+        Write-Host ("  [ ok ] {0,-46} код 0, сбой окружения назван" -f '7. диагностика называет причину')
+        $script:passed++
+    } else {
+        Write-Host ("  [FAIL] {0,-46} код {1}, сбой назван: {2}, версия: {3}" -f `
+            '7. диагностика называет причину', $diag.Code, $saysMissing, $saysVersion)
+        $script:failed++
+        ($diagText -split "`n" | Select-Object -Last 8) | ForEach-Object { Write-Host "         $_" }
+    }
+} else {
+    Write-Host ("  [FAIL] {0,-46} подготовка не удалась (код {1})" -f '7. диагностика называет причину', $diagInstall.Code)
+    $script:failed++
+}
+
 Write-Host ''
 Write-Host ("ИТОГ: проверок {0}, пройдено {1}, провалено {2}" -f ($passed + $failed), $passed, $failed)
 

@@ -184,6 +184,14 @@ if ($Diagnose) {
             continue
         }
         $version = (& $candidate -c "import sys; print('%d.%d.%d' % sys.version_info[:3])" 2>&1 | Out-String).Trim()
+        if ($version -notmatch '^\d+\.\d+\.\d+$') {
+            # Заглушка Microsoft Store отдаёт текст вместо версии: в письме нужна
+            # короткая правда, а не весь абзац (измерено 23.11.2026).
+            $short = ($version -split "`n" | Select-Object -First 1)
+            if ($short.Length -gt 70) { $short = $short.Substring(0, 70) + '…' }
+            Write-Host ("  · {0} — НЕ ЗАПУСКАЕТСЯ: {1}" -f $candidate, $short)
+            continue
+        }
         $venvOk = (& $candidate -c "import venv; print('venv')" 2>&1 | Out-String).Trim()
         Write-Host ("  · {0} — версия {1}, venv: {2}" -f $candidate, $version, $(if ($venvOk -eq 'venv') { 'есть' } else { 'НЕТ' }))
     }
@@ -383,63 +391,64 @@ if ($sameVersion -and -not $Upgrade) {
 
     $backup = ''
     $venvCarried = $false
-    if ($installedVersion) {
-        $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-        $backup = "$($script:InstallDir).bak-$stamp"
-        Move-Item -LiteralPath $script:InstallDir -Destination $backup
-        Add-Step -Name 'Прежняя версия' -State 'OK' -Detail "$installedVersion → $backup"
-    }
+    $stage = "$($script:InstallDir).new-$PID"
+    if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
+    New-Item -ItemType Directory -Path $stage -Force | Out-Null
 
-    New-Item -ItemType Directory -Path $script:InstallDir -Force | Out-Null
-    # Служебные каталоги живого дерева в установку НЕ переносятся: состояние
-    # (.ragraf), песочницы (.staging, .work, .zwork), окружение (.venv) и сборки
-    # принадлежат дереву разработки, а не продукту (измерено 23.11.2026: копия
-    # с .ragraf делала установленный каталог «чужим корпусом»).
+    # Служебные каталоги живого дерева в установку НЕ переносятся: состояние (.ragraf),
+    # песочницы (.staging, .work, .zwork), окружение (.venv) принадлежат разработке, а не
+    # продукту (измерено 23.11.2026: копия с .ragraf делала каталог «чужим корпусом»).
     $skipNames = @('.git', '.ragraf', '.venv', '.work', '.zwork', '.staging', '.tools',
                    'node_modules', '__pycache__', '.pytest_cache', '.mypy_cache')
     foreach ($item in Get-ChildItem -LiteralPath $Source -Force) {
         if ($skipNames -contains $item.Name) { continue }
-        Copy-Item -LiteralPath $item.FullName -Destination $script:InstallDir -Recurse -Force
+        Copy-Item -LiteralPath $item.FullName -Destination $stage -Recurse -Force
+    }
+    $copied = Get-TreeVersion -Root $stage
+    if ($copied -ne $script:Version) {
+        Remove-Item -LiteralPath $stage -Recurse -Force
+        Stop-WithReason -Step 'Распаковка' -Reason "в новом каталоге версия $copied вместо $($script:Version)"
     }
 
-    # Состояние переезжает из бэкапа в новую установку: реестр, хранилище секретов,
-    # лицензия, отпечаток и индекс — это НЕ часть программы. Обновление, которое
-    # уносит их в .bak, теряет лицензию и заставляет пересобирать индекс заново
-    # (измерено 23.11.2026: требование «обновление при живом индексе»).
-    if ($backup) {
+    if ($installedVersion) {
         $moved = @()
         foreach ($name in @('catalog', '.ragraf')) {
-            $from = Join-Path $backup $name
+            $from = Join-Path $script:InstallDir $name
             if (Test-Path -LiteralPath $from) {
-                # Поставка может содержать ПУСТОЙ заготовок с тем же именем — иначе
-                # Move-Item падает «already exists» (измерено 23.11.2026). Состояние
-                # прежней установки старше заготовка, поэтому заготовок убираем.
-                $target = Join-Path $script:InstallDir $name
-                if (Test-Path -LiteralPath $target) {
-            Remove-Item -LiteralPath $target -Recurse -Force
-        }
-        Move-Item -LiteralPath $from -Destination $script:InstallDir -Force
-        $moved += $name
+                # В поставке лежит пустая заготовка с тем же именем — снимаем её,
+                # иначе Move-Item падает «already exists» (измерено 23.11.2026).
+                $staleTarget = Join-Path $stage $name
+                if (Test-Path -LiteralPath $staleTarget) {
+                    Remove-Item -LiteralPath $staleTarget -Recurse -Force
+                }
+                Move-Item -LiteralPath $from -Destination $stage -Force
+                $moved += $name
             }
         }
         foreach ($pattern in @('edition.license', 'edition.license.sig', 'edition.pub')) {
-            $file = Join-Path $backup $pattern
+            $file = Join-Path $script:InstallDir $pattern
             if (Test-Path -LiteralPath $file) {
-                Move-Item -LiteralPath $file -Destination $script:InstallDir -Force
+                Move-Item -LiteralPath $file -Destination $stage -Force
                 $moved += $pattern
             }
         }
-        # Виртуальное окружение тоже переезжает: без этого pip ставит зависимости заново
-        # и «обновление» занимает те же минуты, что установка с нуля.
-        $oldVenv = Join-Path $backup '.venv'
-        if ((Test-Path -LiteralPath $oldVenv) -and -not $SkipDeps) {
-            # В поставке лежит пустой .venv (или его создал pip install -e):
-            # без снятия Move-Item падает «already exists» (измерено 23.11.2026).
-            $newVenv = Join-Path $script:InstallDir '.venv'
-            if (Test-Path -LiteralPath $newVenv) {
-                Remove-Item -LiteralPath $newVenv -Recurse -Force
+        # Конфиги корпусов, созданные ensure/init, лежат в config\ установки: новый
+        # набор выигрывает по совпадающим именам, остальные переносятся как есть.
+        $oldConfig = Join-Path $script:InstallDir 'config'
+        if (Test-Path -LiteralPath $oldConfig) {
+            $newConfig = Join-Path $stage 'config'
+            if (-not (Test-Path -LiteralPath $newConfig)) { New-Item -ItemType Directory -Path $newConfig -Force | Out-Null }
+            foreach ($file in Get-ChildItem -LiteralPath $oldConfig -File -Force) {
+                $target = Join-Path $newConfig $file.Name
+                if (-not (Test-Path -LiteralPath $target)) { Copy-Item -LiteralPath $file.FullName -Destination $target }
             }
-            Move-Item -LiteralPath $oldVenv -Destination $script:InstallDir -Force
+            $moved += 'config'
+        }
+        $oldVenv = Join-Path $script:InstallDir '.venv'
+        if ((Test-Path -LiteralPath $oldVenv) -and -not $SkipDeps) {
+            $staleVenv = Join-Path $stage '.venv'
+            if (Test-Path -LiteralPath $staleVenv) { Remove-Item -LiteralPath $staleVenv -Recurse -Force }
+            Move-Item -LiteralPath $oldVenv -Destination $stage -Force
             $moved += '.venv'
             $venvCarried = $true
         }
@@ -448,10 +457,15 @@ if ($sameVersion -and -not $Upgrade) {
         } else {
             Add-Step -Name 'Состояние' -State 'SKIP' -Detail 'переносить было нечего (свежая установка)'
         }
-    }
-    $copied = Get-TreeVersion -Root $script:InstallDir
-    if ($copied -ne $script:Version) {
-        Stop-WithReason -Step 'Распаковка' -Reason "после копирования версия $copied вместо $($script:Version)"
+
+        $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+        $backup = "$($script:InstallDir).bak-$stamp"
+        Move-Item -LiteralPath $script:InstallDir -Destination $backup
+        Move-Item -LiteralPath $stage -Destination $script:InstallDir
+        Add-Step -Name 'Прежняя версия' -State 'OK' -Detail "$installedVersion → $backup"
+    } else {
+        if (Test-Path -LiteralPath $script:InstallDir) { Remove-Item -LiteralPath $script:InstallDir -Recurse -Force }
+        Move-Item -LiteralPath $stage -Destination $script:InstallDir
     }
     Add-Step -Name 'Распаковка' -State 'OK' -Detail "версия $copied"
     $verify = -not $SkipVerify
@@ -459,9 +473,19 @@ if ($sameVersion -and -not $Upgrade) {
 
 # --- 5. зависимости -------------------------------------------------------
 if ($venvCarried -and (Test-Path -LiteralPath $exePath)) {
-    # Окружение переехало из прежней установки: ставить заново нечего. Пакет при этом
-    # лежит в venv в режиме editable, поэтому новая версия видна сразу (проверяется ниже).
-    Add-Step -Name 'Зависимости' -State 'OK' -Detail 'окружение перенесено, установка не нужна'
+    # Editable-установка запоминает ПУТЬ к src/: после переезда она указывала в старый
+    # каталог и `--version` показывал прежнюю версию. Перепривязываем без сети.
+    $pyExe = Join-Path $script:InstallDir '.venv\Scripts\python.exe'
+    if (Test-Path -LiteralPath $pyExe) {
+        & $pyExe -m pip install -e $script:InstallDir --no-deps --quiet *> $null
+        if ($LASTEXITCODE -ne 0) {
+            Add-Step -Name 'Зависимости' -State 'WARN' -Detail 'перепривязка editable-пакета не удалась'
+        } else {
+            Add-Step -Name 'Зависимости' -State 'OK' -Detail 'окружение перенесено (перепривязано)'
+        }
+    } else {
+        Add-Step -Name 'Зависимости' -State 'OK' -Detail 'окружение перенесено, установка не нужна'
+    }
 } elseif (-not $SkipDeps) {
     $installer = Join-Path $script:InstallDir 'scripts\install.ps1'
     if (-not (Test-Path -LiteralPath $installer)) {
