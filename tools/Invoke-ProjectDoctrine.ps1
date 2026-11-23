@@ -18,7 +18,7 @@
     результат Ok=$true при нулевом осмотре считается ложным PASS и валит прогон.
 
     Ожидаемый baseline на момент передачи проекта: 0 ошибок, 0 предупреждений,
-    50 проверок — ровно столько, сколько записей в реестре `$script:CheckFunctions`;
+    51 проверка — ровно столько, сколько записей в реестре `$script:CheckFunctions`;
     это сверяет Test-DocumentedNumbers. Прежние две ошибки («запись прогона в реестр
     не покрывала путь ensure» и «документы называли 18 и 16 инструментов там, где
     в коде 23») закрыты
@@ -4787,6 +4787,59 @@ function Test-TrapCatalog {
         -Examined $examined -Details $problems.ToArray()
 }
 
+function Test-ReleaseAndStateProperties {
+    <#
+    .SYNOPSIS
+        Публикация не принимает непроверенное дерево, а состояние пишется атомарно.
+
+    .DESCRIPTION
+        Три измеренных дефекта, которых чекер не видел (23.11.2026):
+
+        * `util.write_json` писал файл на месте — читатель видел ПУСТОЙ реестр
+          (231 пустое чтение из 1058), и записи соседних корпусов терялись молча;
+        * публикация не требовала отпечатка проверенной сборки — дерево можно было
+          подменить между проверкой и коммитом;
+        * первый запуск на проекте с чужим `.ragraf/install.json` не называл
+          установку-хозяина и мог перезаписать чужое состояние.
+
+        Свойства проверяет `tools/check_release_and_state.py`; здесь — вызов и разбор.
+    #>
+    $checkName = 'release takes only verified tree and state writes are atomic'
+    $toolPath = Join-Path $script:ProjectRoot 'tools/check_release_and_state.py'
+    if (-not (Test-Path -LiteralPath $toolPath)) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: нет tools/check_release_and_state.py')
+    }
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $python) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: python не найден в PATH')
+    }
+
+    $output = & $python.Source $toolPath 2>&1
+    $code = $LASTEXITCODE
+    $text = ($output | Out-String).Trim()
+    Write-Host ("    свойства публикации: " + (($text -split "`n" | Where-Object { $_ -match 'ИТОГ' }) -join ' '))
+
+    $examined = 0
+    $examinedMatch = [regex]::Match($text, 'свойств\s+нарушено\s+(\d+)\s+из\s+(\d+)')
+    if ($examinedMatch.Success) { $examined = [int]$examinedMatch.Groups[2].Value }
+    elseif ($text -match 'три свойства из трёх') { $examined = 3 }
+
+    $problems = [System.Collections.Generic.List[string]]::new()
+    if ($code -ne 0) {
+        foreach ($line in @($output | Where-Object { $_ -is [string] })) {
+            if ($line -match '^FAIL:') { $problems.Add(($line -replace '^FAIL:\s*', '')) }
+        }
+        if ($problems.Count -eq 0) {
+            $problems.Add("проверка свойств завершилась кодом $code без расшифровки")
+        }
+    }
+
+    return New-CheckResult -Name $checkName -Ok ($problems.Count -eq 0) `
+        -Examined $examined -Details $problems.ToArray()
+}
+
 $script:CheckFunctions = @(
     'Test-ProjectLayout'
     'Test-SecretHygiene'
@@ -4838,6 +4891,7 @@ $script:CheckFunctions = @(
     'Test-SettingsDeclaration'
     'Test-AgentIntegrations'
     'Test-TrapCatalog'
+    'Test-ReleaseAndStateProperties'
 )
 
 $script:CheckNames = @()

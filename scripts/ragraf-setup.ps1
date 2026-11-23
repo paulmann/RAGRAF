@@ -65,12 +65,17 @@ $script:ExitError = 1
 $script:ExitUsage = 2
 $script:ExitEnvironment = 3
 
+#: Граница версии Python — ОДНО объявление на установщик. Её же читает
+#: `tools/check_python_floor.py` и сверяет с `pyproject.toml` и документом.
+$script:MinPython = [version]'3.13'
+
 $script:Results = [System.Collections.Generic.List[object]]::new()
 
-#: Предел файлов для мастера первого запуска. Число не «на глаз»: на этом проекте
-#: 1012 файлов индексируются 8 минут, то есть 20 000 — это часы, и обещать их как
-#: «первый запуск» нельзя.
-$script:FirstRunFileLimit = 20000
+#: Предел файлов для мастера первого запуска — ИЗМЕРЕН, а не на глаз:
+#: 500 файлов → 48 с, 2000 → 501 с (23.11.2026), кривая ≈ n^1,7, то есть
+#: 20 000 файлов — это часы работы. 10-минутный бюджет даёт ≈2 000 файлов.
+#: Предел называет число и причину в отказе; обойти — `ragraf ensure`.
+$script:FirstRunFileLimit = 2000
 
 function Get-ProjectFileCount {
     <# Файлов в проекте, с ранним остановом на пределе: полный обход огромного
@@ -330,8 +335,10 @@ if ($PythonPath) {
 }
 foreach ($candidate in ($candidates | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -Unique)) {
     $probeVersion = (& $candidate -c "import sys; print('%d.%d' % sys.version_info[:2])" 2>&1 | Out-String).Trim()
-    if ($probeVersion -notmatch '^3\.(1[3-9]|[2-9][0-9])$') {
-        $rejected += "$candidate ($probeVersion) — версия ниже 3.13"
+    $okVersion = $false
+    try { $okVersion = ([version]$probeVersion -ge $script:MinPython) } catch { $okVersion = $false }
+    if (-not $okVersion) {
+        $rejected += "$candidate ($probeVersion) — версия ниже $($script:MinPython)"
         continue
     }
     # venv проверяется ДО записи: с app-bundled интерпретатором без venv установка
@@ -704,7 +711,7 @@ if ($FirstRun) {
         } elseif ($size -gt $script:FirstRunFileLimit) {
             # Предел назван числом: молчаливое ожидание на 200 000 файлов — не помощь.
             Add-Step -Name 'Первый запуск' -State 'SKIP' `
-                -Detail ("файлов больше предела $($script:FirstRunFileLimit): индексируйте отдельно — ragraf ensure `"$probeProject`"")
+                -Detail ("файлов $size, предел $($script:FirstRunFileLimit): мастер не индексирует такой проект — это часы работы. Запустите отдельно: ragraf ensure `"$probeProject`"")
         } elseif ($note = Get-GitignoreNote -Project $probeProject) {
             Add-Step -Name 'Первый запуск git' -State 'WARN' -Detail $note
         } elseif (-not (Test-Path -LiteralPath $exe)) {

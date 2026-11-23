@@ -190,6 +190,10 @@ if [ "${UNINSTALL}" -eq 1 ]; then
   exit 0
 fi
 
+#: Граница версии Python — ОДНО объявление на установщик (её читает
+#: `tools/check_python_floor.py`).
+MIN_PYTHON="3.13"
+
 # --- 3. интерпретатор -----------------------------------------------------
 if [ -z "${PYTHON_BIN}" ]; then
   PYTHON_BIN="$(command -v python3 || true)"
@@ -198,10 +202,10 @@ fi
 [ -x "${PYTHON_BIN}" ] || fail Python "указанный интерпретатор ${PYTHON_BIN} не исполняемый" 3
 
 VER="$("${PYTHON_BIN}" -c 'import sys; print("%d.%d" % sys.version_info[:2])' 2>/dev/null || echo none)"
-case "${VER}" in
-  3.1[3-9]|3.[2-9][0-9]) : ;;
-  *) fail Python "нужен Python 3.13+, найден ${VER} (${PYTHON_BIN}); на Debian 12 системный 3.11 — нужен 3.13 из backports или собранный" 3 ;;
-esac
+# Сравнение версий, а не шаблон: граница объявлена выше одним значением.
+if [ "$(printf '%s\n%s\n' "${MIN_PYTHON}" "${VER}" | sort -V | head -1)" != "${MIN_PYTHON}" ]; then
+  fail Python "нужен Python ${MIN_PYTHON}+, найден ${VER} (${PYTHON_BIN}); на Debian 12 системный 3.11 — нужен ${MIN_PYTHON} из backports или собранный" 3
+fi
 "${PYTHON_BIN}" -c 'import venv' 2>/dev/null || fail Python "у интерпретатора ${PYTHON_BIN} нет модуля venv (нужен пакет python3-venv)" 3
 step ok Python "${VER} (${PYTHON_BIN})"
 
@@ -471,9 +475,11 @@ EOF
   fi
 fi
 
-#: Предел файлов для мастера первого запуска: на этом проекте 1012 файлов
-#: индексируются 8 минут, 20 000 — это часы, и обещать их как «первый запуск» нельзя.
-FIRST_RUN_FILE_LIMIT=20000
+#: Предел файлов для мастера первого запуска — ИЗМЕРЕН, а не на глаз:
+#: 500 файлов → 48 с, 2000 → 501 с (23.11.2026), кривая ≈ n^1,7, то есть
+#: 20 000 файлов — это часы работы. 10-минутный бюджет даёт ≈2 000 файлов.
+#: Предел называет число и причину в отказе; обойти — `ragraf ensure`.
+FIRST_RUN_FILE_LIMIT=2000
 
 count_project_files() {
   # Файлов в проекте с ранним остановом на пределе: полный обход — своя работа.
@@ -492,7 +498,7 @@ if [ -n "${FIRST_RUN}" ]; then
        [ -n "${MARKED}" ] && [ "${MARKED}" != "${PREFIX}" ]; then
     step FAIL "Первый запуск" "в проекте индекс установки ${MARKED}, а это ${PREFIX}: индексируйте своим установщиком"
   elif [ "$(count_project_files "${FIRST_RUN}" "${FIRST_RUN_FILE_LIMIT}")" -gt "${FIRST_RUN_FILE_LIMIT}" ]; then
-    step skip "Первый запуск" "файлов больше предела ${FIRST_RUN_FILE_LIMIT}: индексируйте отдельно — ragraf ensure ${FIRST_RUN}"
+    step skip "Первый запуск" "файлов больше предела ${FIRST_RUN_FILE_LIMIT} (это часы работы): запустите отдельно — ragraf ensure ${FIRST_RUN}"
   elif [ ! -x "${BIN}" ]; then
     step skip "Первый запуск" "без окружения первый запуск невозможен"
   else
