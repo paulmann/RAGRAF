@@ -396,6 +396,11 @@ def build_operations(facade_class: Any | None = None) -> frozenset[str]:
 # ---------------------------------------------------------------------------
 
 
+#: За сколько дней до истечения лицензии предупреждать. Число выбрано
+#: так, чтобы владелец успел продлить, но не получал шум за полгода.
+EXPIRY_WARN_DAYS = 30
+
+
 @dataclass
 class LicenseInfo:
     """Что известно о файле лицензии. Причина названа в любом состоянии."""
@@ -404,6 +409,10 @@ class LicenseInfo:
     edition: str = ""
     licensee: str = ""
     expires_at: str = ""
+    #: Сколько дней осталось до срока (0 — истекает сегодня); -1 — срока нет.
+    days_left: int = -1
+    #: Предупреждение о близком сроке; пусто, если срок далеко или его нет.
+    warning: str = ""
     file: str = ""
     reason: str = ""
 
@@ -417,6 +426,8 @@ class LicenseInfo:
             "edition": self.edition,
             "licensee": self.licensee,
             "expires_at": self.expires_at,
+            "days_left": self.days_left,
+            "warning": self.warning,
             "file": self.file,
             "reason": self.reason,
         }
@@ -570,6 +581,16 @@ def read_license(path: str | pathlib.Path | None = None,
             info.state = "expired"
             info.reason = f"срок действия лицензии истёк {info.expires_at}"
             return info
+        # Предупреждение ЗАРАНЕЕ: до 23.11.2026 о сроке узнавали в день, когда
+        # платные операции уже перестали работать. Лицензия при этом действует —
+        # молчаливое понижение за месяц до срока было бы неверным.
+        left = (time.mktime(expires) - time.mktime(time.localtime()[:3] + (0, 0, 0, 0, 0, -1))) / 86400
+        days_left = int(round(left))
+        if 0 <= days_left <= EXPIRY_WARN_DAYS:
+            info.days_left = days_left
+            info.warning = (
+                f"срок действия лицензии истекает {info.expires_at} — через {days_left} дн."
+            )
 
     info.state = "valid"
     info.reason = "подпись сходится, издание названо в подписанном файле"
@@ -857,6 +878,8 @@ def resolve(*, declared: str | None = None,
         notes.append(
             f"лицензия не действует ({license_info.state}): {license_info.reason}"
         )
+    elif getattr(license_info, "warning", ""):
+        notes.append(f"лицензия действует, но {license_info.warning}")
 
     required_from = str((baseline.get("license") or {}).get("required_from") or default)
     paid = rank(baseline, required_from)

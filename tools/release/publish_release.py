@@ -40,6 +40,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 import zipfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -89,26 +90,82 @@ def tree_digest(tree: pathlib.Path) -> str:
     return digest.hexdigest()
 
 
+STAMP_NAME = "BUILD-STAMP.json"
+
+
 def stamp_path(tree: pathlib.Path) -> pathlib.Path:
-    return tree.with_name(tree.name + ".stamp.json")
+    """Отпечаток живёт ВНУТРИ дерева и уходит в архив вместе с ним."""
+    return tree / STAMP_NAME
 
 
-def write_stamp(tree: pathlib.Path) -> None:
-    stamp_path(tree).write_text(
-        json.dumps({"tree": tree.name, "digest": tree_digest(tree), "files": len(tree_files(tree))},
-                   ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+def tree_digest(tree: pathlib.Path, skip: tuple[str, ...] = (STAMP_NAME,)) -> str:
+    """Отпечаток содержимого дерева: путь + sha256 каждого файла (кроме самого отпечатка)."""
+    digest = hashlib.sha256()
+    for rel in tree_files(tree):
+        if rel in skip:
+            continue
+        digest.update(rel.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(sha256(tree / rel).encode("ascii"))
+        digest.update(b"\n")
+    return digest.hexdigest()
 
 
-def check_stamp(tree: pathlib.Path) -> str:
+def table_head(tree: pathlib.Path) -> str:
+    """Голова публикации, названная таблицей источников ЭТОГО дерева."""
+    doc = tree / SOURCES_DOC
+    if not doc.is_file():
+        return ""
+    found = re.search(r"Публичный `main` на момент сверки:\*\*\s*`([0-9a-f]{40})`",
+                      doc.read_text(encoding="utf-8"))
+    return found.group(1) if found else ""
+
+
+def files_manifest(tree: pathlib.Path) -> dict[str, str]:
+    return {rel: sha256(tree / rel) for rel in tree_files(tree) if rel != STAMP_NAME}
+
+
+def write_stamp(tree: pathlib.Path, version: str = "") -> pathlib.Path:
+    """Записать отпечаток в дерево: хэши файлов, отпечаток, голова таблицы, версия."""
+    document = {
+        "tool": "tools/release/publish_release.py",
+        "version": version,
+        "table_head": table_head(tree),
+        "files": len(files_manifest(tree)),
+        "digest": tree_digest(tree),
+        "content": files_manifest(tree),
+    }
+    target = stamp_path(tree)
+    target.write_text(json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+                      encoding="utf-8", newline="\n")
+    return target
+
+
+def check_stamp(tree: pathlib.Path, version: str = "") -> str:
     """Пустая строка — дерево то же, что проверили; иначе причина отказа."""
-    path = stamp_path(tree)
-    if not path.is_file():
-        return f"нет отпечатка сборки {path}: публиковать можно только проверенное дерево"
-    recorded = json.loads(path.read_text(encoding="utf-8")).get("digest", "")
+    target = stamp_path(tree)
+    if not target.is_file():
+        return f"нет отпечатка сборки {target}: публиковать можно только проверенное дерево"
+    try:
+        document = json.loads(target.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return f"отпечаток сборки не разбирается: {exc}"
     actual = tree_digest(tree)
-    if recorded != actual:
+    if document.get("digest") != actual:
         return ("дерево изменилось после проверки: отпечаток "
-                f"{recorded[:12]}…, сейчас {actual[:12]}…")
+                f"{str(document.get('digest'))[:12]}…, сейчас {actual[:12]}…")
+    content = document.get("content") or {}
+    current = files_manifest(tree)
+    if content != current:
+        changed = [name for name in current if content.get(name) != current[name]]
+        return f"отпечаток называет другие хэши файлов: {', '.join(changed[:3])}"
+    head_here = table_head(tree)
+    if document.get("table_head") and head_here and document["table_head"] != head_here:
+        return ("отпечаток называет голову таблицы "
+                f"{str(document['table_head'])[:7]}, а в дереве {head_here[:7]}")
+    if version and document.get("version") and document["version"] != version:
+        return (f"отпечаток собран для версии {document['version']}, "
+                f"а публикуется {version}")
     return ""
 
 
@@ -186,7 +243,8 @@ def verify_tree_checksums(tree: pathlib.Path) -> list[str]:
         actual = sha256(target)
         if actual != expected:
             problems.append(f"{CHECKSUMS}: {rel}: ожидался {expected[:12]}…, получен {actual[:12]}…")
-    extra = [rel for rel in tree_files(tree) if rel not in listed and rel != CHECKSUMS]
+    extra = [rel for rel in tree_files(tree)
+             if rel not in listed and rel not in (CHECKSUMS, STAMP_NAME)]
     if extra:
         problems.append(f"{CHECKSUMS}: не перечислены файлы сборки: {', '.join(extra[:5])}")
     return problems
@@ -270,9 +328,44 @@ def stage(args: argparse.Namespace) -> int:
     if checksums:
         print("ОТКАЗ: собственный список контрольных сумм сборки не сходится")
         return 1
-    write_stamp(out)
-    print(f"ГОТОВО к публикации: {out}")
+    write_stamp(out, args.version)
+    problem = check_stamp(out, args.version)
+    if problem:
+        print(f"ОТКАЗ: отпечаток сборки не сходится: {problem}")
+        return 1
+    print(f"ГОТОВО к публикации: {out} (отпечаток {STAMP_NAME})")
     return 0
+
+
+def retry(step: str, command: list[str], cwd: pathlib.Path, env: dict[str, str],
+          attempts: int = 3, delays: tuple[int, ...] = (5, 15, 45)) -> tuple[int, str]:
+    """Повторить сетевую операцию: отказ сети — не приговор выпуску.
+
+    Измерено 23.11.2026: `git push` тега упал «Failed to connect to github.com:443»
+    уже ПОСЛЕ того, как main ушёл; выпуск остался половинчатым, и его пришлось
+    доигрывать руками. Права повтора здесь нет только у ошибки, которая повтором не
+    лечится: её видно по тексту (`denied`, `not found`, `no such remote`).
+    """
+    import os as _os
+    fatal = ("denied", "not found", "no such remote", "does not appear to be a git",
+             "permission", "non-fast-forward", "protected branch")
+    output = ""
+    for attempt in range(1, attempts + 1):
+        result = subprocess.run(command, cwd=str(cwd), capture_output=True, text=True, env=env)
+        output = (result.stdout or "") + (result.stderr or "")
+        if result.returncode == 0:
+            return 0, output
+        if any(marker in output.lower() for marker in fatal):
+            print(f"ПОВТОР НЕ ПОМОЖЕТ ({step}): {output.strip().splitlines()[-1][:160]}")
+            return result.returncode, output
+        if _os.environ.get("RAGRAF_PUBLISH_FAULT") == "1" and attempt == 1:
+            output += "\nRAGRAF_PUBLISH_FAULT: искусственный отказ первой попытки"
+            print(f"  · {step}: искусственный отказ первой попытки (RAGRAF_PUBLISH_FAULT)")
+        if attempt < attempts:
+            delay = delays[min(attempt - 1, len(delays) - 1)]
+            print(f"  · {step}: попытка {attempt} не удалась, повтор через {delay} с")
+            time.sleep(delay)
+    return 1, output
 
 
 def publish(args: argparse.Namespace) -> int:
@@ -281,7 +374,7 @@ def publish(args: argparse.Namespace) -> int:
     version = args.version
     tag = f"v{version}" if version else ""
 
-    problem = check_stamp(tree)
+    problem = check_stamp(tree, version)
     if problem:
         print(f"ОТКАЗ: {problem}")
         return 1
@@ -350,13 +443,13 @@ def publish(args: argparse.Namespace) -> int:
             return 1
     subprocess.run(["git", "tag", "-f", "-a", tag, "-m", f"RAGRAF {version}"], cwd=str(clone),
                    check=True, env=env)
-    for cmd in (["git", "push", "origin", "main"], ["git", "push", "--force", "origin", tag]):
-        result = subprocess.run(cmd, cwd=str(clone), capture_output=True, text=True, env=env)
-        output = (result.stdout + result.stderr).strip()
-        if output:
-            print(output.splitlines()[-1])
-        if result.returncode != 0:
-            print(f"ОТКАЗ: {cmd[1]} {cmd[2] if len(cmd) > 2 else ''} не удался")
+    for step, cmd in (("push main", ["git", "push", "origin", "main"]),
+                      (f"push {tag}", ["git", "push", "--force", "origin", tag])):
+        code, output = retry(step, cmd, clone, env)
+        if output.strip():
+            print(output.strip().splitlines()[-1][:160])
+        if code != 0:
+            print(f"ОТКАЗ: {step} не удался; состояние возобновляемое — повторите запуск")
             return 1
 
     archive = pathlib.Path(args.archive).resolve() if args.archive else None
@@ -370,16 +463,15 @@ def publish(args: argparse.Namespace) -> int:
                                   cwd=str(clone), capture_output=True, text=True, env=env)
         assets = [str(archive), str(archive) + ".sha256"]
         if existing.returncode == 0:
-            result = subprocess.run(["gh", "release", "upload", tag, *assets, "--clobber"],
-                                    cwd=str(clone), capture_output=True, text=True, env=env)
+            command = ["gh", "release", "upload", tag, *assets, "--clobber"]
         else:
-            result = subprocess.run(["gh", "release", "create", tag, *assets,
-                                     "--title", f"RAGRAF {version}",
-                                     "--notes-file", str(notes)], cwd=str(clone),
-                                    capture_output=True, text=True, env=env)
-        print((result.stdout + result.stderr).strip().splitlines()[-1] if (result.stdout + result.stderr).strip() else "")
-        if result.returncode != 0:
-            print("ОТКАЗ: релиз не выложен")
+            command = ["gh", "release", "create", tag, *assets,
+                       "--title", f"RAGRAF {version}", "--notes-file", str(notes)]
+        code, output = retry("релиз", command, clone, env)
+        if output.strip():
+            print(output.strip().splitlines()[-1][:160])
+        if code != 0:
+            print("ОТКАЗ: релиз не выложен; состояние возобновляемое — повторите запуск")
             return 1
 
     code, text = run([sys.executable, str(ROOT / "tools/release/check_sources_lag.py"),

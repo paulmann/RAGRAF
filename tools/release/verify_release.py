@@ -234,9 +234,15 @@ def check_hash(ctx: "Context") -> list[str]:
     return problems
 
 
+#: Файлы, которые создаёт САМА сборка, поэтому в манифесте их быть не может.
+#: Отпечаток описывает результат сборки и уходит в архив вместе с деревом; без этой
+#: строки правило покрытия называло его мусором (замер 23.11.2026).
+GENERATED_BY_BUILD = {"BUILD-STAMP.json"}
+
+
 def check_coverage(ctx: "Context") -> list[str]:
     problems = []
-    allowed = set(ctx.expected) | set(ctx.manifest.artifacts)
+    allowed = set(ctx.expected) | set(ctx.manifest.artifacts) | GENERATED_BY_BUILD
     for path in sorted(ctx.tree_files):
         if path in allowed:
             continue
