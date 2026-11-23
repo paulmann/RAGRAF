@@ -315,6 +315,8 @@ if ($sameVersion -and -not $Upgrade) {
         exit $script:ExitOk
     }
 
+    $backup = ''
+    $venvCarried = $false
     if ($installedVersion) {
         $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
         $backup = "$($script:InstallDir).bak-$stamp"
@@ -326,6 +328,54 @@ if ($sameVersion -and -not $Upgrade) {
     foreach ($item in Get-ChildItem -LiteralPath $Source -Force) {
         Copy-Item -LiteralPath $item.FullName -Destination $script:InstallDir -Recurse -Force
     }
+
+    # Состояние переезжает из бэкапа в новую установку: реестр, хранилище секретов,
+    # лицензия, отпечаток и индекс — это НЕ часть программы. Обновление, которое
+    # уносит их в .bak, теряет лицензию и заставляет пересобирать индекс заново
+    # (измерено 23.11.2026: требование «обновление при живом индексе»).
+    if ($backup) {
+        $moved = @()
+        foreach ($name in @('catalog', '.ragraf')) {
+            $from = Join-Path $backup $name
+            if (Test-Path -LiteralPath $from) {
+                # Поставка может содержать ПУСТОЙ заготовок с тем же именем — иначе
+                # Move-Item падает «already exists» (измерено 23.11.2026). Состояние
+                # прежней установки старше заготовка, поэтому заготовок убираем.
+                $target = Join-Path $script:InstallDir $name
+                if (Test-Path -LiteralPath $target) {
+                    Remove-Item -LiteralPath $target -Recurse -Force
+                }
+                Move-Item -LiteralPath $from -Destination $script:InstallDir -Force
+                $moved += $name
+            }
+        }
+        foreach ($pattern in @('edition.license', 'edition.license.sig', 'edition.pub')) {
+            $file = Join-Path $backup $pattern
+            if (Test-Path -LiteralPath $file) {
+                Move-Item -LiteralPath $file -Destination $script:InstallDir -Force
+                $moved += $pattern
+            }
+        }
+        # Виртуальное окружение тоже переезжает: без этого pip ставит зависимости заново
+        # и «обновление» занимает те же минуты, что установка с нуля.
+        $oldVenv = Join-Path $backup '.venv'
+        if ((Test-Path -LiteralPath $oldVenv) -and -not $SkipDeps) {
+            # В поставке лежит пустой .venv (или его создал pip install -e):
+            # без снятия Move-Item падает «already exists» (измерено 23.11.2026).
+            $newVenv = Join-Path $script:InstallDir '.venv'
+            if (Test-Path -LiteralPath $newVenv) {
+                Remove-Item -LiteralPath $newVenv -Recurse -Force
+            }
+            Move-Item -LiteralPath $oldVenv -Destination $script:InstallDir -Force
+            $moved += '.venv'
+            $venvCarried = $true
+        }
+        if ($moved.Count) {
+            Add-Step -Name 'Состояние' -State 'OK' -Detail ('перенесено: ' + ($moved -join ', '))
+        } else {
+            Add-Step -Name 'Состояние' -State 'SKIP' -Detail 'переносить было нечего (свежая установка)'
+        }
+    }
     $copied = Get-TreeVersion -Root $script:InstallDir
     if ($copied -ne $script:Version) {
         Stop-WithReason -Step 'Распаковка' -Reason "после копирования версия $copied вместо $($script:Version)"
@@ -335,7 +385,11 @@ if ($sameVersion -and -not $Upgrade) {
 }
 
 # --- 5. зависимости -------------------------------------------------------
-if (-not $SkipDeps) {
+if ($venvCarried -and (Test-Path -LiteralPath $exePath)) {
+    # Окружение переехало из прежней установки: ставить заново нечего. Пакет при этом
+    # лежит в venv в режиме editable, поэтому новая версия видна сразу (проверяется ниже).
+    Add-Step -Name 'Зависимости' -State 'OK' -Detail 'окружение перенесено, установка не нужна'
+} elseif (-not $SkipDeps) {
     $installer = Join-Path $script:InstallDir 'scripts\install.ps1'
     if (-not (Test-Path -LiteralPath $installer)) {
         Stop-WithReason -Step 'Зависимости' -Reason "в поставке нет scripts\install.ps1"

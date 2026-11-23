@@ -36,6 +36,9 @@ NO_PATH=0
 SKIP_DEPS=0
 SKIP_VERIFY=0
 SERVICE=0
+SERVICE_USER_ARG=""
+CONFIG_PATH=""
+REFRESH_MINUTES=15
 PYTHON_BIN="${RAGRAF_PYTHON:-}"
 
 usage() {
@@ -54,6 +57,9 @@ while [ $# -gt 0 ]; do
     --skip-deps) SKIP_DEPS=1; shift ;;
     --skip-verify) SKIP_VERIFY=1; shift ;;
     --service) SERVICE=1; shift ;;
+    --service-user) SERVICE_USER_ARG="${2:-}"; shift 2 ;;
+    --config) CONFIG_PATH="${2:-}"; shift 2 ;;
+    --refresh-minutes) REFRESH_MINUTES="${2:-15}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "ОТКАЗ: неизвестный аргумент '$1'" >&2; exit 2 ;;
   esac
@@ -75,6 +81,11 @@ if [ -z "${PREFIX}" ]; then
   PREFIX="${HOME}/.local/share/ragraf"
 fi
 PREFIX="${PREFIX%/}"
+# Умолчание конфигурации для службы: конфиг, который лежит в поставке. Если его нет —
+# служба не создаётся (иначе ExecStart падает с 203/EXEC на несуществующем пути).
+if [ -z "${CONFIG_PATH}" ]; then
+  CONFIG_PATH="${PREFIX}/config/ragraf.yaml"
+fi
 
 case "${PREFIX}" in
   /|/usr|/usr/local|/etc|/var|/var/www|/var/www/*|/opt)
@@ -108,7 +119,15 @@ if [ "${UNINSTALL}" -eq 1 ]; then
   step ok Удаление "${PREFIX} удалён$( [ "${PURGE}" -eq 1 ] && echo ' с состоянием')"
   if [ "${NO_PATH}" -eq 0 ]; then
     for link in "${HOME}/.local/bin/ragraf" "/usr/local/bin/ragraf"; do
-      if [ -L "${link}" ]; then rm -f -- "${link}"; step ok PATH "симлинк ${link} убран"; fi
+      if [ -L "${link}" ]; then
+        if [ -e "${link}" ]; then
+          rm -f -- "${link}"
+          step ok PATH "симлинк ${link} убран"
+        else
+          rm -f -- "${link}"
+          step ok PATH "битый симлинк ${link} убран"
+        fi
+      fi
     done
   fi
   exit 0
@@ -163,6 +182,7 @@ stash_state() {
 # --- 5. та же версия ------------------------------------------------------
 SAME=0
 if [ -n "${INSTALLED}" ] && [ "${INSTALLED}" = "${VERSION}" ]; then SAME=1; fi
+STATE_NAMES="catalog .ragraf edition.license edition.license.sig edition.pub"
 
 if [ "${DRY_RUN}" -eq 1 ]; then
   if [ "${SAME}" -eq 1 ] && [ "${UPGRADE}" -eq 0 ]; then
@@ -189,10 +209,42 @@ else
   COPIED="$(installed_version)"
   [ "${COPIED}" = "${VERSION}" ] || fail Распаковка "после копирования версия ${COPIED} вместо ${VERSION}"
   step ok Распаковка "версия ${COPIED}"
+
+  # Состояние — не часть программы: реестр, хранилище секретов, лицензия и индекс
+  # переезжают из бэкапа в новую установку, иначе обновление теряет лицензию и
+  # заставляет пересобирать индекс (измерено 23.11.2026).
+  if [ -n "${BACKUP:-}" ]; then
+    MOVED=""
+    for name in ${STATE_NAMES}; do
+      if [ -e "${BACKUP}/${name}" ]; then
+        # Поставка содержит пустой каталог catalog/; без снятия mv положил бы
+        # состояние ВНУТРЬ него (catalog/catalog) — проверено глазами на прогоне.
+        rm -rf -- "${PREFIX:?}/${name}"
+        mv -- "${BACKUP}/${name}" "${PREFIX}/"
+        MOVED="${MOVED} ${name}"
+      fi
+    done
+    # venv переезжает вместе с кодом только если его ставили: иначе pip снова
+    # тянул бы всё с сети, а «обновление» длилось бы как установка с нуля.
+    if [ -d "${BACKUP}/.venv" ] && [ "${SKIP_DEPS}" -eq 0 ]; then
+      rm -rf -- "${PREFIX}/.venv"
+      mv -- "${BACKUP}/.venv" "${PREFIX}/"
+      MOVED="${MOVED} .venv"
+    fi
+    if [ -n "${MOVED}" ]; then
+      step ok Состояние "перенесено:${MOVED}"
+    else
+      step skip Состояние "переносить было нечего (свежая установка)"
+    fi
+  fi
 fi
 
 # --- 6. окружение ---------------------------------------------------------
-if [ "${SKIP_DEPS}" -eq 0 ]; then
+if [ -x "${PREFIX}/.venv/bin/ragraf" ] && [ "${SKIP_DEPS}" -eq 0 ] && [ -n "${BACKUP:-}" ]; then
+  # Окружение переехало из прежней установки: пакет лежит в режиме editable, новая
+  # версия видна сразу — ставить заново нечего (проверяется ниже).
+  step ok Окружение "перенесено из прежней установки"
+elif [ "${SKIP_DEPS}" -eq 0 ]; then
   VENV="${PREFIX}/.venv"
   if [ ! -x "${VENV}/bin/python" ]; then
     "${PYTHON_BIN}" -m venv "${VENV}" || fail Окружение "не удалось создать ${VENV}"
@@ -217,6 +269,12 @@ if [ "${NO_PATH}" -eq 0 ]; then
   fi
   mkdir -p -- "${LINK_DIR}"
   ln -sfn -- "${BIN}" "${LINK_DIR}/ragraf"
+  # Свойство: симлинк либо отсутствует, либо указывает на существующий файл.
+  # Битый симлинк опаснее отсутствующего: оболочка находит команду и отвергает
+  # её выполнение (измерено 23.11.2026 при ручном удалении каталога).
+  if [ ! -e "${LINK_DIR}/ragraf" ]; then
+    fail PATH "симлинк ${LINK_DIR}/ragraf создан, но цель ${BIN} недоступна" 1
+  fi
   step ok PATH "симлинк ${LINK_DIR}/ragraf"
   case ":${PATH}:" in
     *":${LINK_DIR}:"*) : ;;
@@ -274,26 +332,64 @@ if [ "${SERVICE}" -eq 1 ]; then
     step skip Служба "--service требует --system и root"
   elif ! command -v systemctl >/dev/null 2>&1; then
     step skip Служба "systemctl не найден (не systemd)"
+  elif [ ! -f "${CONFIG_PATH}" ]; then
+    # Юнит без конфигурации — служба, падающая на старте. Отказ, а не запись
+    # «на всякий случай» (измерено: status=203/EXEC).
+    fail Служба "нет файла конфигурации ${CONFIG_PATH}: укажите --config <файл>" 2
   else
-    UNIT=/etc/systemd/system/ragraf-watch.service
+    SERVICE_USER="${SERVICE_USER_ARG:-ragraf}"
+    # Интерпретатор из домашнего каталога служебному пользователю недоступен: shebang
+    # venv указывает туда, а /home/<кто-то> обычно 700 — systemd даёт 203/EXEC
+    # (измерено 23.11.2026 на 192.168.31.31: venv собран ~/.local/python313).
+    case "${PYTHON_BIN}" in
+      /home/*|/root/*)
+        OWNER_OF_PY="$(printf '%s' "${PYTHON_BIN}" | cut -d/ -f3)"
+        if [ "${OWNER_OF_PY}" != "${SERVICE_USER}" ]; then
+          fail Служба "интерпретатор ${PYTHON_BIN} лежит в домашнем каталоге ${OWNER_OF_PY}, а служба работает от ${SERVICE_USER}: нужен системный Python 3.13 или --service-user ${OWNER_OF_PY}" 3
+        fi
+        ;;
+    esac
+    if ! id -u "${SERVICE_USER}" >/dev/null 2>&1; then
+      useradd --system --no-create-home --shell /usr/sbin/nologin "${SERVICE_USER}" \
+        || fail Служба "не удалось создать пользователя ${SERVICE_USER}" 1
+      step ok Служба "пользователь ${SERVICE_USER} создан"
+    fi
+    # Файлы должны быть читаемы и исполняемы службой: без этого systemd даёт
+    # 203/EXEC «Permission denied» (измерено с User=nobody).
+    chown -R "${SERVICE_USER}:${SERVICE_USER}" "${PREFIX}" 2>/dev/null || true
+    chmod -R a+rX "${PREFIX}"
+    chown "${SERVICE_USER}:${SERVICE_USER}" "${CONFIG_PATH}" 2>/dev/null || true
+    # Обновление индекса по таймеру, а не «демон сторожа»: подкоманды watch в CLI нет,
+    # а свежесть проверяется внутри каждого вызова фасада. Таймер запускает то, что
+    # действительно существует (check), и называется по делу.
+    UNIT=/etc/systemd/system/ragraf-refresh.service
+    TIMER=/etc/systemd/system/ragraf-refresh.timer
     cat > "${UNIT}" <<EOF
 [Unit]
-Description=RAGRAF watchdog (refresh stale corpora)
+Description=RAGRAF: проверить свежесть корпуса и пересобрать при расхождении
 After=network.target
 
 [Service]
-Type=simple
-ExecStart=${BIN} -p /etc/ragraf/ragraf.yaml watch
-Restart=on-failure
-RestartSec=30
-User=nobody
-Group=nogroup
+Type=oneshot
+User=${SERVICE_USER}
+Group=${SERVICE_USER}
+ExecStart=${BIN} -p ${CONFIG_PATH} check
+TimeoutStartSec=1800
+EOF
+    cat > "${TIMER}" <<EOF
+[Unit]
+Description=RAGRAF: периодическая проверка свежести (${REFRESH_MINUTES} мин)
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=${REFRESH_MINUTES}min
+Unit=ragraf-refresh.service
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=timers.target
 EOF
     systemctl daemon-reload
-    step ok Служба "${UNIT} создан (запуск: systemctl enable --now ragraf-watch)"
+    step ok Служба "${TIMER} (каждые ${REFRESH_MINUTES} мин, пользователь ${SERVICE_USER})"
   fi
 fi
 

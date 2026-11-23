@@ -136,6 +136,38 @@ if ($result.Code -eq 0) {
     ($result.Output -split "`n" | Select-Object -Last 6) | ForEach-Object { Write-Host "         $_" }
 }
 
+# --- проверка свойства: обновление сохраняет состояние ----------------------
+# Своё же поведение, которое ломалось: `-Upgrade` уносил catalog/ и лицензию в .bak.
+$upgradeTarget = Join-Path $Sandbox 'upgrade-target'
+$first = Invoke-Setup -Arguments @('-Prefix', $upgradeTarget, '-NoPath', '-SkipDeps', '-SkipVerify', '-Source', $Source)
+if ($first.Code -eq 0) {
+    New-Item -ItemType Directory -Path (Join-Path $upgradeTarget 'catalog') -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $upgradeTarget 'catalog\marker.json') -Value '{"registry":"live"}' -Encoding utf8NoBOM
+    Set-Content -LiteralPath (Join-Path $upgradeTarget 'edition.license') -Value 'license' -Encoding utf8NoBOM
+    $marker = (Get-FileHash (Join-Path $upgradeTarget 'catalog\marker.json')).Hash
+    $initPath = Join-Path $upgradeTarget 'src\ragraf\__init__.py'
+    $text = [IO.File]::ReadAllText($initPath)
+    $current = [regex]::Match($text, '__version__\s*=\s*"([^"]+)"').Groups[1].Value
+    [IO.File]::WriteAllText($initPath, $text.Replace($current, '0.0.1-probe'), [Text.UTF8Encoding]::new($false))
+    $second = Invoke-Setup -Arguments @('-Prefix', $upgradeTarget, '-NoPath', '-SkipDeps', '-SkipVerify', '-Upgrade', '-Source', $Source)
+    $markerKept = (Test-Path (Join-Path $upgradeTarget 'catalog\marker.json')) -and
+                  ((Get-FileHash (Join-Path $upgradeTarget 'catalog\marker.json')).Hash -eq $marker)
+    $licenseKept = Test-Path (Join-Path $upgradeTarget 'edition.license')
+    $backupMade = @(Get-ChildItem -Directory -Path $Sandbox -Filter 'upgrade-target.bak-*').Count -ge 1
+    if ($second.Code -eq 0 -and $markerKept -and $licenseKept -and $backupMade) {
+        Write-Host ("  [ ok ] {0,-46} код 0, состояние и лицензия на месте, .bak создан" -f '6. обновление сохраняет состояние')
+        $script:passed++
+    } else {
+        Write-Host ("  [FAIL] {0,-46} код {1}, реестр {2}, лицензия {3}, .bak {4}" -f `
+            '6. обновление сохраняет состояние', $second.Code, $markerKept, $licenseKept, $backupMade)
+        $script:failed++
+        ($second.Output -split "`n" | Select-Object -Last 8) | ForEach-Object { Write-Host "         $_" }
+    }
+} else {
+    Write-Host ("  [FAIL] {0,-46} подготовка не удалась (код {1})" -f '6. обновление сохраняет состояние', $first.Code)
+    $script:failed++
+}
+
 Write-Host ''
 Write-Host ("ИТОГ: проверок {0}, пройдено {1}, провалено {2}" -f ($passed + $failed), $passed, $failed)
 
