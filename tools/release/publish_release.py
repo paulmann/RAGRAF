@@ -351,6 +351,13 @@ def retry(step: str, command: list[str], cwd: pathlib.Path, env: dict[str, str],
              "permission", "non-fast-forward", "protected branch")
     output = ""
     for attempt in range(1, attempts + 1):
+        # Имитация сетевого отказа: первая попытка не выполняется вовсе, чтобы
+        # проверить именно ВОЗОБНОВЛЯЕМОСТЬ, а не удачу сети (замер 23.11.2026:
+        # прежняя проверка стояла после реального отказа и не срабатывала никогда).
+        if _os.environ.get("RAGRAF_PUBLISH_FAULT") == "1" and attempt == 1:
+            print(f"  · {step}: искусственный отказ первой попытки (RAGRAF_PUBLISH_FAULT)")
+            time.sleep(1)
+            continue
         result = subprocess.run(command, cwd=str(cwd), capture_output=True, text=True, env=env)
         output = (result.stdout or "") + (result.stderr or "")
         if result.returncode == 0:
@@ -358,9 +365,6 @@ def retry(step: str, command: list[str], cwd: pathlib.Path, env: dict[str, str],
         if any(marker in output.lower() for marker in fatal):
             print(f"ПОВТОР НЕ ПОМОЖЕТ ({step}): {output.strip().splitlines()[-1][:160]}")
             return result.returncode, output
-        if _os.environ.get("RAGRAF_PUBLISH_FAULT") == "1" and attempt == 1:
-            output += "\nRAGRAF_PUBLISH_FAULT: искусственный отказ первой попытки"
-            print(f"  · {step}: искусственный отказ первой попытки (RAGRAF_PUBLISH_FAULT)")
         if attempt < attempts:
             delay = delays[min(attempt - 1, len(delays) - 1)]
             print(f"  · {step}: попытка {attempt} не удалась, повтор через {delay} с")
