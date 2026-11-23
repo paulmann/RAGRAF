@@ -162,6 +162,23 @@ RAGRAF 用索引取代这条路径。智能体通过固定操作提问，得到�
 
 需要 **Python 3.13 或更新版本**。不需要管理员权限。
 
+
+### 一步安装（Windows 10/11 与 Linux）
+
+安装器解包发行包、准备环境、把 `ragraf` 写入 PATH，并在报告“完成”之前检查三件事。它会拒绝危险目录（磁盘根、家目录本身、被索引项目内的目录）以及没有 `venv` 模块的解释器——实测陷阱：应用内嵌的 Python 3.13 能通过版本检查，却让安装失败。
+
+```powershell
+# Windows
+pwsh -NoLogo -NoProfile -File scripts\ragraf-setup.ps1 -DryRun
+pwsh -NoLogo -NoProfile -File scripts\ragraf-setup.ps1
+```
+
+```bash
+# Linux (Debian 12)
+bash scripts/ragraf-install.sh --dry-run
+bash scripts/ragraf-install.sh
+```
+
 ### Windows（PowerShell 7.6+）
 
 ```powershell
@@ -413,7 +430,7 @@ python tools/ragraf.py ensure .
 
 ## 用数字看项目与实测基准
 
-公开发表的数字（2026-11-23 核对；索引规模取自活动修订记录）：<!-- surface:figures -->外观上的 **87 个操作**、**94 个 MCP 工具**、**26** 个 CLI 子命令、**29** 种语法树语言与 **41** 种文本接入语言（包括 `document`）、登记表中 **87** 种数据格式（61 种语言、9 类文档家族、10 类数据、4 种无解析器）<!-- /surface:figures -->；RAGRAF 自身索引—— 1 006 个文件、7 423 个节点、104 877 条边（快照由 `Test-DocumentedNumbers` 与活动修订记录比对：属于过去修订的数字会给出带其 `rev_id` 与日期的警告，而在发布时这就是拒绝——`tools/release/gate_release.py`；活动数字来自 `python tools/ragraf.py -p config/ragraf.yaml status`）。
+公开发表的数字（2026-11-23 核对；索引规模取自活动修订记录）：<!-- surface:figures -->外观上的 **87 个操作**、**94 个 MCP 工具**、**26** 个 CLI 子命令、**29** 种语法树语言与 **41** 种文本接入语言（包括 `document`）、登记表中 **87** 种数据格式（61 种语言、9 类文档家族、10 类数据、4 种无解析器）<!-- /surface:figures -->；RAGRAF 自身索引—— 1 011 个文件、7 468 个节点、105 240 条边（快照由 `Test-DocumentedNumbers` 与活动修订记录比对：属于过去修订的数字会给出带其 `rev_id` 与日期的警告，而在发布时这就是拒绝——`tools/release/gate_release.py`；活动数字来自 `python tools/ragraf.py -p config/ragraf.yaml status`）。
 
 **试验场，已去个人化**（去掉项目名、路径和域名）。本节的数字是 **2026-10-16 的快照**，不是当前状态：当时登记册里有 **28 个语料、25 个已索引**—— 10 个带 CPG 层，15 个处于 `degraded` 模式。其中 16 个的修订记录在同一天读过：**7 527 个文件、94 528 个符号、791 844 条边、86 790 个分块**。
 

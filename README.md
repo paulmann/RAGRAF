@@ -151,7 +151,27 @@ What gets indexed is chosen in the panel: **Settings → the "Formats" tab** —
 
 **Python 3.13 or newer** is required. No administrator rights are needed.
 
-### Windows (PowerShell 7.6+)
+### One-step installer (Windows 10/11 and Linux)
+
+The installer unpacks the release, installs the environment, registers `ragraf` on PATH and
+verifies three things before it reports success. It refuses dangerous targets (a drive root,
+the home directory itself, a directory inside an indexed project) and refuses an interpreter
+without the `venv` module — the trap measured on 23.11.2026: an app-bundled Python 3.13 passes
+the version check and fails the install.
+
+```powershell
+# Windows: unpack the archive, then
+pwsh -NoLogo -NoProfile -File scripts\ragraf-setup.ps1 -DryRun   # show the plan
+pwsh -NoLogo -NoProfile -File scripts\ragraf-setup.ps1           # install to %LOCALAPPDATA%\RAGRAF
+```
+
+```bash
+# Linux (Debian 12): without sudo — ~/.local/share/ragraf; with sudo and --system — /opt/ragraf
+bash scripts/ragraf-install.sh --dry-run
+bash scripts/ragraf-install.sh
+```
+
+### Windows (PowerShell 7.6+), manual path
 
 ```powershell
 git clone https://github.com/paulmann/RAGRAF.git
@@ -432,7 +452,7 @@ The project is built for concrete tasks, so architecture proposals get a hearing
 
 ## The project in numbers and the measured test bed
 
-Published figures (checked on 23.11.2026; index sizes from the active revision record): <!-- surface:figures -->**87 operations** on the facade, **94 MCP tools**, **26** CLI subcommands, **29** tree-parsed languages and **41** text-attached ones (including `document`), **87** data formats in the registry (61 languages, 9 document families, 10 data kinds, 4 without a parser)<!-- /surface:figures -->; the RAGRAF index itself — 1 006 files, 7 423 nodes and 104 877 edges (the snapshot is compared with the active revision record by `Test-DocumentedNumbers`: figures from a past revision raise a warning naming its `rev_id` and date, and at publication that is a refusal — `tools/release/gate_release.py`; the live figures come from `python tools/ragraf.py -p config/ragraf.yaml status`).
+Published figures (checked on 23.11.2026; index sizes from the active revision record): <!-- surface:figures -->**87 operations** on the facade, **94 MCP tools**, **26** CLI subcommands, **29** tree-parsed languages and **41** text-attached ones (including `document`), **87** data formats in the registry (61 languages, 9 document families, 10 data kinds, 4 without a parser)<!-- /surface:figures -->; the RAGRAF index itself — 1 011 files, 7 468 nodes and 105 240 edges (the snapshot is compared with the active revision record by `Test-DocumentedNumbers`: figures from a past revision raise a warning naming its `rev_id` and date, and at publication that is a refusal — `tools/release/gate_release.py`; the live figures come from `python tools/ragraf.py -p config/ragraf.yaml status`).
 
 **The test bed, depersonalised** (project names, paths and domains removed). The figures in this section are a **snapshot of 16.10.2026**, not the current state: at that moment the registry held **28 corpora, 25 indexed** — 10 with the CPG layer, 15 in `degraded` mode. For 16 of them the revision record was read the same day: **7 527 files, 94 528 symbols, 791 844 edges, 86 790 chunks**.
 

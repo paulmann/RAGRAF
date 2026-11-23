@@ -1215,8 +1215,17 @@ def main(argv: list[str] | None = None) -> int:
     lag_code, lag_output = run("check_sources_lag.py", "--mode", "build",
                                "--tree", str(tree), "--source", str(source))
     lag_text = lag_output.strip().splitlines()[-1] if lag_output.strip() else "(пусто)"
-    print(("OK: " if lag_code == 0 else "FAIL: ") + lag_text)
-    if lag_code != 0:
+    if lag_code == 0:
+        print("OK: " + lag_text)
+    elif lag_code == 2:
+        # Нет клона публикации (он есть только на машине выпуска) — это не отставание,
+        # а неимение чем проверить. Вердикт обязан это назвать, а не промолчать и не
+        # заблокировать сборку там, где проверка невозможна (измерено 23.11.2026:
+        # 24-я проверка чекера падала на этом требование к окружению).
+        print("WARN: отставание таблицы не проверено: " + lag_text)
+        state["warnings"].append("отставание таблицы источников не проверено: " + lag_text)
+    else:
+        print("FAIL: " + lag_text)
         state["blocks"].append("таблица источников называет не текущую голову публикации")
         state["actions"].append("пересчитать таблицу в рабочем дереве и не коммитить её отдельно; "
                                 "клон публикации задаётся RAGRAF_PUBLICATION_CLONE")

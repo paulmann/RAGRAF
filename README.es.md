@@ -166,6 +166,23 @@ Lo que se indexa se elige en el panel: **Ajustes → la pestaña «Formatos»** 
 
 **Se requiere Python 3.13 o superior.** No hacen falta permisos de administrador.
 
+
+### Instalador en un paso (Windows 10/11 y Linux)
+
+El instalador descomprime la entrega, prepara el entorno, registra `ragraf` en PATH y comprueba tres cosas antes de decir «listo». Rechaza directorios peligrosos (raíz de la unidad, el propio directorio personal, un directorio dentro de un proyecto indexado) y un intérprete sin módulo `venv` — la trampa medida: un Python 3.13 embebido en una aplicación pasa la comprobación de versión y hace fallar la instalación.
+
+```powershell
+# Windows
+pwsh -NoLogo -NoProfile -File scripts\ragraf-setup.ps1 -DryRun
+pwsh -NoLogo -NoProfile -File scripts\ragraf-setup.ps1
+```
+
+```bash
+# Linux (Debian 12)
+bash scripts/ragraf-install.sh --dry-run
+bash scripts/ragraf-install.sh
+```
+
 ### Windows (PowerShell 7.6+)
 
 ```powershell
@@ -419,7 +436,7 @@ El proyecto se construye para tareas concretas, por eso las propuestas de arquit
 
 ## El proyecto en cifras y el banco de pruebas medido
 
-Cifras publicadas (comprobadas el 23.11.2026; tamaños del índice según la entrada de la revisión activa): <!-- surface:figures -->**87 operaciones** en la fachada, **94 herramientas MCP**, **26** subcomandos de CLI, **29** lenguajes analizados por árbol y **41** conectados como texto (incluido `document`), **87** formatos de datos en el registro (61 lenguajes, 9 familias de documentos, 10 tipos de datos, 4 sin analizador)<!-- /surface:figures -->; el índice propio de RAGRAF — 1 006 archivos, 7 423 nodos y 104 877 aristas (el retrato se compara con la entrada de revisión activa mediante `Test-DocumentedNumbers`: las cifras de una revisión pasada producen un aviso que nombra su `rev_id` y su fecha, y en la publicación eso es una negativa — `tools/release/gate_release.py`; las cifras vivas salen de `python tools/ragraf.py -p config/ragraf.yaml status`).
+Cifras publicadas (comprobadas el 23.11.2026; tamaños del índice según la entrada de la revisión activa): <!-- surface:figures -->**87 operaciones** en la fachada, **94 herramientas MCP**, **26** subcomandos de CLI, **29** lenguajes analizados por árbol y **41** conectados como texto (incluido `document`), **87** formatos de datos en el registro (61 lenguajes, 9 familias de documentos, 10 tipos de datos, 4 sin analizador)<!-- /surface:figures -->; el índice propio de RAGRAF — 1 011 archivos, 7 468 nodos y 105 240 aristas (el retrato se compara con la entrada de revisión activa mediante `Test-DocumentedNumbers`: las cifras de una revisión pasada producen un aviso que nombra su `rev_id` y su fecha, y en la publicación eso es una negativa — `tools/release/gate_release.py`; las cifras vivas salen de `python tools/ragraf.py -p config/ragraf.yaml status`).
 
 **El banco de pruebas, anonimizado** (nombres de proyecto, rutas y dominios eliminados). Las cifras de esta sección son un **retrato del 16.10.2026**, no el estado actual: en ese momento el registro tenía **28 corpus, 25 indexados** — 10 con la capa CPG, 15 en modo `degraded`. Para 16 de ellos la entrada de revisión se leyó el mismo día: **7 527 archivos, 94 528 símbolos, 791 844 aristas, 86 790 fragmentos**.
 

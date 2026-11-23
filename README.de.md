@@ -166,6 +166,23 @@ Was indiziert wird, wählt man in der Oberfläche: **Einstellungen → Registerk
 
 Erforderlich ist **Python 3.13 oder neuer**. Administratorrechte sind nicht nötig.
 
+
+### Installer in einem Schritt (Windows 10/11 und Linux)
+
+Der Installer entpackt die Auslieferung, richtet die Umgebung ein, trägt `ragraf` in PATH ein und prüft drei Dinge, bevor er „fertig“ meldet. Er lehnt gefährliche Verzeichnisse ab (Laufwerkswurzel, das Home-Verzeichnis selbst, ein Verzeichnis innerhalb eines indizierten Projekts) und einen Interpreter ohne `venv` — die gemessene Falle: ein in eine Anwendung eingebettetes Python 3.13 besteht die Versionsprüfung und lässt die Installation scheitern.
+
+```powershell
+# Windows
+pwsh -NoLogo -NoProfile -File scripts\ragraf-setup.ps1 -DryRun
+pwsh -NoLogo -NoProfile -File scripts\ragraf-setup.ps1
+```
+
+```bash
+# Linux (Debian 12)
+bash scripts/ragraf-install.sh --dry-run
+bash scripts/ragraf-install.sh
+```
+
 ### Windows (PowerShell 7.6+)
 
 ```powershell
@@ -419,7 +436,7 @@ Das Projekt wird für konkrete Aufgaben entwickelt, deshalb werden Vorschläge z
 
 ## Das Projekt in Zahlen und der gemessene Prüfstand
 
-Die veröffentlichten Zahlen (abgeglichen am 23.11.2026; die Größen des Index — nach dem Eintrag der aktiven Revision): <!-- surface:figures -->**87 Operationen** der Fassade, **94 MCP-Werkzeuge**, **26** CLI-Unterbefehle, **29** Sprachen über den Syntaxbaum und **41** als Text (einschließlich `document`), **87** Datenformate im Register (61 Sprachen, 9 Familien von Dokumenten, 10 Arten von Daten, 4 ohne Parser)<!-- /surface:figures -->; der eigene Index von RAGRAF — 1 006 Dateien, 7 423 Knoten und 104 877 Kanten (der Stand wird mit dem aktiven Revisionseintrag durch die Prüfung `Test-DocumentedNumbers` abgeglichen — Zahlen einer vergangenen Revision ergeben eine Warnung mit ihrer `rev_id` und ihrem Datum, bei der Veröffentlichung ist das eine Ablehnung: `tools/release/gate_release.py`; die geltenden Zahlen — `python tools/ragraf.py -p config/ragraf.yaml status`).
+Die veröffentlichten Zahlen (abgeglichen am 23.11.2026; die Größen des Index — nach dem Eintrag der aktiven Revision): <!-- surface:figures -->**87 Operationen** der Fassade, **94 MCP-Werkzeuge**, **26** CLI-Unterbefehle, **29** Sprachen über den Syntaxbaum und **41** als Text (einschließlich `document`), **87** Datenformate im Register (61 Sprachen, 9 Familien von Dokumenten, 10 Arten von Daten, 4 ohne Parser)<!-- /surface:figures -->; der eigene Index von RAGRAF — 1 011 Dateien, 7 468 Knoten und 105 240 Kanten (der Stand wird mit dem aktiven Revisionseintrag durch die Prüfung `Test-DocumentedNumbers` abgeglichen — Zahlen einer vergangenen Revision ergeben eine Warnung mit ihrer `rev_id` und ihrem Datum, bei der Veröffentlichung ist das eine Ablehnung: `tools/release/gate_release.py`; die geltenden Zahlen — `python tools/ragraf.py -p config/ragraf.yaml status`).
 
 **Der Prüfstand, entpersonalisiert** (Namen der Projekte, Pfade und Domänen sind verborgen). Die Zahlen dieses Abschnitts sind eine **Momentaufnahme vom 16.10.2026**, nicht der heutige Zustand: zu jenem Zeitpunkt standen **28 Korpora im Register, 25 indiziert** — 10 mit der CPG-Schicht, 15 im Modus `degraded`. Bei 16 von ihnen wurde der Revisionseintrag am selben Tag gelesen: **7 527 Dateien, 94 528 Symbole, 791 844 Kanten, 86 790 Chunks**.
 
