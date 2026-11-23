@@ -18,7 +18,7 @@
     результат Ok=$true при нулевом осмотре считается ложным PASS и валит прогон.
 
     Ожидаемый baseline на момент передачи проекта: 0 ошибок, 0 предупреждений,
-    52 проверки — ровно столько, сколько записей в реестре `$script:CheckFunctions`;
+    53 проверки — ровно столько, сколько записей в реестре `$script:CheckFunctions`;
     это сверяет Test-DocumentedNumbers. Прежние две ошибки («запись прогона в реестр
     не покрывала путь ensure» и «документы называли 18 и 16 инструментов там, где
     в коде 23») закрыты
@@ -4892,6 +4892,64 @@ function Test-TestSetsDoNotHideFailure {
         -Examined $examined -Details $problems.ToArray()
 }
 
+function Test-RefsAreFixedByRule {
+    <#
+    .SYNOPSIS
+        Ремонт адресов `файл:строка` идёт по правилу, а не по похожему абзацу.
+
+    .DESCRIPTION
+        Измерено 23.11.2026: правки ядра сдвинули 28 адресов, и автоматический пересчёт
+        «по абзацу» ИСПОРТИЛ документы — в абзаце несколько ссылок на один файл, маркер
+        одного утверждения применялся к соседям (104 «исправления», восстановление вручную).
+
+        Правило инструмента `tools/fix_line_refs.py`: одна пара — одна ссылка; при равенстве
+        расстояний РАЗНЫХ адресов — отказ; диапазон проверяется попаданием; признак из отчёта
+        обязан встречаться однозначно. Свойства проверяет `tools/check_fix_refs_rule.py`
+        приманками (8 проверок), а здесь — вызов и разбор.
+    #>
+    $checkName = 'document addresses are repaired by rule, not by guess'
+    $toolPath = Join-Path $script:ProjectRoot 'tools/check_fix_refs_rule.py'
+    $fixPath = Join-Path $script:ProjectRoot 'tools/fix_line_refs.py'
+    if (-not (Test-Path -LiteralPath $toolPath) -or -not (Test-Path -LiteralPath $fixPath)) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: нет tools/fix_line_refs.py или tools/check_fix_refs_rule.py')
+    }
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $python) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: python не найден в PATH')
+    }
+
+    $problems = [System.Collections.Generic.List[string]]::new()
+    $examined = 0
+
+    $ruleOut = & $python.Source $toolPath 2>&1
+    $ruleCode = $LASTEXITCODE
+    $ruleText = ($ruleOut | Out-String).Trim()
+    Write-Host ("    правило ремонта адресов: " + (($ruleText -split "`n" | Where-Object { $_ -match 'ИТОГ' }) -join ' '))
+    $ruleMatch = [regex]::Match($ruleText, 'осмотрено:\s*(\d+)')
+    if ($ruleMatch.Success) { $examined += [int]$ruleMatch.Groups[1].Value }
+    if ($ruleCode -ne 0) {
+        foreach ($line in @($ruleOut | Where-Object { $_ -is [string] })) {
+            if ($line -match '^\s*\[FAIL\]') { $problems.Add(($line -replace '^\s*\[FAIL\]\s*', '')) }
+        }
+        if ($problems.Count -eq 0) { $problems.Add("правило ремонта завершилось кодом $ruleCode без расшифровки") }
+    }
+
+    # Дерево обязано быть чистым: иначе ремонт предстоит, и это находка публикации.
+    $dryOut = & $python.Source $fixPath --quiet 2>&1
+    $dryCode = $LASTEXITCODE
+    $dryText = ($dryOut | Out-String).Trim()
+    Write-Host ("    ремонт адресов на живом дереве: " + (($dryText -split "`n" | Select-Object -First 1) -join ' '))
+    if ($dryCode -ne 0) {
+        $problems.Add("на живом дереве есть адреса, которые правило чинит или не может починить (код $dryCode): $($dryText.Split([char]10)[0])")
+    }
+    $examined += 1
+
+    return New-CheckResult -Name $checkName -Ok ($problems.Count -eq 0) `
+        -Examined $examined -Details $problems.ToArray()
+}
+
 $script:CheckFunctions = @(
     'Test-ProjectLayout'
     'Test-SecretHygiene'
@@ -4945,6 +5003,7 @@ $script:CheckFunctions = @(
     'Test-TrapCatalog'
     'Test-ReleaseAndStateProperties'
     'Test-TestSetsDoNotHideFailure'
+    'Test-RefsAreFixedByRule'
 )
 
 $script:CheckNames = @()

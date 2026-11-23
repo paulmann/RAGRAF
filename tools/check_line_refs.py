@@ -262,9 +262,9 @@ PAIRS = (
     dict(doc="docs/AGENTS-context.md", anchor="Прежний текст «CPG отключена в конфигурации» заменён", path="src/ragraf/indexer.py",
          marker="CPG в этом прогоне не собиралась"),
     dict(doc="docs/AGENTS-context.md", anchor="Коды возврата CLI", path="src/ragraf/cli.py",
-         marker="EXIT_UNAVAILABLE = 3"),
+         marker="def _index_not_built"),
     dict(doc="docs/AGENTS-context.md", anchor="Коды возврата CLI", path="src/ragraf/cli.py",
-         marker="return EXIT_UNAVAILABLE"),
+         marker="def _index_not_built"),
     dict(doc="docs/AGENTS-context.md", anchor="отсутствие внешнего слоя даёт", path="src/ragraf/cpg.py",
          marker="capability=degraded"),
     # Ловушки AGENTS-TRAPS.md: объект назван в самом утверждении.
@@ -446,7 +446,7 @@ DECLARED: tuple[dict, ...] = tuple(
     dict(doc="docs/AGENTS-context.md", ref="src/ragraf/admin_server.py:269", key="F"),
     dict(doc="docs/AGENTS-context.md", ref="src/ragraf/admin_server.py:1392", key="F"),
     dict(doc="docs/AGENTS-context.md", ref="src/ragraf/cli.py:988-989", key="F"),
-    dict(doc="docs/AGENTS-context.md", ref="src/ragraf/cli.py:906", key="F"),
+    dict(doc="docs/AGENTS-context.md", ref="src/ragraf/cli.py:2282", key="F"),
     # docs/03_implementation/HARNESS_INTEGRATION.md
     dict(doc="docs/03_implementation/HARNESS_INTEGRATION.md", ref="src/ragraf/mcp_server.py:1200-1201", key="F"),
     dict(doc="docs/03_implementation/HARNESS_INTEGRATION.md", ref="src/ragraf/mcp_server.py:140-147", key="F"),
@@ -462,7 +462,7 @@ DECLARED: tuple[dict, ...] = tuple(
     dict(doc="docs/03_implementation/RELEASE-SOURCES.md", ref="community/CONTRIBUTING.md:73", key="C"),
     dict(doc="docs/03_implementation/RELEASE-SOURCES.md", ref="tools/check_licensing.py:106", key="F"),
     # docs/skills/ragraf-core/SKILL.md
-    dict(doc="docs/skills/ragraf-core/SKILL.md", ref="src/ragraf/cli.py:906", key="F"),
+    dict(doc="docs/skills/ragraf-core/SKILL.md", ref="src/ragraf/cli.py:2282", key="F"),
     dict(doc="docs/skills/ragraf-core/SKILL.md", ref="src/ragraf/cli.py:444-447", key="F"),
     dict(doc="docs/skills/ragraf-core/SKILL.md", ref="src/ragraf/ensure.py:540-545", key="F"),
     dict(doc="docs/skills/ragraf-core/SKILL.md", ref="src/ragraf/util.py:162-175", key="F"),
@@ -1470,6 +1470,14 @@ PAIRS = PAIRS + (
     dict(doc="AGENTS-TRAPS.md",
          anchor="   (`src/ragraf/config.py:1139`) и не используется",
          path="src/ragraf/config.py", marker="budget_seconds=max(5.0"),
+)
+
+
+# --- Блок 26: selftest и числа проверок ---
+PAIRS = PAIRS + (
+    dict(doc="docs/AGENTS-context.md",
+         anchor="(`src/ragraf/cli.py:2282`), поэтому «зелёный selftest»",
+         path="src/ragraf/cli.py", marker="def cmd_selftest"),
 )
 
 
