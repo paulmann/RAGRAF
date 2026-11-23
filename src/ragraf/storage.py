@@ -444,16 +444,30 @@ def plan(
 
     history = revisions(cfg)
     known = {item["rev_id"] for item in history}
-    active = history[0]["rev_id"] if history else ""
+    # Активная ревизия — последняя ЗАПЕЧАТАННАЯ, а не последняя записанная: прерванный по
+    # бюджету прогон оставляет запись в состоянии `building`, данных в ней нет, и держать её
+    # в списке хранения значит копить мусор навсегда (замер 23.11.2026: rev-0001/building
+    # называлась активной, и её 3 604 строки пережили успешный прогон).
+    sealed_states = set(store_mod.SEALED_STATES)
+    sealed = [item for item in history if str(item.get("state")) in sealed_states]
+    unsealed = [item for item in history if str(item.get("state")) not in sealed_states]
+    active = sealed[0]["rev_id"] if sealed else ""
 
-    keep = [item["rev_id"] for item in history[:retain]]
+    keep = [item["rev_id"] for item in sealed[:retain]]
     if active and active not in keep:
         keep.insert(0, active)
     keep_set = set(keep)
     tail = [item["rev_id"] for item in history if item["rev_id"] not in keep_set]
+    # Незапечатанные ревизии перечислены отдельно: вызывающий видит, что удаляется не
+    # «старая история», а данные прерванных прогонов.
+    unsealed_ids = [item["rev_id"] for item in unsealed]
 
-    orphans = orphan_rows(cfg, known)
-    orphan_revs = orphan_revision_ids(cfg, known)
+    # Известными считаются только ЗАПЕЧАТАННЫЕ ревизии: строки незапечатанной (прерванной
+    # по бюджету) никто прочитать не может, она не активна, и без этого правила её данные
+    # не удаляло ничто — ротация смотрит только `state='ready'`.
+    sealed_known = {item["rev_id"] for item in sealed}
+    orphans = orphan_rows(cfg, sealed_known)
+    orphan_revs = orphan_revision_ids(cfg, sealed_known)
 
     arts = cpg_artifacts(cfg)
     cpg_keep = [item["rev_id"] for item in history[: max(1, cpg_keep_revs)]]
@@ -531,6 +545,7 @@ def plan(
         "active": next((item for item in history if item["rev_id"] == active), None),
         "revisions_in_stores": len(history),
         "revisions_kept": keep,
+        "revisions_unsealed": unsealed_ids,
         "revisions_tail": tail,
         "stores": stores,
         "total_index_mb": round(

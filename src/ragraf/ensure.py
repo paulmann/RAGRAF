@@ -37,6 +37,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from . import store
 from .catalog import Catalog, _norm
 
 # Имена каталогов, которые не являются проектом, когда так назван сам каталог.
@@ -296,6 +297,53 @@ def looks_like_project(root: Path) -> tuple[bool, str]:
         f"({', '.join(_PROJECT_MARKERS)}) ни в корне, ни на глубине до "
         f"{_MARKER_SEARCH_MAX_DEPTH}: корпус не создаётся{tail}"
     )
+
+
+
+def _sealed_bytes(cfg: Any) -> float:
+    """Объём хранилищ, которые держат ЗАПЕЧАТАННЫЕ ревизии, в мегабайтах.
+
+    Разделение нужно для честного числа после `partial`: каталог индекса — это и рабочий
+    индекс, и мусор прерванного прогона. Объём файлов по ревизиям SQLite не отдаёт,
+    поэтому доля оценивается как «хранилище минус свободные страницы» по запечатанным
+    ревизиям: так число не выдумано и не выдаёт весь каталог за мусор.
+    """
+    total = 0.0
+    for db in (cfg.graph_db, cfg.lexvec_db):
+        if not db.is_file():
+            continue
+        try:
+            conn = store.connect(db, readonly=True)
+            try:
+                used = conn.execute("PRAGMA page_count").fetchone()[0]
+                free = conn.execute("PRAGMA freelist_count").fetchone()[0]
+                page = conn.execute("PRAGMA page_size").fetchone()[0]
+            finally:
+                conn.close()
+        except Exception:
+            total += db.stat().st_size
+            continue
+        total += max(0, used - free) * page
+    return round(total / (1024 * 1024), 1)
+
+
+def _unsealed_bytes(root: pathlib.Path) -> float:
+    """Сколько занимает каталог индекса корпуса, в мегабайтах.
+
+    Нужен только для честного сообщения после `partial`: без числа «незакреплённые
+    данные» звучит как мелочь, а это сотни мегабайт (замер 23.11.2026: 204,9 МБ).
+    """
+    index_dir = root / ".ragraf" / "index"
+    if not index_dir.is_dir():
+        return 0.0
+    total = 0
+    for path in index_dir.rglob("*"):
+        try:
+            if path.is_file():
+                total += path.stat().st_size
+        except OSError:
+            continue
+    return round(total / (1024 * 1024), 1)
 
 
 def ensure(root: Path, *, create: bool = True, index: bool = True,
@@ -583,6 +631,21 @@ def _ensure_new(catalog: Catalog, root: Path, start: float, *, create: bool,
         outcome.status = "partial"
         jumps = [str(n) for n in data.get("notes", []) if "бюджет" in str(n)]
         outcome.reason = jumps[-1] if jumps else "прогон прерван по бюджету времени"
+        # Оставленное место называется числом: 205 МБ без ревизии (замер 23.11.2026)
+        # — это то, что никто не вернёт, если о нём не сказать.
+        left_mb = _unsealed_bytes(cfg.root)
+        if left_mb > 0:
+            sealed = _sealed_bytes(cfg)
+            share = max(0.0, left_mb - sealed)
+            outcome.reason += (
+                f". Каталог индекса занимает {left_mb:.1f} МБ, рабочий индекс в нём — "
+                f"{sealed:.1f} МБ; остальные {share:.1f} МБ принадлежат прерванному прогону "
+                f"и сами не исчезнут: успешный прогон кладёт СВОИ строки рядом (замер: "
+                f"1,5 → 3,1 МБ), а мусор убирает `ragraf compact --apply`"
+            )
+            outcome.notes.append(
+                f"прерванный прогон оставил {share:.1f} МБ; уборка — `compact --apply` "
+                f"(каталог {left_mb:.1f} МБ)")
     elif not data.get("ok", False):
         outcome.status = "error"
         outcome.reason = "индексация нового корпуса завершилась с ошибкой"

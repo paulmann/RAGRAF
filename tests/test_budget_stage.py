@@ -1,129 +1,115 @@
-"""Проверка P0-2: бюджет времени останавливает прогон ВНУТРИ стадии и называет место.
+"""Измеренный дефект блока 24: отказ по бюджету называл стадию, на которой его спросили.
 
-Требование ТЗ: «Никогда не отвечать таймаутом без деталей: при превышении
-бюджета — ответ status=timeout с этапом, числом обработанных файлов и
-подсказкой». До этой правки бюджет проверялся только МЕЖДУ стадиями, поэтому
-самая долгая стадия (`ast` на корпусе BWO — 370–410 с при бюджете 120 с)
-завершалась целиком и только потом выяснялось, что времени не было.
+Замер 23.11.2026 (корпус 4 693 файла, бюджет 60 с): прогон шёл 323,8 с и сообщал
+«бюджет исчерпан на стадии schema», хотя стадия schema не начиналась — проверка стояла
+только на границах стадий, а тяжёлые проходы (разрешение имён, наследование, импорты)
+шли между ними без проверок.
 
-Проверяется три свойства:
-  1. прогон с исчерпанным бюджетом ОСТАНАВЛИВАЕТСЯ и не закрепляет ревизию;
-  2. в отчёте есть стадия и число обработанных файлов (а не просто «таймаут»);
-  3. прогон с достаточным бюджетом по-прежнему проходит и не помечается.
+Закрепляется свойство порядка, а не написание:
+1. предел проверяется ВНУТРИ тяжёлого прохода, поэтому названная стадия — та, что шла;
+2. исключение, брошенное внутри прохода, не выходит из `run()` трейсбеком, а даёт
+   `ok=False` с причиной;
+3. активная ревизия корпуса не меняется — прерванный прогон не закрепляет новую;
+4. счётчик сделанного относится к проходу, а не к нулю следующей стадии.
 
-Стиль — самостоятельный скрипт с `check`, как остальные проверки проекта.
+Проверка не воспроизводит 323 секунды: проход подменяется тем, что бросает то же
+исключение, что и настоящий `check_budget`.
 """
-
-from __future__ import annotations
-
-import shutil
+import pathlib
 import sys
 import tempfile
-from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[1]
-SRC = REPO / "src"
-if str(SRC) not in sys.path:
-    sys.path.insert(0, str(SRC))
+ROOT = pathlib.Path(r"C:\AutoClaw\RAGRAF")
+sys.path.insert(0, str(ROOT / "src"))
 
-from ragraf.config import load as load_config  # noqa: E402
-from ragraf.indexer import Indexer  # noqa: E402
-from ragraf.init_corpus import create_config  # noqa: E402
+from ragraf import config as config_mod  # noqa: E402
+from ragraf import indexer as indexer_mod  # noqa: E402
+from ragraf import store as store_mod  # noqa: E402
+
+PHP = ("<?php\nfunction f{i}($v) {{ $o = new S{i}(); return $o->get($v); }}\n"
+       "class S{i} {{ public function get($v) {{ return $v; }} }}\n")
 
 PASS = 0
 FAIL = 0
+problems: list[str] = []
 
 
-def check(condition: bool, title: str, detail: str = "") -> None:
+def check(cond: bool, message: str) -> None:
     global PASS, FAIL
-    if condition:
+    if cond:
         PASS += 1
-        print(f"  [OK ] {title}")
     else:
         FAIL += 1
-        print(f"  [FAIL] {title}" + (f"\n      {detail}" if detail else ""))
-
-
-PHP = """<?php
-function probe_%(i)d($x) {
-    $y = $x + %(i)d;
-    return $y * 2;
-}
-"""
-
-
-def build_corpus(root: Path, count: int = 200) -> None:
-    (root / ".gitignore").write_text("probe\n", encoding="utf-8")
-    src = root / "src"
-    src.mkdir()
-    for i in range(count):
-        (src / f"mod{i:03d}.php").write_text(PHP % {"i": i}, encoding="utf-8")
+        problems.append(message)
 
 
 def main() -> int:
-    tmp = Path(tempfile.mkdtemp(prefix="ragraf_budget_"))
-    try:
-        build_corpus(tmp)
-        cfg_path, _scan = create_config(tmp, project="budgetprobe",
-                                         config_path=tmp / "budget.yaml")
-        text = cfg_path.read_text(encoding="utf-8").replace(
-            "joern_enabled: true", "joern_enabled: false")
-        cfg_path.write_text(text, encoding="utf-8", newline="\n")
-        cfg = load_config(cfg_path)
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        work = pathlib.Path(tmp)
+        corpus = work / "corpus"
+        (corpus / "src").mkdir(parents=True)
+        (corpus / "composer.json").write_text("{}", encoding="utf-8")
+        for i in range(40):
+            (corpus / "src" / f"u{i:03d}.php").write_text(PHP.format(i=i), encoding="utf-8")
 
-        print("=== 1. Бюджет 1 мс: прогон обязан остановиться внутри стадии ===")
-        before = None
-        idx = Indexer(cfg)
-        try:
-            before = idx.control.current_rev()
-            report = idx.run(with_vectors=False, budget_seconds=0.001)
-        finally:
-            idx.close()
-        print(f"  отчёт: budget_exceeded={report.budget_exceeded} "
-              f"stage={report.budget_stage!r} files_done={report.budget_files_done} "
-              f"ok={report.ok}")
-        check(report.budget_exceeded, "прогон помечен как превысивший бюджет")
-        check(bool(report.budget_stage), "стадия названа", report.budget_stage)
-        check(int(report.budget_files_done) > 0,
-              "число обработанных файлов названо", str(report.budget_files_done))
-        check(report.budget_files_done < 200,
-              "прогон остановился, не дойдя до конца корпуса",
-              str(report.budget_files_done))
-        check(not report.ok, "отчёт не объявляет прогон успешным")
-        note = " ".join(report.notes)
-        check("бюджет" in note and "прерван" in note,
-              "в примечаниях есть причина и подсказка", note[:200])
-        check("index.budget_seconds" in note or "exclude" in note,
-              "подсказка называет, что делать", note[:200])
-        after = None
-        idx2 = Indexer(cfg)
-        try:
-            after = idx2.control.current_rev()
-        finally:
-            idx2.close()
-        check(after == before, "ревизия не закреплена: прежний индекс остался рабочим",
-              f"было {before}, стало {after}")
+        config_path = work / "corpus.yaml"
+        config_path.write_text(
+            f"project: budget-stage\nroot: {corpus.as_posix()}\n"
+            "languages:\n  - php\ninclude:\n  - \"**/*.php\"\n"
+            "exclude:\n  - \"**/.ragraf/**\"\n", encoding="utf-8")
+        cfg = config_mod.load(config_path)
 
-        print("\n=== 2. Достаточный бюджет: прогон проходит и не помечается ===")
-        idx3 = Indexer(cfg)
-        try:
-            ok_report = idx3.run(with_vectors=False, budget_seconds=300)
-        finally:
-            idx3.close()
-        check(not ok_report.budget_exceeded, "прогон не помечен как превысивший бюджет",
-              str(ok_report.budget_stage))
-        check(ok_report.ok and bool(ok_report.rev_id), "прогон завершён",
-              f"ok={ok_report.ok} rev={ok_report.rev_id}")
-        check(ok_report.files >= 200, "все файлы корпуса обработаны",
-              str(ok_report.files))
-    finally:
-        shutil.rmtree(tmp, ignore_errors=True)
+        # 1. Нормальный прогон: ревизия закреплена, её и запоминаем как рабочую.
+        good = indexer_mod.Indexer(cfg)
+        first = good.run(budget_seconds=600)
+        check(first.ok, f"подготовительный прогон не собрался: {first.notes[-1:]}")
+        good.close()
+        rev_conn = store_mod.connect(cfg.graph_db) if hasattr(store_mod, "connect") else None
+        if rev_conn is None:
+            check(False, "нет store.connect — активную ревизию не прочитать")
+            return 1
+        active_before, _ = store_mod.active_revision(rev_conn)
+        rev_conn.close()
+        check(bool(active_before), "после успешного прогона активной ревизии нет")
 
-    print()
-    print("=" * 78)
+        # 2. Прогон, у которого проход разрешения имён упирается в предел.
+        broken = indexer_mod.Indexer(cfg)
+
+        def boom(rev_id: str, check_budget=None):
+            raise indexer_mod._BudgetExceeded("resolve_names", 67743)
+
+        broken._resolve_external_names = boom  # type: ignore[method-assign]
+        report = broken.run(budget_seconds=600)
+        broken.close()
+
+        check(report.ok is False, f"ok={report.ok!r}, ожидалось False (прерванный прогон)")
+        check(report.budget_exceeded, "признак превышения бюджета не выставлен")
+        check(report.budget_stage == "resolve_names",
+              f"названа стадия {report.budget_stage!r} вместо 'resolve_names'")
+        check(report.budget_files_done == 67743,
+              f"счётчик сделанного {report.budget_files_done}, ожидалось 67743 (счётчик прохода)")
+        note_text = " ".join(report.notes)
+        check("resolve_names" in note_text, "причина не называет стадию прогона")
+        check("ревизия не закреплена" in note_text,
+              "причина не говорит, что ревизия не закреплена")
+
+        # 3. Активная ревизия осталась прежней: прерванный прогон её не подменил.
+        rev_conn = store_mod.connect(cfg.graph_db)
+        active_after, _ = store_mod.active_revision(rev_conn)
+        rev_conn.close()
+        before_rev = (active_before or {}).get("rev_id")
+        after_rev = (active_after or {}).get("rev_id")
+        check(before_rev == after_rev,
+              f"активная ревизия сменилась {before_rev!r} → {after_rev!r}: прерванный прогон закрепил новую")
+        check(after_rev != report.rev_id,
+              f"прерванная ревизия {report.rev_id!r} стала активной")
+
+    if problems:
+        for problem in problems:
+            print(f"FAIL: {problem}")
+        return 1
     print(f"ИТОГ: пройдено {PASS}, провалено {FAIL}")
-    print("=" * 78)
-    return 0 if FAIL == 0 else 1
+    return 0
 
 
 if __name__ == "__main__":

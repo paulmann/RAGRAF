@@ -148,6 +148,21 @@ def mirror(skill: Path, root: Path, name: str) -> None:
     shutil.copyfile(skill / name, root / "sandbox-copy" / "ragraf-core" / name)
 
 
+
+def _set_checks(path: Path, replacement: str) -> None:
+    """Заменить число проверок чекера, не завязываясь на грамматическую форму.
+
+    «51 проверка», «49 проверок», «33 проверки» — одна и та же величина. Подсадка,
+    искавшая буквальное «N проверок», падала на верной форме (замер 23.11.2026).
+    """
+    body = path.read_text(encoding="utf-8")
+    pattern = re.compile(r"\d+\s+провер(?:ок|ка|ки)")
+    hits = pattern.findall(body)
+    if len(hits) != 1:
+        raise SystemExit(f"число проверок в {path.name} не однозначно: {hits}")
+    path.write_text(pattern.sub(replacement, body, count=1), encoding="utf-8", newline="\n")
+
+
 def main() -> int:
     tmp = Path(tempfile.mkdtemp(prefix="ragraf_skill_numbers_"))
     os.environ["RAGRAF_CATALOG_DIR"] = str(tmp / "catalog")
@@ -162,10 +177,13 @@ def main() -> int:
     ops_n, tools_n = declared_numbers(ops)
     # Число проверок чекера тоже читается из текста навыка: оно меняется вместе
     # с чекером, и набор, помнящий 45, падал бы на верной правке.
-    checks_n = int(re.search(r"(\d+) проверок",
+    checks_n = int(re.search(r"(\d+)\s+провер(?:ок|ка|ки)",
                              repair.read_text(encoding="utf-8")).group(1))
     pristine_ops = ops.read_bytes()
     pristine_skill = skill_md.read_bytes()
+    # Исходные байты repair.md: возврат после подсадки делается из них, а не обратной
+    # заменой строки — обратная замена зависит от грамматической формы числа.
+    pristine_repair = repair.read_bytes()
     print(f"  действующие числа навыка: операций {ops_n}, инструментов {tools_n}")
 
     code, output = run_checker(tmp)
@@ -217,7 +235,7 @@ def main() -> int:
     print("=" * 78)
     ops.write_bytes(pristine_ops)
     mirror(skill, tmp, "reference/operations.md")
-    edit(repair, f"{checks_n} проверок", "33 проверки")
+    _set_checks(repair, "33 проверки")
     mirror(skill, tmp, "reference/repair.md")
     code, output = run_checker(tmp)
     check(code == 1, "устаревший baseline чекера ловится", output[-300:])
@@ -228,7 +246,7 @@ def main() -> int:
     print("=" * 78)
     print("3. ПОДСАДКА: РАСХОЖДЕНИЕ КОПИИ С ИСТОЧНИКОМ")
     print("=" * 78)
-    edit(repair, "33 проверки", f"{checks_n} проверок")
+    repair.write_bytes(pristine_repair)
     mirror(skill, tmp, "reference/repair.md")
     copy_ops = tmp / "sandbox-copy" / "ragraf-core" / "reference" / "operations.md"
     edit_number(copy_ops, "ops", "**62 операции**")

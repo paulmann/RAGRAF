@@ -56,7 +56,7 @@ CORE = [
     # песочный (реестр в .ragraf/tmp) и не трогает живой реестр корпуса.
     "test_server_control.py",
     "test_cli_ops_dispatch.py", "test_task_stats.py", "test_telemetry_facts.py",
-    "test_catalog_state.py", "test_budget_stage.py", "test_evidence_lines.py",
+    "test_catalog_state.py", "test_budget_stage.py", "test_partial_cleanup.py", "test_evidence_lines.py",
     "test_structure_p1.py", "test_polyglot_p13.py", "test_p2_features.py",
     "test_docrole.py", "test_exclude_defaults.py", "test_auto_thresholds.py",
     "test_audit_report.py", "test_dedupe_prompt.py",

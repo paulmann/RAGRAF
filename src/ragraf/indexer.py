@@ -392,15 +392,43 @@ class Indexer:
         if budget_over("resolve"):
             return self.report
         t0 = time.perf_counter()
-        resolved_cnt, ambiguous_cnt = self._resolve_external_names(rev_id)
-        # Рёбра наследования разрешаются отдельно и ДО общих счётчиков не
-        # подмешиваются: у них своя природа (класс, а не метод) и своя
-        # достоверность. Замер: на revoap все 29 рёбер `extends` вели на
-        # заглушки, то есть наследование в графе было невидимым.
-        inherit_resolved, inherit_ambiguous = self._resolve_inheritance_names(rev_id)
-        # Импорты JS/TS: связь задаётся строкой импорта, а не совпадением имён,
-        # поэтому стадия идёт после разрешения имён и не пересекается с ним.
-        import_bound, import_ambiguous = self._resolve_js_imports(rev_id)
+        # Проверка бюджета передаётся ВНУТРЬ проходов: на 4 693 файлах они занимают
+        # больше бюджета целиком, и проверка на границе стадии называла следующую
+        # стадию вместо настоящей (замер 23.11.2026: «schema», files_done=0).
+        # Исключение бюджета здесь ловится ТЕМ ЖЕ обработчиком, что на стадии ast:
+        # иначе оно всплывало из run() трейсбеком вместо честного `partial`.
+        try:
+            resolved_cnt, ambiguous_cnt = self._resolve_external_names(
+                rev_id, check_budget=check_budget)
+            if check_budget is not None:
+                check_budget("resolve_names", resolved_cnt)
+            # Рёбра наследования разрешаются отдельно и ДО общих счётчиков не
+            # подмешиваются: у них своя природа (класс, а не метод) и своя
+            # достоверность. Замер: на revoap все 29 рёбер `extends` вели на
+            # заглушки, то есть наследование в графе было невидимым.
+            inherit_resolved, inherit_ambiguous = self._resolve_inheritance_names(
+                rev_id, check_budget=check_budget)
+            if check_budget is not None:
+                check_budget("inheritance", inherit_resolved)
+            # Импорты JS/TS: связь задаётся строкой импорта, а не совпадением имён,
+            # поэтому стадия идёт после разрешения имён и не пересекается с ним.
+            import_bound, import_ambiguous = self._resolve_js_imports(
+                rev_id, check_budget=check_budget)
+            if check_budget is not None:
+                check_budget("imports_js", import_bound)
+        except _BudgetExceeded as exc:
+            self.report.budget_exceeded = True
+            self.report.budget_stage = exc.stage
+            self.report.budget_files_done = exc.files_done
+            self._abort(
+                rev_id,
+                f"бюджет времени исчерпан на стадии «{exc.stage}» "
+                f"(сделано {exc.files_done}): прогон прерван, ревизия не закреплена, "
+                f"прежний индекс остался рабочим. Увеличьте index.budget_seconds "
+                f"или сократите корпус через exclude.",
+                t_start,
+            )
+            return self.report
         self._stage(rev_id, "resolve", round(time.perf_counter() - t0, 3), resolved_cnt)
         if import_bound or import_ambiguous:
             self.report.notes.append(
@@ -1287,7 +1315,7 @@ class Indexer:
             )
             return 0
 
-    def _resolve_external_names(self, rev_id: str) -> tuple[int, int]:
+    def _resolve_external_names(self, rev_id: str, check_budget=None) -> tuple[int, int]:
         """Разрешение внешних имён (архитектура §6.2 — «динамический вызов»).
 
         `$obj->get()` без вывода типов даёт ребро на `@ext:method:get`. Такие рёбра
@@ -1308,6 +1336,7 @@ class Indexer:
         resolved = 0
         ambiguous = 0
         new_rows: list[tuple] = []
+        _groups_seen = 0
         # Заглушки, которые будут ЗАМЕНЕНЫ разрешёнными рёбрами: иначе в графе останутся
         # и внешняя ссылка, и разрешённая связь одновременно — задвоение факта.
         replaced_uids: list[str] = []
@@ -1327,6 +1356,9 @@ class Indexer:
                 if not cands or len(cands) > NOISY_THRESHOLD or len(cands) > MAX_CANDIDATES:
                     ambiguous += len(group)
                     continue
+                _groups_seen += 1
+                if check_budget is not None and _groups_seen % 500 == 0:
+                    check_budget("resolve_names", _groups_seen)
                 for er in group:
                     for cand in cands:
                         uid = util.stable_id(
@@ -1448,7 +1480,7 @@ class Indexer:
             self.graph.commit()
         return resolved, ambiguous
 
-    def _resolve_js_imports(self, rev_id: str) -> tuple[int, int]:
+    def _resolve_js_imports(self, rev_id: str, check_budget=None) -> tuple[int, int]:
         """Привязать вызовы JS/TS к определениям по строке импорта.
 
         Возвращает `(привязано, неоднозначно)`. Внешние пакеты (`react`,
@@ -1502,7 +1534,11 @@ class Indexer:
         rows: list[tuple] = []
         drop: list[str] = []
         file_rows: list[tuple] = []
+        _seen_files = 0
         for importer in sorted(js_files):
+            _seen_files += 1
+            if check_budget is not None and _seen_files % 100 == 0:
+                check_budget("imports_js", _seen_files)
             try:
                 source = (self.cfg.root / importer).read_text(encoding="utf-8",
                                                               errors="replace")
@@ -1569,7 +1605,7 @@ class Indexer:
         self.graph.conn.commit()
         return bound, ambiguous
 
-    def _resolve_inheritance_names(self, rev_id: str) -> tuple[int, int]:
+    def _resolve_inheritance_names(self, rev_id: str, check_budget=None) -> tuple[int, int]:
         """Разрешить рёбра наследования, ведущие на заглушки `@ext:…`.
 
         ЗАЧЕМ. Извлекатель наследования ставит ребро на заглушку

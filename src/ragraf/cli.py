@@ -2238,6 +2238,14 @@ def _print_compact(answer: dict, applied: bool) -> None:
           f"порог VACUUM {policy.get('storage_vacuum_free_percent')} %")
     print(f"  ревизий в хранилищах: {result.get('revisions_in_stores')}; "
           f"хранятся: {', '.join(result.get('revisions_kept') or [])}")
+    # Незапечатанные ревизии — данные прерванных прогонов: их не читает никто, и без этой
+    # строки уборка выглядела бы как «удалить старую историю» (замер 23.11.2026:
+    # прерванная ревизия оставалась навсегда, 3 604 строки переживали успешный прогон).
+    unsealed = result.get("revisions_unsealed") or []
+    if unsealed:
+        print(f"  прерванных прогонов в хранилищах: {len(unsealed)} "
+              f"({', '.join(unsealed[:5])}{'…' if len(unsealed) > 5 else ''}) — "
+              f"их данные подлежат удалению, читать их нельзя")
     for label, entry in (result.get("stores") or {}).items():
         print(f"  {label:8s} {entry.get('mb')} МБ "
               f"(свободных страниц {entry.get('free_mb')} МБ)")

@@ -776,7 +776,7 @@ PAIRS = PAIRS + (
          anchor="| инструмент `ragraf_preflight` | `src/ragraf/mcp_server.py:742` |",
          path="src/ragraf/mcp_server.py", marker="\"name\": \"ragraf_preflight\","),
     dict(doc="docs/03_implementation/STAGES-X1-X6.md",
-         anchor="| флаг выборки в командной строке | `src/ragraf/cli.py:2723` |",
+         anchor="| флаг выборки в командной строке | `src/ragraf/cli.py:2856` |",
          path="src/ragraf/cli.py", marker="pq.add_argument(\"--sample\", type=int, default=50,"),
     dict(doc="docs/03_implementation/STAGES-X1-X6.md",
          anchor="| каноническая запись описания для хеша | `src/ragraf/pin.py:222` |",
@@ -976,7 +976,7 @@ PAIRS = PAIRS + (
          anchor='| автоматические пометки при индексации | `src/ragraf/provenance.py:971` |',
          path="src/ragraf/provenance.py", marker='def auto_cascade(conn: sqlite3.Connection, rev_id: str, *,'),
     dict(doc="docs/03_implementation/STALE-CASCADE.md",
-         anchor='| хук индексатора (после сборки производных фактов) | `src/ragraf/indexer.py:679` |',
+         anchor='| хук индексатора (после сборки производных фактов) | `src/ragraf/indexer.py:723` |',
          path="src/ragraf/indexer.py", marker='cascade_stats = provenance_mod.auto_cascade(self.lexvec.conn, rev_id)'),
     dict(doc="docs/03_implementation/STALE-CASCADE.md",
          anchor='| тот же хук в сборке документного графа | `src/ragraf/docgraph_extract.py:404` |',
@@ -1074,7 +1074,7 @@ PAIRS = PAIRS + (
          anchor='| автоматические пометки при индексации | `src/ragraf/provenance.py:971` |',
          path="src/ragraf/provenance.py", marker='def auto_cascade(conn: sqlite3.Connection, rev_id: str, *,'),
     dict(doc="docs/03_implementation/STALE-CASCADE.md",
-         anchor='| хук индексатора (после сборки производных фактов) | `src/ragraf/indexer.py:679` |',
+         anchor='| хук индексатора (после сборки производных фактов) | `src/ragraf/indexer.py:723` |',
          path="src/ragraf/indexer.py", marker='cascade_stats = provenance_mod.auto_cascade(self.lexvec.conn, rev_id)'),
     dict(doc="docs/03_implementation/STALE-CASCADE.md",
          anchor='| тот же хук в сборке документного графа | `src/ragraf/docgraph_extract.py:404` |',
@@ -1175,7 +1175,7 @@ PAIRS = PAIRS + (
          anchor='| автоматические пометки при индексации | `src/ragraf/provenance.py:971` |',
          path="src/ragraf/provenance.py", marker='def auto_cascade(conn: sqlite3.Connection, rev_id: str, *,'),
     dict(doc="docs/03_implementation/STALE-CASCADE.md",
-         anchor='| хук индексатора (после сборки производных фактов) | `src/ragraf/indexer.py:679` |',
+         anchor='| хук индексатора (после сборки производных фактов) | `src/ragraf/indexer.py:723` |',
          path="src/ragraf/indexer.py", marker='cascade_stats = provenance_mod.auto_cascade(self.lexvec.conn, rev_id)'),
     dict(doc="docs/03_implementation/STALE-CASCADE.md",
          anchor='| тот же хук в сборке документного графа | `src/ragraf/docgraph_extract.py:404` |',
@@ -1440,9 +1440,16 @@ def main() -> int:
     return 0 if ok else 1
 
 
+# --- Блок 24: уборка после прерванного прогона ----
+PAIRS = PAIRS + (
+    dict(doc="AGENTS-TRAPS.md",
+         anchor="в состоянии `building`. Ротация берёт только `state='ready'` (`src/ragraf/revisions.py:326`),",
+         path="src/ragraf/revisions.py", marker='if r.state == "ready"'),
+    dict(doc="docs/AGENTS-context.md",
+         anchor="ничто: ротация берёт только `state='ready'` (`src/ragraf/revisions.py:326`), а `compact`",
+         path="src/ragraf/revisions.py", marker='if r.state == "ready"'),
+)
+
+
 if __name__ == "__main__":
     sys.exit(main())
-
-
-
-

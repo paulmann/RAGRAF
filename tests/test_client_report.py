@@ -70,7 +70,10 @@ WORK = pathlib.Path(tempfile.mkdtemp(prefix="ragraf-client-"))
 STATE = WORK / "state"
 CORPUS = WORK / "site"
 OTHER = WORK / "other"
-ENV = {"RAGRAF_CATALOG_DIR": str(STATE)}
+ENV = {"RAGRAF_CATALOG_DIR": str(STATE),
+       # Конфиг пробного корпуса — в песочницу: иначе `init` пишет его в ЖИВОЙ
+       # `config/` проекта, и второй прогон падает на «конфигурация уже существует».
+       "RAGRAF_CONFIG_DIR": str(WORK / "config")}
 
 try:
     print("=" * 78)
@@ -106,11 +109,17 @@ try:
 
     code, out = run(["init", str(CORPUS)], ENV)
     check(code == 0, "корпус создан", out.strip()[-200:])
-    config = pathlib.Path(out.strip().splitlines()[-2].split("-p ")[-1].strip()) \
+    named = pathlib.Path(out.strip().splitlines()[-2].split("-p ")[-1].strip()) \
         if "-p " in out else None
-    configs = sorted((REPO / "config").glob("site.yaml"))
-    config = configs[0] if configs else None
+    # Путь из вывода `init` берётся только если файл правда есть: без проверки набор
+    # падал на несуществующем файле, потому что `init` называет путь в живом `config/`.
+    config = named if named is not None and named.is_file() else None
+    sandbox_configs = sorted((WORK / "config").glob("site.yaml"))
+    config = config or (sandbox_configs[0] if sandbox_configs else None)
     check(config is not None, "конфиг корпуса найден", str(config))
+    check(config is not None and str(config).startswith(str(WORK)),
+          "конфиг корпуса внутри песочницы",
+          f"пробный конфиг лежит вне песочницы: {config}")
 
     # `init` пишет шаблоны по найденным языкам; `.astro` и `.ts` должны быть в них.
     text = config.read_text(encoding="utf-8")
@@ -242,7 +251,8 @@ try:
                        ("c.ts", "export const three = () => 3;\n")):
         (OTHER / name).write_text(body, encoding="utf-8")
     code, out = run(["init", str(OTHER)], ENV)
-    other_configs = sorted((REPO / "config").glob("other.yaml"))
+    other_configs = sorted((WORK / "config").glob("other.yaml")) \
+        or sorted((REPO / "config").glob("other.yaml"))
     if code == 0 and other_configs:
         run(["-p", str(other_configs[0]), "register"], ENV)
         run(["-p", str(other_configs[0]), "index", "--no-vectors"], ENV)
@@ -266,6 +276,15 @@ try:
     check("повреждён" in out, "причина названа", out.strip()[:200])
     check((STATE / "catalog.json").exists(),
           "файл реестра не перезаписан пустым")
+
+except BaseException as exc:  # noqa: BLE001 — падение обязано быть видно
+    # `finally` ниже заканчивается `raise SystemExit`, а SystemExit из `finally` подавляет
+    # исходное исключение: без этого перехвата набор печатал «провалено 0» и выходил с
+    # кодом 0, не дойдя до конца (замер 23.11.2026).
+    import traceback  # noqa: PLC0415
+    traceback.print_exc()
+    FAIL += 1
+    print(f"  [FAIL] набор прерван исключением: {type(exc).__name__}: {exc}")
 
 finally:
     print()
