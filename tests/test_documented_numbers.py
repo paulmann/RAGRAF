@@ -122,6 +122,11 @@ SANDBOX_FILES = (
     "SUPPORT.md",
     "NOTICE",
     "docs/03_implementation/LICENSING.md",
+    # Ссылка перевода 0.13.x: «Что обещано и что нет» ведёт на этот документ.
+    # Без него песочница объявляет ссылку битой (`не указывает на файл поставки`),
+    # хотя в поставке файл есть — проверено сборкой манифеста. Это тот же случай,
+    # что `CHANGELOG.md` ниже. Найдено прогоном 23.11.2026.
+    "docs/03_implementation/LICENSING-AND-BILLING.md",
     "catalog/catalog.json",
     "config/ragraf.yaml",
     "tools/Invoke-ProjectDoctrine.ps1",

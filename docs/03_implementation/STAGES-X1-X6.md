@@ -174,8 +174,8 @@
 | оценка погрешности по выборке | `src/ragraf/preflight.py:189` |
 | осмотр корпуса (ничего не создаёт) | `src/ragraf/preflight.py:348` |
 | предел чтения файлов на прогон | `src/ragraf/preflight.py:42` |
-| закрытый список видов отказа (9 видов) | `src/ragraf/util.py:572` |
-| единый следующий шаг отказа | `src/ragraf/util.py:625` |
+| закрытый список видов отказа (9 видов) | `src/ragraf/util.py:630` |
+| единый следующий шаг отказа | `src/ragraf/util.py:683` |
 | операция `preflight` | `src/ragraf/facade.py:1762` |
 | подсказка «в каком конфиге дело» | `src/ragraf/facade.py:8296` |
 | отказ «индекса нет» | `src/ragraf/facade.py:8305` |

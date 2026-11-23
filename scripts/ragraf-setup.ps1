@@ -125,6 +125,19 @@ function Test-DangerousTarget {
     if ($full -match '^[A-Za-z]:\\?$') {
         return "каталог $full — корень диска"
     }
+    $marker = Join-Path $full '.ragraf\install.json'
+    if (Test-Path -LiteralPath $marker) {
+        # Маркер пишет наш же установщик. Другой путь в нём — чужое состояние:
+        # там лицензия и реестр другой установки (правило введено 23.11.2026).
+        $marked = ''
+        try {
+            $doc = [IO.File]::ReadAllText($marker) | ConvertFrom-Json
+            $marked = [string]$doc.install_path
+        } catch { }
+        if ($marked -and $marked -ne $full) {
+            return "состояние в $full\.ragraf принадлежит установке $marked`: выберите другой каталог"
+        }
+    }
     if (Test-Path -LiteralPath (Join-Path $full '.ragraf')) {
         # Своя же установка содержит .ragraf: собственный check после установки создаёт
         # индекс в корне поставки (измерено 23.11.2026 — повторный запуск отказывал на
@@ -445,13 +458,10 @@ if ($sameVersion -and -not $Upgrade) {
             $moved += 'config'
         }
         $oldVenv = Join-Path $script:InstallDir '.venv'
-        if ((Test-Path -LiteralPath $oldVenv) -and -not $SkipDeps) {
-            $staleVenv = Join-Path $stage '.venv'
-            if (Test-Path -LiteralPath $staleVenv) { Remove-Item -LiteralPath $staleVenv -Recurse -Force }
-            Move-Item -LiteralPath $oldVenv -Destination $stage -Force
-            $moved += '.venv'
-            $venvCarried = $true
-        }
+        # Окружение НЕ уносим до подмены: пока идёт сборка (десятки секунд),
+        # установка обязана работать. Переезжает из резервной копии сразу после
+        # второго переименования — путями внутри venv это не двигает.
+        $venvCarried = (-not $SkipDeps) -and (Test-Path -LiteralPath $oldVenv)
         if ($moved.Count) {
             Add-Step -Name 'Состояние' -State 'OK' -Detail ('перенесено: ' + ($moved -join ', '))
         } else {
@@ -463,6 +473,17 @@ if ($sameVersion -and -not $Upgrade) {
         Move-Item -LiteralPath $script:InstallDir -Destination $backup
         Move-Item -LiteralPath $stage -Destination $script:InstallDir
         Add-Step -Name 'Прежняя версия' -State 'OK' -Detail "$installedVersion → $backup"
+        if ($venvCarried) {
+            # Третье переименование: каталог тот же, поэтому editable-пакет уже
+            # указывает верно и `pip install -e` в окне недоступности не нужен.
+            try {
+                Move-Item -LiteralPath (Join-Path $backup '.venv') -Destination $script:InstallDir -Force
+                $moved += '.venv'
+            } catch {
+                $venvCarried = $false
+                Add-Step -Name 'Зависимости' -State 'WARN' -Detail 'прежнее окружение не переехало — запустите установщик без -SkipDeps'
+            }
+        }
     } else {
         if (Test-Path -LiteralPath $script:InstallDir) { Remove-Item -LiteralPath $script:InstallDir -Recurse -Force }
         Move-Item -LiteralPath $stage -Destination $script:InstallDir
@@ -473,15 +494,20 @@ if ($sameVersion -and -not $Upgrade) {
 
 # --- 5. зависимости -------------------------------------------------------
 if ($venvCarried -and (Test-Path -LiteralPath $exePath)) {
-    # Editable-установка запоминает ПУТЬ к src/: после переезда она указывала в старый
-    # каталог и `--version` показывал прежнюю версию. Перепривязываем без сети.
+    # Путь каталога не менялся, поэтому перепривязка не нужна: она осталась
+    # страховкой на случай, если окружение всё же оказалось из другого пути.
     $pyExe = Join-Path $script:InstallDir '.venv\Scripts\python.exe'
     if (Test-Path -LiteralPath $pyExe) {
-        & $pyExe -m pip install -e $script:InstallDir --no-deps --quiet *> $null
-        if ($LASTEXITCODE -ne 0) {
+        $rebind = $false
+        try {
+            $inner = & $pyExe -c 'import ragraf, pathlib; print(pathlib.Path(ragraf.__file__).resolve())' 2>$null
+            if (-not $inner -or -not ([string]$inner).StartsWith($script:InstallDir)) { $rebind = $true }
+        } catch { $rebind = $true }
+        if ($rebind) { & $pyExe -m pip install -e $script:InstallDir --no-deps --quiet *> $null }
+        if ($rebind -and $LASTEXITCODE -ne 0) {
             Add-Step -Name 'Зависимости' -State 'WARN' -Detail 'перепривязка editable-пакета не удалась'
         } else {
-            Add-Step -Name 'Зависимости' -State 'OK' -Detail 'окружение перенесено (перепривязано)'
+            Add-Step -Name 'Зависимости' -State 'OK' -Detail 'окружение перенесено (пути совпадают)'
         }
     } else {
         Add-Step -Name 'Зависимости' -State 'OK' -Detail 'окружение перенесено, установка не нужна'
@@ -638,6 +664,21 @@ if ($FirstRun) {
         }
     }
 }
+
+
+# --- маркер установки -----------------------------------------------------
+# Свой маркер, а не догадка о чужом индексе: другой запуск по нему увидит, что
+# состояние принадлежит иной установке (проверка в Test-DangerousTarget).
+$markerDir = Join-Path $script:InstallDir '.ragraf'
+New-Item -ItemType Directory -Path $markerDir -Force | Out-Null
+$markerDoc = [ordered]@{
+    installer    = 'ragraf-setup.ps1'
+    install_path = $script:InstallDir
+    version      = $script:Version
+    written_at   = (Get-Date).ToString('o')
+}
+[IO.File]::WriteAllText((Join-Path $markerDir 'install.json'),
+    ($markerDoc | ConvertTo-Json -Depth 3), [Text.UTF8Encoding]::new($false))
 
 Write-Host ''
 Write-Host "Готово: RAGRAF $($script:Version) в $($script:InstallDir)" -ForegroundColor Green

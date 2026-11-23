@@ -194,6 +194,29 @@ if ($diagInstall.Code -eq 0) {
     $script:failed++
 }
 
+# --- порча 8: чужое состояние — отказ ------------------------------------
+# Правило: маркер `.ragraf\install.json` пишет наш же установщик; если он называет
+# ДРУГОЙ каталог, там лицензия и реестр другой установки — трогать нельзя.
+$owner = Join-Path $Sandbox 'marker-owner'
+$intruder = Join-Path $Sandbox 'marker-intruder'
+$first = Invoke-Setup -Arguments @('-Prefix', $owner, '-NoPath', '-SkipDeps', '-SkipVerify', '-Source', $Source)
+if ($first.Code -eq 0 -and (Test-Path (Join-Path $owner '.ragraf\install.json'))) {
+    New-Item -ItemType Directory -Path (Join-Path $intruder '.ragraf') -Force | Out-Null
+    Copy-Item -LiteralPath (Join-Path $owner '.ragraf\install.json') -Destination (Join-Path $intruder '.ragraf\install.json')
+    $third = Invoke-Setup -Arguments @('-Prefix', $intruder, '-NoPath', '-SkipDeps', '-SkipVerify', '-Source', $Source)
+    if ($third.Code -eq 2 -and $third.Output -match 'принадлежит установке') {
+        Write-Host ("  [ ok ] {0,-46} код 2, чужое состояние названо" -f '8. чужое состояние не перезаписывается')
+        $script:passed++
+    } else {
+        Write-Host ("  [FAIL] {0,-46} код {1}" -f '8. чужое состояние не перезаписывается', $third.Code)
+        $script:failed++
+        ($third.Output -split "`n" | Select-Object -Last 6) | ForEach-Object { Write-Host "         $_" }
+    }
+} else {
+    Write-Host ("  [FAIL] {0,-46} маркер не создан (код {1})" -f '8. чужое состояние не перезаписывается', $first.Code)
+    $script:failed++
+}
+
 Write-Host ''
 Write-Host ("ИТОГ: проверок {0}, пройдено {1}, провалено {2}" -f ($passed + $failed), $passed, $failed)
 

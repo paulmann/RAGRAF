@@ -126,14 +126,31 @@ def main() -> int:
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                 encoding="utf-8", errors="replace", env=env)
 
+        def tail(text: str, lines: int = 6) -> str:
+            """Хвост вывода дочернего процесса: без него отказ неразбираем.
+
+            Замер 23.11.2026: под групповой нагрузкой раздел 1 падал с «в реестре
+            одна запись из двух», а код возврата и текст ошибки дочернего
+            процесса выбрасывались — причина была невидна, и отказ выглядел как
+            дефект реестра без объяснения.
+            """
+            rows = [row for row in (text or "").strip().splitlines() if row.strip()]
+            return " / ".join(rows[-lines:])[:600]
+
         print("=== 1. Два РАЗНЫХ корпуса одновременно ===")
         alpha = base / "alpha"
         beta = base / "beta"
         cfg_a = make_corpus(alpha, "alpha", 40)
         cfg_b = make_corpus(beta, "beta", 40)
         pa, pb = spawn(cfg_a), spawn(cfg_b)
-        pa.communicate(timeout=1800)
-        pb.communicate(timeout=1800)
+        out_a, err_a = pa.communicate(timeout=1800)
+        out_b, err_b = pb.communicate(timeout=1800)
+        # Код возврата проверяется ОТДЕЛЬНО: прогон, который упал, но оставил
+        # часть записей, раньше проходил мимо внимания.
+        check(pa.returncode == 0, "alpha: index завершился без ошибки",
+              f"код {pa.returncode}: {tail((out_a or '') + (err_a or ''))}")
+        check(pb.returncode == 0, "beta: index завершился без ошибки",
+              f"код {pb.returncode}: {tail((out_b or '') + (err_b or ''))}")
 
         entries = (json.loads((state / "catalog.json").read_text(encoding="utf-8"))
                    .get("entries") or {})
@@ -203,6 +220,51 @@ def main() -> int:
           str([item for item in verdicts if item is not None])[:140])
     leftovers = [p.name for p in shared.iterdir() if "write-probe" in p.name]
     check(leftovers == [], "пробы не остаются после проверки", str(leftovers)[:100])
+
+    print("\n=== 4. Читатель не видит частичный реестр ===")
+    # Замер 23.11.2026: при прямой `write_text` читатель видел ПУСТОЙ `catalog.json`
+    # 231 раз из 1058 чтений — файл сначала обрезается, потом наполняется. Для
+    # реестра это потеря состояния: пустой файл читается как «реестра нет», слияние
+    # чужих записей пропускается, и корпуса соседа исчезают (этим объясняется
+    # провал раздела 1 в групповом прогоне). Проверка держит свойство: пока идёт
+    # запись, чтение либо даёт прежнее/новое содержимое, либо перечитывает.
+    from ragraf import util as util_mod  # noqa: E402
+
+    race_path = base / "race" / "catalog.json"
+    payload = {"version": 1, "entries": {f"corpus-{i}": {"root": "/x", "rev_id": "rev-0001"}
+                                          for i in range(120)}}
+    util_mod.write_json(race_path, payload)
+    stop_writing = threading.Event()
+    bad_reads: list[str] = []
+    read_count = 0
+
+    def reader() -> None:
+        nonlocal read_count
+        while not stop_writing.is_set():
+            read_count += 1
+            try:
+                got = util_mod.read_json(race_path, default=None)
+                if not isinstance(got, dict) or not (got.get("entries") or {}):
+                    bad_reads.append("пусто или не словарь")
+            except Exception as exc:  # noqa: BLE001 — любая неудача чтения и есть находка
+                bad_reads.append(f"{type(exc).__name__}: {exc}")
+
+    readers = [threading.Thread(target=reader, daemon=True) for _ in range(2)]
+    for thread in readers:
+        thread.start()
+    try:
+        for i in range(60):
+            payload["entries"][f"corpus-w{i}"] = {"root": "/x", "rev_id": f"rev-w{i}"}
+            util_mod.write_json(race_path, payload)
+    finally:
+        stop_writing.set()
+        for thread in readers:
+            thread.join(timeout=5)
+
+    check(bad_reads == [], "читатель не видит частичный файл реестра",
+          f"неудачных {len(bad_reads)} из {read_count}: {bad_reads[:2]}")
+    tmp_left = [p.name for p in (base / "race").iterdir() if ".tmp-" in p.name]
+    check(tmp_left == [], "временные файлы записи убраны", str(tmp_left)[:100])
 
     print("\n=== ИТОГ ===")
     print(f"пройдено: {PASS}, провалено: {FAIL}")

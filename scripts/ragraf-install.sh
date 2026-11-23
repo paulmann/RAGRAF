@@ -147,6 +147,15 @@ esac
 if [ "${SYSTEM}" -eq 1 ] && [ "$(id -u)" -ne 0 ]; then
   fail Каталог "--system требует root; запустите через sudo или уберите --system" 3
 fi
+MARKER="${PREFIX}/.ragraf/install.json"
+if [ -f "${MARKER}" ]; then
+  # Маркер пишет наш же установщик. Другой путь в нём — это чужое состояние,
+  # и перезаписывать его нельзя: там лицензия и реестр другой установки.
+  MARKED="$(sed -n 's/.*"install_path": *"\([^"]*\)".*/\1/p' "${MARKER}" | head -1)"
+  if [ -n "${MARKED}" ] && [ "${MARKED}" != "${PREFIX}" ]; then
+    fail Каталог "состояние в ${PREFIX}/.ragraf принадлежит установке ${MARKED}: выберите другой каталог" 2
+  fi
+fi
 if [ -e "${PREFIX}/.ragraf" ] && [ ! -f "${PREFIX}/src/ragraf/__init__.py" ]; then
   fail Каталог "каталог ${PREFIX} уже содержит индекс .ragraf: установка перезапишет чужой корпус" 2
 fi
@@ -286,17 +295,21 @@ else
       done
       MOVED="${MOVED} config"
     fi
-    if [ -d "${PREFIX}/.venv" ] && [ "${SKIP_DEPS}" -eq 0 ]; then
-      rm -rf -- "${NEW}/.venv"
-      mv -- "${PREFIX}/.venv" "${NEW}/"
-      MOVED="${MOVED} .venv"
-    fi
+    # Окружение НЕ уносим до подмены: пока идёт сборка, установка обязана работать
+    # (замер 23.11.2026: унесли на начале сборки — 88 отказов из 95 обращений).
     if [ -n "${MOVED}" ]; then step ok Состояние "перенесено:${MOVED}"; fi
 
     BACKUP="${PREFIX}.bak-$(date +%Y%m%d-%H%M%S)"
     mv -- "${PREFIX}" "${BACKUP}" || { rm -rf -- "${NEW}"; fail Распаковка "не удалось отложить прежнюю установку"; }
     mv -- "${NEW}" "${PREFIX}" || { mv -- "${BACKUP}" "${PREFIX}"; fail Распаковка "подмена не удалась, прежняя установка возвращена"; }
     step ok Прежняя версия "${INSTALLED} → ${BACKUP}"
+    if [ "${SKIP_DEPS}" -eq 0 ] && [ -d "${BACKUP}/.venv" ]; then
+      # Третье переименование на том же томе: пути внутри venv не меняются, потому
+      # что каталог прежний, — перепривязка editable-пакета не нужна.
+      mv -- "${BACKUP}/.venv" "${PREFIX}/.venv" || \
+        step warn Окружение "прежнее окружение не переехало: соберите его запуском без --skip-deps"
+      MOVED="${MOVED} .venv"
+    fi
   else
     rm -rf -- "${PREFIX}"
     mv -- "${NEW}" "${PREFIX}"
@@ -307,12 +320,7 @@ fi
 
 # --- 6. окружение ---------------------------------------------------------
 if [ -x "${PREFIX}/.venv/bin/ragraf" ] && [ "${SKIP_DEPS}" -eq 0 ] && [ -n "${BACKUP:-}" ]; then
-  # Окружение переехало из прежней установки. Но editable-установка запоминает
-  # ПУТЬ к src/: после переезда она указывала в старый каталог, и `--version`
-  # показывал прежнюю версию (измерено 23.11.2026: установка падала на своей же
-  # проверке). Перепривязываем без сети: --no-deps ничего не скачивает.
-  ( cd -- "${PREFIX}" && "${PREFIX}/.venv/bin/python" -m pip install -e . --no-deps --quiet \
-      >/dev/null 2>&1 ) || step warn Окружение "перепривязка editable-пакета не удалась"
+  # Перепривязка уже сделана в новом каталоге ДО подмены (шаг 5): здесь только слово.
   step ok Окружение "перенесено из прежней установки (перепривязано)"
 elif [ "${SKIP_DEPS}" -eq 0 ]; then
   VENV="${PREFIX}/.venv"
@@ -495,6 +503,13 @@ if [ -n "${FIRST_RUN}" ]; then
     fi
   fi
 fi
+
+# --- маркер установки -----------------------------------------------------
+# Свой маркер: по нему другой запуск увидит, что состояние принадлежит иной
+# установке. Догадаться об этом по данным .ragraf нельзя — поля «чей индекс» там нет.
+mkdir -p -- "${PREFIX}/.ragraf"
+printf '{\n  "installer": "ragraf-install.sh",\n  "install_path": "%s",\n  "version": "%s",\n  "written_at": "%s"\n}\n' \
+  "${PREFIX}" "${VERSION}" "$(date -Iseconds)" > "${PREFIX}/.ragraf/install.json"
 
 echo
 echo "Готово: RAGRAF ${VERSION} в ${PREFIX}"

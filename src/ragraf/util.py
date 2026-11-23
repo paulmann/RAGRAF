@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import re
+import time
 import uuid
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Sequence
@@ -319,17 +320,74 @@ def loads(text: str) -> Any:
 
 
 def write_json(path: str | Path, obj: Any, indent: int = 2) -> None:
-    """Запись JSON в UTF-8 без BOM (NFR-6 / правила проекта)."""
+    """Запись JSON в UTF-8 без BOM (NFR-6 / правила проекта).
+
+    ЗАПИСЬ АТОМАРНА: во временный файл рядом и `os.replace`. Замер 23.11.2026
+    (`RAGRAF/.work/probe_partial_read.py`): при прямой `write_text` читатель видел
+    ПУСТОЙ `catalog.json` — 231 раз из 1058 чтений, потому что файл сначала
+    обрезается, потом наполняется. Для реестра это потеря состояния: пустой файл
+    читается как `default`, слияние чужих записей пропускается, и корпуса соседа
+    исчезают из реестра без единого сообщения (этим объясняется провал
+    `tests/test_parallel_index.py` в групповом прогоне 23.11.2026).
+
+    Переименование на Windows может упереться в открытый читателем файл; тогда
+    повторяем коротко — замок реестра в это время уже держится.
+    """
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(dumps(obj, indent=indent) + "\n", encoding="utf-8", newline="\n")
+    body = dumps(obj, indent=indent) + "\n"
+    tmp = p.with_name(f"{p.name}.tmp-{os.getpid()}")
+    tmp.write_text(body, encoding="utf-8", newline="\n")
+    for attempt in range(6):
+        try:
+            os.replace(tmp, p)
+            return
+        except PermissionError:
+            # На Windows переименование поверх открытого читателем файла невозможно
+            # (дескриптор без FILE_SHARE_DELETE). Ждём коротко: замок реестра уже
+            # держится, а читатель открывает файл на миллисекунды.
+            if attempt < 5:
+                time.sleep(0.05)
+    # Читатель с непрерывным циклом (замер 23.11.2026: 1710 чтений на 300 записей)
+    # не даёт переименовать вовсе. Тогда пишем на месте: короткое окно частичного
+    # файла поглощает терпимое чтение (`read_json` перечитывает), а отказ записи
+    # не выдаётся за успех.
+    tmp.unlink(missing_ok=True)
+    p.write_text(body, encoding="utf-8", newline="\n")
 
 
 def read_json(path: str | Path, default: Any = None) -> Any:
+    """Прочитать JSON. Пустое/недописанное содержимое НЕ считается отсутствием файла.
+
+    Замер 23.11.2026: пока реестр писался прямой `write_text`, читатель видел
+    пустой файл (231 раз из 1058 чтений) и принимал его за `default` — то есть
+    за «реестра нет». Теперь запись атомарна, но и чтение терпимо к короткому
+    окну: пустое содержимое и обрезанный JSON перечитываются, а не превращаются
+    в «файла нет». Отсутствующий файл по-прежнему даёт `default` сразу.
+    """
     p = Path(path)
     if not p.exists():
         return default
-    return loads(p.read_text(encoding="utf-8"))
+    last: Exception | None = None
+    for attempt in range(6):
+        try:
+            text = p.read_text(encoding="utf-8")
+        except OSError as exc:
+            last = exc
+            time.sleep(0.02)
+            continue
+        if not text.strip():
+            last = json.JSONDecodeError("пустой файл", text, 0)
+            time.sleep(0.02)
+            continue
+        try:
+            return loads(text)
+        except json.JSONDecodeError as exc:
+            last = exc
+            time.sleep(0.02)
+    if last is not None:
+        raise last
+    return default
 
 
 def write_text(path: str | Path, text: str) -> None:

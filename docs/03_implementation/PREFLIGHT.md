@@ -58,7 +58,7 @@
 
 ## 2. Единый текст отказа
 
-`util.next_action(operation, arg, kind=..., detail=...)` (`src/ragraf/util.py:625`) возвращает четыре
+`util.next_action(operation, arg, kind=..., detail=...)` (`src/ragraf/util.py:683`) возвращает четыре
 обязательные части:
 
 | поле | смысл |

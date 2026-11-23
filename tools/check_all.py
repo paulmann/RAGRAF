@@ -402,6 +402,27 @@ SLOW_TIMEOUTS: dict[str, int] = {"test_cli_ops_dispatch.py": 1200}
 # стало 76; при пределе 900 с он упирался в предел, а не в дефект.
 
 
+def failure_excerpt(out: str, marks: int = 40, tail: int = 40) -> str:
+    """Выжимка провала: строки-признаки отказа плюс хвост вывода.
+
+    Зачем не только хвост. Замер 23.11.2026: `test_contract_pin` в групповом
+    прогоне дал «241 пройдено, 1 провалено», а в хвосте из 40 строк оказались
+    дампы справки argparse — названной проверки в отчёте не было, и разбор
+    начался с догадок. Теперь сначала идут строки, по которым отказ виден
+    (`[FAIL]`, `ПРОВАЛ`, `Traceback`, `Error`), и только потом хвост.
+    """
+    lines = (out or "").splitlines()
+    marker_re = re.compile(r"\[FAIL\]|ПРОВАЛ|Traceback|\bAssertionError\b|^\s*Error:")
+    marked = [line for line in lines if marker_re.search(line)][:marks]
+    tail_lines = lines[-tail:]
+    if not marked:
+        return "\n".join(tail_lines)
+    body = "\n".join(marked)
+    if tail_lines and tail_lines[-1] not in marked:
+        body += "\n--- хвост вывода ---\n" + "\n".join(tail_lines)
+    return body
+
+
 def run_one(name: str, timeout: int) -> dict:
     started = time.perf_counter()
     # Предел для МЕДЛЕННОГО набора: он запускает четыре десятка процессов CLI,
@@ -459,7 +480,12 @@ def run_one(name: str, timeout: int) -> dict:
         # Хвост вывода нужен только при провале: без него причина остаётся
         # внутри захваченного вывода, и разбор начинается с догадок
         # (замер 30.10.2026: провал test_ensure 3/17 при одиночном 17/0).
-        "tail_output": "\n".join((out or "").splitlines()[-40:]),
+        # Провал показывается ДВУМЯ частями: строки-признаки отказа (их ищут
+        # глазами) и хвост вывода (в нём причина). Один только хвост в 40 строк
+        # у набора, печатающего дампы `--help`, целиком занят справкой
+        # argparse — так провал test_contract_pin 23.11.2026 остался без
+        # названной проверки.
+        "tail_output": failure_excerpt(out),
     }
 
 
