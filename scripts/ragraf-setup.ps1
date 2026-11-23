@@ -45,6 +45,10 @@ param(
     # Явный интерпретатор. Без него установщик ищет сам (PATH, %LOCALAPPDATA%\Python,
     # C:\Program Files\Python3*) и берёт первый с модулем venv.
     [string]$PythonPath = '',
+    # Собрать сведения об окружении одним блоком (для письма в поддержку) и выйти.
+    [switch]$Diagnose,
+    # Первый запуск: каталог проекта, который надо проиндексировать и показать в работе.
+    [string]$FirstRun = '',
     # Не запускать проверки после установки.
     [switch]$SkipVerify,
     # Машиночитаемый итог.
@@ -156,6 +160,67 @@ function Get-TreeVersion {
 }
 
 Write-Host '=== RAGRAF: установка на Windows ===' -ForegroundColor Cyan
+
+if ($Diagnose) {
+    # Диагностика ничего не меняет на диске и не читает секретоносные пути.
+    # Один блок — чтобы его можно было скопировать в письмо целиком.
+    Write-Host ''
+    Write-Host '--- сведения об окружении (для поддержки) ---'
+    Write-Host ("RAGRAF-установщик: {0}" -f $PSScriptRoot)
+    Write-Host ("PowerShell: {0} {1}" -f $PSVersionTable.PSVersion, $PSVersionTable.PSEdition)
+    Write-Host ("ОС: {0}" -f [System.Runtime.InteropServices.RuntimeInformation]::OSDescription)
+    Write-Host ("Архитектура: {0}" -f [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)
+    if ($Prefix) { Write-Host ("Каталог установки (задан): {0}" -f $Prefix) }
+
+    Write-Host ''
+    Write-Host '--- интерпретаторы ---'
+    $probe = @()
+    $probe += Get-Command python -ErrorAction SilentlyContinue | ForEach-Object { $_.Source }
+    $probe += (Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Python\bin\python.exe')
+    $probe += Get-ChildItem 'C:\Program Files\Python3*\python.exe' -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }
+    foreach ($candidate in ($probe | Where-Object { $_ } | Select-Object -Unique)) {
+        if (-not (Test-Path -LiteralPath $candidate)) {
+            Write-Host ("  · {0} — нет файла" -f $candidate)
+            continue
+        }
+        $version = (& $candidate -c "import sys; print('%d.%d.%d' % sys.version_info[:3])" 2>&1 | Out-String).Trim()
+        $venvOk = (& $candidate -c "import venv; print('venv')" 2>&1 | Out-String).Trim()
+        Write-Host ("  · {0} — версия {1}, venv: {2}" -f $candidate, $version, $(if ($venvOk -eq 'venv') { 'есть' } else { 'НЕТ' }))
+    }
+
+    Write-Host ''
+    Write-Host '--- установка, если уже есть ---'
+    $target = if ($Prefix) { $Prefix } else { Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'RAGRAF' }
+    if (Test-Path -LiteralPath (Join-Path $target 'src\ragraf\__init__.py')) {
+        Write-Host ("каталог: {0}" -f $target)
+        Write-Host ("версия: {0}" -f (Get-TreeVersion -Root $target))
+        $diagExe = Join-Path $target '.venv\Scripts\ragraf.exe'
+        if (Test-Path -LiteralPath $diagExe) {
+            Write-Host ("ragraf --version: {0}" -f ((& $diagExe --version 2>&1 | Out-String).Trim()))
+            Write-Host '--- состояние индекса ---'
+            $ownConfig = Join-Path $target 'config\ragraf.yaml'
+            if (Test-Path -LiteralPath $ownConfig) {
+                (& $diagExe -p $ownConfig status 2>&1 | Out-String).Trim() -split "`n" |
+                    Select-Object -First 6 | ForEach-Object { Write-Host ("  {0}" -f $_.Trim()) }
+            } else {
+                Write-Host '  · своего конфига нет (установка без корпуса)'
+            }
+        } else {
+            Write-Host '  · .venv\Scripts\ragraf.exe нет — зависимости не встали'
+        }
+    } else {
+        Write-Host ("  · не установлено в {0}" -f $target)
+    }
+
+    Write-Host ''
+    Write-Host '--- свободное место ---'
+    foreach ($drive in (Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Free -ne $null })) {
+        Write-Host ("  · {0}: свободно {1:N1} ГБ" -f $drive.Name, ($drive.Free / 1GB))
+    }
+    Write-Host ''
+    Write-Host 'Конец блока диагностики.'
+    exit $script:ExitOk
+}
 
 # --- 1. окружение ---------------------------------------------------------
 if ($PSVersionTable.PSVersion -lt [version]'7.6' -or $PSVersionTable.PSEdition -ne 'Core') {
@@ -301,6 +366,7 @@ if ($Uninstall) {
 }
 
 # --- 4. та же версия: ничего не делаем ------------------------------------
+$venvCarried = $false
 $sameVersion = ($installedVersion -and $installedVersion -eq $script:Version)
 if ($sameVersion -and -not $Upgrade) {
     Add-Step -Name 'Установка' -State 'SKIP' -Detail "уже установлено: версия $installedVersion в $($script:InstallDir)"
@@ -325,7 +391,14 @@ if ($sameVersion -and -not $Upgrade) {
     }
 
     New-Item -ItemType Directory -Path $script:InstallDir -Force | Out-Null
+    # Служебные каталоги живого дерева в установку НЕ переносятся: состояние
+    # (.ragraf), песочницы (.staging, .work, .zwork), окружение (.venv) и сборки
+    # принадлежат дереву разработки, а не продукту (измерено 23.11.2026: копия
+    # с .ragraf делала установленный каталог «чужим корпусом»).
+    $skipNames = @('.git', '.ragraf', '.venv', '.work', '.zwork', '.staging', '.tools',
+                   'node_modules', '__pycache__', '.pytest_cache', '.mypy_cache')
     foreach ($item in Get-ChildItem -LiteralPath $Source -Force) {
+        if ($skipNames -contains $item.Name) { continue }
         Copy-Item -LiteralPath $item.FullName -Destination $script:InstallDir -Recurse -Force
     }
 
@@ -343,10 +416,10 @@ if ($sameVersion -and -not $Upgrade) {
                 # прежней установки старше заготовка, поэтому заготовок убираем.
                 $target = Join-Path $script:InstallDir $name
                 if (Test-Path -LiteralPath $target) {
-                    Remove-Item -LiteralPath $target -Recurse -Force
-                }
-                Move-Item -LiteralPath $from -Destination $script:InstallDir -Force
-                $moved += $name
+            Remove-Item -LiteralPath $target -Recurse -Force
+        }
+        Move-Item -LiteralPath $from -Destination $script:InstallDir -Force
+        $moved += $name
             }
         }
         foreach ($pattern in @('edition.license', 'edition.license.sig', 'edition.pub')) {
@@ -501,6 +574,45 @@ if ($verify -and $sameVersion -and -not $Upgrade) {
     }
 } else {
     Add-Step -Name 'Проверка' -State 'SKIP' -Detail 'пропущено по -SkipVerify'
+}
+
+# --- 8. первый запуск ------------------------------------------------------
+# Мастер показывает, что продукт делает, на реальном каталоге владельца: ensure →
+# status → первая выдача с адресом файл:строка. Честное «capability=degraded»
+# произносится вслух, а не замалчивается.
+if ($FirstRun) {
+    $probeProject = [IO.Path]::GetFullPath($FirstRun)
+    $exe = Join-Path $script:InstallDir '.venv\Scripts\ragraf.exe'
+    if (-not (Test-Path -LiteralPath $probeProject)) {
+        Add-Step -Name 'Первый запуск' -State 'FAIL' -Detail "каталога $probeProject нет"
+    } elseif (-not (Test-Path -LiteralPath $exe)) {
+        Add-Step -Name 'Первый запуск' -State 'SKIP' -Detail 'без окружения первый запуск невозможен'
+    } else {
+        $ensureDoc = $null
+        try { $ensureDoc = (& $exe ensure $probeProject --json 2>&1 | Out-String) | ConvertFrom-Json } catch { }
+        $status = if ($ensureDoc) { [string]$ensureDoc.status } else { '' }
+        if ($status -in @('actual', 'reindexed', 'created')) {
+            Add-Step -Name 'Первый запуск ensure' -State 'OK' -Detail "статус $status"
+        } else {
+            Add-Step -Name 'Первый запуск ensure' -State 'FAIL' -Detail "статус «$status»"
+        }
+        if ($ensureDoc -and $ensureDoc.config) {
+            $statusOut = (& $exe -p $ensureDoc.config status 2>&1 | Out-String)
+            $line = ($statusOut -split "`n" | Where-Object { $_ -match 'capability=' } | Select-Object -First 1)
+            if ($line) { Add-Step -Name 'Первый запуск status' -State 'OK' -Detail $line.Trim() }
+            if ($line -match 'capability=(\w+)' -and $Matches[1] -ne 'full') {
+                Add-Step -Name 'Возможности' -State 'WARN' `
+                    -Detail "capability=$($Matches[1]): Joern или модель эмбеддингов не настроены — честное состояние, а не ошибка"
+            }
+            $queryOut = (& $exe -p $ensureDoc.config query search 'def ' --limit 3 2>&1 | Out-String)
+            $refs = ([regex]::Matches($queryOut, '[\w./\\-]+\.\w+:\d+')).Count
+            if ($refs -gt 0) {
+                Add-Step -Name 'Первый запуск поиск' -State 'OK' -Detail "адресов файл:строка $refs"
+            } else {
+                Add-Step -Name 'Первый запуск поиск' -State 'SKIP' -Detail 'поиск не дал адресов (маленький корпус)'
+            }
+        }
+    }
 }
 
 Write-Host ''

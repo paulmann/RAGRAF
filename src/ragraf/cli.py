@@ -527,6 +527,14 @@ def _run_reindex_locked(args: argparse.Namespace, cfg: ProjectConfig,
     from .catalog import Catalog
     from .drift import archive_and_reset
     from .indexer import Indexer
+    from .watch import ensure_state_dir
+
+    # Первый запуск допустим: каталог состояния создаётся, а не объявляется ошибкой.
+    # Отказ здесь только если запись в него невозможна.
+    state_problem = ensure_state_dir(cfg)
+    if state_problem:
+        print(f"ОТКАЗ: {state_problem}")
+        return EXIT_UNAVAILABLE
 
     catalog = Catalog()
     idx = Indexer(cfg, heartbeat=lambda: catalog.touch_corpus_lock(category))

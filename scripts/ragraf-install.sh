@@ -36,6 +36,8 @@ NO_PATH=0
 SKIP_DEPS=0
 SKIP_VERIFY=0
 SERVICE=0
+DIAGNOSE=0
+FIRST_RUN=""
 SERVICE_USER_ARG=""
 CONFIG_PATH=""
 REFRESH_MINUTES=15
@@ -57,6 +59,8 @@ while [ $# -gt 0 ]; do
     --skip-deps) SKIP_DEPS=1; shift ;;
     --skip-verify) SKIP_VERIFY=1; shift ;;
     --service) SERVICE=1; shift ;;
+    --diagnose) DIAGNOSE=1; shift ;;
+    --first-run) FIRST_RUN="${2:-}"; shift 2 ;;
     --service-user) SERVICE_USER_ARG="${2:-}"; shift 2 ;;
     --config) CONFIG_PATH="${2:-}"; shift 2 ;;
     --refresh-minutes) REFRESH_MINUTES="${2:-15}"; shift 2 ;;
@@ -69,6 +73,50 @@ step() { printf '  [%s] %-22s %s\n' "$1" "$2" "$3"; }
 fail() { printf '\nОТКАЗ: %s\n' "$2" >&2; step FAIL "$1" "$2"; exit "${3:-1}"; }
 
 echo "=== RAGRAF: установка на Linux ==="
+
+if [ "${DIAGNOSE}" -eq 1 ]; then
+  # Диагностика ничего не меняет и не читает секретоносные пути: один блок для письма.
+  echo
+  echo "--- сведения об окружении (для поддержки) ---"
+  echo "RAGRAF-установщик: ${SCRIPT_DIR}"
+  echo "bash: $($BASH --version 2>/dev/null | head -1)"
+  echo "ядро: $(uname -srm)"
+  echo "учётная запись: $(id -un) (uid $(id -u))"
+  echo
+  echo "--- интерпретаторы ---"
+  for candidate in $(command -v python3 python3.13 python3.14 python3.15 2>/dev/null) \
+      /usr/bin/python3 /usr/local/bin/python3; do
+    [ -x "${candidate}" ] || continue
+    version="$("${candidate}" -c 'import sys; print("%d.%d.%d" % sys.version_info[:3])' 2>/dev/null || echo неизвестно)"
+    if "${candidate}" -c 'import venv' >/dev/null 2>&1; then venv_ok="есть"; else venv_ok="НЕТ"; fi
+    echo "  · ${candidate} — версия ${version}, venv: ${venv_ok}"
+  done
+  echo
+  echo "--- установка, если уже есть ---"
+  target="${PREFIX:-${HOME}/.local/share/ragraf}"
+  if [ -f "${target}/src/ragraf/__init__.py" ]; then
+    echo "каталог: ${target}"
+    echo "версия: $(installed_version 2>/dev/null || sed -n 's/^__version__ *= *"\(.*\)"/\1/p' "${target}/src/ragraf/__init__.py" | head -1)"
+    if [ -x "${target}/.venv/bin/ragraf" ]; then
+      echo "ragraf --version: $("${target}/.venv/bin/ragraf" --version 2>&1 | head -1)"
+      if [ -f "${target}/config/ragraf.yaml" ]; then
+        "${target}/.venv/bin/ragraf" -p "${target}/config/ragraf.yaml" status 2>&1 | head -6 | sed 's/^/  /'
+      else
+        echo "  · своего конфига нет (установка без корпуса)"
+      fi
+    else
+      echo "  · .venv/bin/ragraf нет — зависимости не встали"
+    fi
+  else
+    echo "  · не установлено в ${target}"
+  fi
+  echo
+  echo "--- свободное место ---"
+  df -h "${HOME}" 2>/dev/null | tail -1 | sed 's/^/  /'
+  echo
+  echo "Конец блока диагностики."
+  exit 0
+fi
 
 # --- 1. каталог: дешёвые отказы раньше окружения -------------------------
 # Аргументные ошибки (плохой каталог, --system без root) называются ДО поиска
@@ -205,7 +253,14 @@ else
   fi
   mkdir -p -- "${PREFIX}"
   # Копируется содержимое поставки; .venv прежней установки уехал в бэкап вместе с ней.
-  ( cd -- "${SOURCE}" && tar -cf - --exclude='./.git' --exclude='./.ragraf' . ) | ( cd -- "${PREFIX}" && tar -xf - )
+  # Служебные каталоги живого дерева в установку не переносятся: состояние (.ragraf),
+  # песочницы (.staging, .work, .zwork), окружение (.venv) принадлежат разработке.
+  ( cd -- "${SOURCE}" && tar -cf - \
+      --exclude='./.git' --exclude='./.ragraf' --exclude='./.venv' \
+      --exclude='./.work' --exclude='./.zwork' --exclude='./.staging' \
+      --exclude='./.tools' --exclude='./node_modules' --exclude='*/__pycache__' \
+      --exclude='./.pytest_cache' --exclude='./.mypy_cache' . ) |
+    ( cd -- "${PREFIX}" && tar -xf - )
   COPIED="$(installed_version)"
   [ "${COPIED}" = "${VERSION}" ] || fail Распаковка "после копирования версия ${COPIED} вместо ${VERSION}"
   step ok Распаковка "версия ${COPIED}"
@@ -390,6 +445,39 @@ WantedBy=timers.target
 EOF
     systemctl daemon-reload
     step ok Служба "${TIMER} (каждые ${REFRESH_MINUTES} мин, пользователь ${SERVICE_USER})"
+  fi
+fi
+
+# --- 10. первый запуск ------------------------------------------------------
+if [ -n "${FIRST_RUN}" ]; then
+  if [ ! -d "${FIRST_RUN}" ]; then
+    step FAIL "Первый запуск" "каталога ${FIRST_RUN} нет"
+  elif [ ! -x "${BIN}" ]; then
+    step skip "Первый запуск" "без окружения первый запуск невозможен"
+  else
+    ENSURE="$("${BIN}" ensure "${FIRST_RUN}" --json 2>&1)"
+    STATUS="$(printf '%s' "${ENSURE}" | sed -n 's/.*"status": *"\([^"]*\)".*/\1/p' | head -1)"
+    case "${STATUS}" in
+      actual|reindexed|created) step ok "Первый запуск ensure" "статус ${STATUS}" ;;
+      *) step FAIL "Первый запуск ensure" "статус «${STATUS}»" ;;
+    esac
+    CFG_FIRST="$(printf '%s' "${ENSURE}" | sed -n 's/.*"config": *"\([^"]*\)".*/\1/p' | head -1)"
+    if [ -n "${CFG_FIRST}" ]; then
+      LINE="$("${BIN}" -p "${CFG_FIRST}" status 2>&1 | grep -m1 'capability=' || true)"
+      [ -n "${LINE}" ] && step ok "Первый запуск status" "${LINE}"
+      case "${LINE}" in
+        *capability=full*) : ;;
+        *capability=*)
+          step warn Возможности "${LINE}: Joern или модель эмбеддингов не настроены —
+честное состояние, а не ошибка" ;;
+      esac
+      REFS="$("${BIN}" -p "${CFG_FIRST}" query search 'def ' --limit 3 2>&1 | grep -cE ':[0-9]+' || true)"
+      if [ "${REFS:-0}" -gt 0 ]; then
+        step ok "Первый запуск поиск" "адресов файл:строка ${REFS}"
+      else
+        step skip "Первый запуск поиск" "поиск не дал адресов (маленький корпус)"
+      fi
+    fi
   fi
 fi
 

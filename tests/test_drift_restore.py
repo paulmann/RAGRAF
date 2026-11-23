@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import uuid
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
 PY = sys.executable
@@ -53,7 +54,7 @@ def payload(text: str) -> dict:
 WORK = pathlib.Path(tempfile.mkdtemp(prefix="ragraf-restore-"))
 created: pathlib.Path | None = None
 STATE = WORK / "state"
-CORPUS = WORK / "corpus"
+CORPUS = WORK / ("corpus-" + uuid.uuid4().hex[:8])
 ENV = {"RAGRAF_CATALOG_DIR": str(STATE)}
 TARGET = CORPUS / "widget.ts"
 ORIGINAL = "export const box = () => 1;\nexport const lid = () => 2;\n"

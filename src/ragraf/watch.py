@@ -872,6 +872,26 @@ def index_changed_reason(fresh: Freshness) -> str:
     return ""
 
 
+def ensure_state_dir(cfg: ProjectConfig) -> str:
+    """Создать каталог состояния или назвать причину, почему нельзя.
+
+    Измеренный дефект (23.11.2026, 192.168.31.31): `check` на корпусе без
+    `.ragraf` пытался открыть базу в несуществующем каталоге и выносил наружу
+    `OperationalError: ...control.sqlite не существует` текстом внутри отчёта.
+    Первый запуск — это НЕ ошибка: каталог состояния создаётся сам (как при `init`),
+    а отказ остаётся только там, где запись действительно невозможна.
+    """
+    target = Path(cfg.ragraf_dir)
+    try:
+        target.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        return f"каталог состояния недоступен: {util.to_posix(target)} — {exc}"
+    blocker = util.dir_blocker(target)
+    if blocker:
+        return blocker
+    return ""
+
+
 def run_reindex(
     cfg: ProjectConfig, category: str, *, trigger: str = "guard", mode: str = "full",
     budget_seconds: float | None = None,
@@ -906,6 +926,11 @@ def run_reindex(
     корпусу иначе запустят две индексации и перезапишут показатели.
     """
     catalog = Catalog()
+    # Первый запуск: каталога состояния может ещё не быть — создаём его здесь,
+    # а не падаем `OperationalError` внутри отчёта (измерено 23.11.2026).
+    state_problem = ensure_state_dir(cfg)
+    if state_problem:
+        return False, "", 0.0, state_problem
     if not catalog.acquire_corpus_lock(category):
         return False, "", 0.0, "индексация уже выполняется другим процессом"
 
