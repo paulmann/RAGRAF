@@ -67,6 +67,64 @@ $script:ExitEnvironment = 3
 
 $script:Results = [System.Collections.Generic.List[object]]::new()
 
+#: Предел файлов для мастера первого запуска. Число не «на глаз»: на этом проекте
+#: 1012 файлов индексируются 8 минут, то есть 20 000 — это часы, и обещать их как
+#: «первый запуск» нельзя.
+$script:FirstRunFileLimit = 20000
+
+function Get-ProjectFileCount {
+    <# Файлов в проекте, с ранним остановом на пределе: полный обход огромного
+       дерева — сам по себе работа, которой мастер первого запуска не обещает. #>
+    param([string]$Project, [int]$Limit)
+    $count = 0
+    $stack = [System.Collections.Generic.Stack[string]]::new()
+    $stack.Push($Project)
+    while ($stack.Count -gt 0) {
+        $dir = $stack.Pop()
+        try { $entries = [IO.Directory]::EnumerateFileSystemEntries($dir) } catch { continue }
+        foreach ($entry in $entries) {
+            if ([IO.Directory]::Exists($entry)) {
+                $name = [IO.Path]::GetFileName($entry)
+                if ($name -in @('.git', '.ragraf', 'node_modules', '.venv', 'vendor', '__pycache__')) { continue }
+                $stack.Push($entry)
+            } else {
+                $count++
+                if ($count -gt $Limit) { return $count }
+            }
+        }
+    }
+    return $count
+}
+
+function Get-ForeignStateNote {
+    <# Причина, по которой каталог проекта нельзя индексировать этой установкой. #>
+    param([string]$Project)
+    $marker = Join-Path $Project '.ragraf\install.json'
+    if (-not (Test-Path -LiteralPath $marker)) { return '' }
+    try { $doc = [IO.File]::ReadAllText($marker) | ConvertFrom-Json } catch { return '' }
+    $owner = [string]$doc.install_path
+    if ($owner -and $owner -ne $script:InstallDir) {
+        return "в проекте индекс установки $owner, а это $($script:InstallDir): индексируйте своим установщиком"
+    }
+    return ''
+}
+
+function Get-GitignoreNote {
+    <# Проект под git без правила `.ragraf/`: индекс попадёт в git status. #>
+    param([string]$Project)
+    if (-not (Test-Path -LiteralPath (Join-Path $Project '.git'))) { return '' }
+    $ignore = Join-Path $Project '.gitignore'
+    if (-not (Test-Path -LiteralPath $ignore)) {
+        return 'проект под git без .gitignore: добавьте строку .ragraf/ (иначе индекс попадёт в git status)'
+    }
+    $lines = [IO.File]::ReadAllLines($ignore)
+    foreach ($line in $lines) {
+        $clean = $line.Trim()
+        if ($clean -eq '.ragraf' -or $clean -eq '.ragraf/' -or $clean -eq '/.ragraf/' -or $clean -eq '**/.ragraf/') { return '' }
+    }
+    return 'в .gitignore нет правила .ragraf/: индекс попадёт в git status (добавьте .ragraf/)'
+}
+
 function Add-Step {
     param([string]$Name, [string]$State, [string]$Detail = '')
     $script:Results.Add([pscustomobject]@{ step = $Name; state = $State; detail = $Detail })
@@ -635,24 +693,26 @@ if ($FirstRun) {
     $exe = Join-Path $script:InstallDir '.venv\Scripts\ragraf.exe'
     if (-not (Test-Path -LiteralPath $probeProject)) {
         Add-Step -Name 'Первый запуск' -State 'FAIL' -Detail "каталога $probeProject нет"
-    } elseif (-not (Test-Path -LiteralPath $exe)) {
-        Add-Step -Name 'Первый запуск' -State 'SKIP' -Detail 'без окружения первый запуск невозможен'
     } else {
-        $ensureDoc = $null
-        try { $ensureDoc = (& $exe ensure $probeProject --json 2>&1 | Out-String) | ConvertFrom-Json } catch { }
-        $status = if ($ensureDoc) { [string]$ensureDoc.status } else { '' }
-        if ($status -in @('actual', 'reindexed', 'created')) {
-            Add-Step -Name 'Первый запуск ensure' -State 'OK' -Detail "статус $status"
+        # Проверки ДАННЫХ идут до проверки окружения: чужий индекс в проекте и
+        # огромный каталог — факты о файлах, и они не должны зависеть от того,
+        # встали ли зависимости.
+        $foreign = Get-ForeignStateNote -Project $probeProject
+        $size = Get-ProjectFileCount -Project $probeProject -Limit $script:FirstRunFileLimit
+        if ($foreign) {
+            Add-Step -Name 'Первый запуск' -State 'FAIL' -Detail $foreign
+        } elseif ($size -gt $script:FirstRunFileLimit) {
+            # Предел назван числом: молчаливое ожидание на 200 000 файлов — не помощь.
+            Add-Step -Name 'Первый запуск' -State 'SKIP' `
+                -Detail ("файлов больше предела $($script:FirstRunFileLimit): индексируйте отдельно — ragraf ensure `"$probeProject`"")
+        } elseif ($note = Get-GitignoreNote -Project $probeProject) {
+            Add-Step -Name 'Первый запуск git' -State 'WARN' -Detail $note
+        } elseif (-not (Test-Path -LiteralPath $exe)) {
+            Add-Step -Name 'Первый запуск' -State 'SKIP' -Detail 'без окружения первый запуск невозможен'
         } else {
-            Add-Step -Name 'Первый запуск ensure' -State 'FAIL' -Detail "статус «$status»"
-        }
-        if ($ensureDoc -and $ensureDoc.config) {
-            $statusOut = (& $exe -p $ensureDoc.config status 2>&1 | Out-String)
-            $line = ($statusOut -split "`n" | Where-Object { $_ -match 'capability=' } | Select-Object -First 1)
-            if ($line) { Add-Step -Name 'Первый запуск status' -State 'OK' -Detail $line.Trim() }
-            if ($line -match 'capability=(\w+)' -and $Matches[1] -ne 'full') {
-                Add-Step -Name 'Возможности' -State 'WARN' `
-                    -Detail "capability=$($Matches[1]): Joern или модель эмбеддингов не настроены — честное состояние, а не ошибка"
+            if ($size -gt 1500) {
+                Add-Step -Name 'Первый запуск размер' -State 'WARN' `
+                    -Detail "файлов ${size}: индексация займёт минуты, это ожидаемо"
             }
             $queryOut = (& $exe -p $ensureDoc.config query search 'def ' --limit 3 2>&1 | Out-String)
             $refs = ([regex]::Matches($queryOut, '[\w./\\-]+\.\w+:\d+')).Count

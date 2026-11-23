@@ -217,6 +217,51 @@ if ($first.Code -eq 0 -and (Test-Path (Join-Path $owner '.ragraf\install.json'))
     $script:failed++
 }
 
+# --- порча 9: индекс чужой установки В ПРОЕКТЕ — отказ --------------------
+# Правило: `<проект>/.ragraf/install.json` с ДРУГИМ install_path — это индекс
+# другой установки. Первый запуск обязан назвать это ДО индексации.
+$foreignProject = Join-Path $Sandbox 'foreign-project'
+New-Item -ItemType Directory -Path (Join-Path $foreignProject 'src') -Force | Out-Null
+Set-Content -LiteralPath (Join-Path $foreignProject 'src' 'a.py') -Value 'def a(): pass' -NoNewline
+New-Item -ItemType Directory -Path (Join-Path $foreignProject '.ragraf') -Force | Out-Null
+    $foreignMarker = [ordered]@{
+        installer    = 'ragraf-setup.ps1'
+        install_path = 'C:/ragraf-other'
+        version      = '0.0.0'
+    }
+    [IO.File]::WriteAllText((Join-Path $foreignProject '.ragraf' 'install.json'),
+        ($foreignMarker | ConvertTo-Json -Depth 3), [Text.UTF8Encoding]::new($false))
+$ninth = Invoke-Setup -Arguments @('-Prefix', 'C:\ragraf-g9', '-NoPath', '-SkipDeps', '-SkipVerify',
+                                   '-Source', $Source, '-FirstRun', $foreignProject)
+$saw = ($ninth.Output -split "`n" | Where-Object { $_ -match 'индекс установки' } | Select-Object -First 1)
+if ($ninth.Code -eq 0 -and $saw -match 'ragraf-other' -and $saw -match 'индекс установки') {
+    Write-Host ("  [ ok ] {0,-46} чужой индекс в проекте назван" -f '9. индекс чужой установки в проекте')
+    $script:passed++
+} else {
+    Write-Host ("  [FAIL] {0,-46} код {1}" -f '9. индекс чужой установки в проекте', $ninth.Code)
+    $script:failed++
+    ($ninth.Output -split "`n" | Select-Object -Last 8) | ForEach-Object { Write-Host "         $_" }
+}
+
+# --- порча 10: проект под git без правила .ragraf/ -------------------------
+# Это предупреждение, а не отказ: правило в чужом .gitignore — дело владельца.
+$gitProject = Join-Path $Sandbox 'git-project'
+New-Item -ItemType Directory -Path (Join-Path $gitProject '.git') -Force | Out-Null
+New-Item -ItemType Directory -Path (Join-Path $gitProject 'src') -Force | Out-Null
+Set-Content -LiteralPath (Join-Path $gitProject 'src' 'b.py') -Value 'def b(): pass' -NoNewline
+Set-Content -LiteralPath (Join-Path $gitProject '.gitignore') -Value 'node_modules/' -NoNewline
+$tenth = Invoke-Setup -Arguments @('-Prefix', 'C:\ragraf-g10', '-NoPath', '-SkipDeps', '-SkipVerify',
+                                   '-Source', $Source, '-FirstRun', $gitProject)
+$warned = ($tenth.Output -split "`n" | Where-Object { $_ -match 'нет правила \.ragraf/' } | Select-Object -First 1)
+if ($tenth.Code -eq 0 -and $warned) {
+    Write-Host ("  [ ok ] {0,-46} предупреждение, а не отказ" -f '10. .gitignore без правила .ragraf/')
+    $script:passed++
+} else {
+    Write-Host ("  [FAIL] {0,-46} код {1}" -f '10. .gitignore без правила .ragraf/', $tenth.Code)
+    $script:failed++
+    ($tenth.Output -split "`n" | Select-Object -Last 8) | ForEach-Object { Write-Host "         $_" }
+}
+
 Write-Host ''
 Write-Host ("ИТОГ: проверок {0}, пройдено {1}, провалено {2}" -f ($passed + $failed), $passed, $failed)
 

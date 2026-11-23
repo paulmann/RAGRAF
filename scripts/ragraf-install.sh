@@ -471,13 +471,35 @@ EOF
   fi
 fi
 
+#: Предел файлов для мастера первого запуска: на этом проекте 1012 файлов
+#: индексируются 8 минут, 20 000 — это часы, и обещать их как «первый запуск» нельзя.
+FIRST_RUN_FILE_LIMIT=20000
+
+count_project_files() {
+  # Файлов в проекте с ранним остановом на пределе: полный обход — своя работа.
+  find "$1" -type f \
+    -not -path '*/\.git/*' -not -path '*/\.ragraf/*' -not -path '*/node_modules/*' \
+    -not -path '*/\.venv/*' -not -path '*/vendor/*' -not -path '*/__pycache__/*' \
+    2>/dev/null | head -n "$(( $2 + 1 ))" | wc -l | tr -d ' '
+}
+
 # --- 10. первый запуск ------------------------------------------------------
 if [ -n "${FIRST_RUN}" ]; then
   if [ ! -d "${FIRST_RUN}" ]; then
     step FAIL "Первый запуск" "каталога ${FIRST_RUN} нет"
+  elif [ -f "${FIRST_RUN}/.ragraf/install.json" ] && \
+       MARKED="$(sed -n 's/.*"install_path": *"\([^"]*\)".*/\1/p' "${FIRST_RUN}/.ragraf/install.json" | head -1)" && \
+       [ -n "${MARKED}" ] && [ "${MARKED}" != "${PREFIX}" ]; then
+    step FAIL "Первый запуск" "в проекте индекс установки ${MARKED}, а это ${PREFIX}: индексируйте своим установщиком"
+  elif [ "$(count_project_files "${FIRST_RUN}" "${FIRST_RUN_FILE_LIMIT}")" -gt "${FIRST_RUN_FILE_LIMIT}" ]; then
+    step skip "Первый запуск" "файлов больше предела ${FIRST_RUN_FILE_LIMIT}: индексируйте отдельно — ragraf ensure ${FIRST_RUN}"
   elif [ ! -x "${BIN}" ]; then
     step skip "Первый запуск" "без окружения первый запуск невозможен"
   else
+    if [ -d "${FIRST_RUN}/.git" ] && [ -f "${FIRST_RUN}/.gitignore" ]; then
+      grep -qxE '(\.?/?\.ragraf/?|\*\*/\.ragraf/)' "${FIRST_RUN}/.gitignore" || \
+        step warn "Первый запуск git" "в .gitignore нет правила .ragraf/: индекс попадёт в git status"
+    fi
     ENSURE="$("${BIN}" ensure "${FIRST_RUN}" --json 2>&1)"
     STATUS="$(printf '%s' "${ENSURE}" | sed -n 's/.*"status": *"\([^"]*\)".*/\1/p' | head -1)"
     case "${STATUS}" in
