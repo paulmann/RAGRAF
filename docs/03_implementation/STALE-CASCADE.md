@@ -16,7 +16,7 @@
 | закрытие пометок после пересчёта | `src/ragraf/provenance.py:912` |
 | три вида вызова одним входом | `src/ragraf/provenance.py:924` |
 | автоматические пометки при индексации | `src/ragraf/provenance.py:971` |
-| хук индексатора (после сборки производных фактов) | `src/ragraf/indexer.py:723` |
+| хук индексатора (после сборки производных фактов) | `src/ragraf/indexer.py:738` |
 | тот же хук в сборке документного графа | `src/ragraf/docgraph_extract.py:404` |
 | операция фасада `stale_cascade` | `src/ragraf/facade.py:6669` |
 | свойства | `tests/test_provenance.py:327` (раздел 5б) |

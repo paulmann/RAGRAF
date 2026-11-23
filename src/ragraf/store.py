@@ -428,6 +428,10 @@ CREATE TABLE IF NOT EXISTS node (
 CREATE INDEX IF NOT EXISTS idx_node_fqn ON node(rev_id, fqn);
 CREATE INDEX IF NOT EXISTS idx_node_path ON node(rev_id, path);
 CREATE INDEX IF NOT EXISTS idx_node_kind ON node(rev_id, kind);
+-- Разрешение имён ищет кандидатов по имени (`WHERE rev_id = ? AND name = ?`).
+-- Без этого индекса запрос шёл перебором всех узлов ревизии: замер 23.11.2026 —
+-- 200 имён за ~300 с, из-за чего бюджет прогона не соблюдался.
+CREATE INDEX IF NOT EXISTS idx_node_name ON node(rev_id, name);
 
 CREATE TABLE IF NOT EXISTS edge (
   rev_id TEXT NOT NULL,

@@ -1451,5 +1451,27 @@ PAIRS = PAIRS + (
 )
 
 
+# --- Блок 25: точка контроля предела ---
+PAIRS = PAIRS + (
+    dict(doc="docs/AGENTS-context.md",
+         anchor="Бюджет прогона: три замера блока 25",
+         path="src/ragraf/indexer.py", marker="deadline = (t_start + float(budget_seconds))"),
+)
+
+
+# --- Блок 25: ссылки ловушки 65 ---
+PAIRS = PAIRS + (
+    dict(doc="AGENTS-TRAPS.md",
+         anchor="1. **Настройка не применялась вообще.**",
+         path="src/ragraf/indexer.py", marker="deadline = (t_start + float(budget_seconds))"),
+    dict(doc="AGENTS-TRAPS.md",
+         anchor='(`src/ragraf/indexer.py:296`). Настройка объявлена (`src/ragraf/config.py:733`), читается',
+         path="src/ragraf/config.py", marker="budget_seconds` — сколько секунд"),
+    dict(doc="AGENTS-TRAPS.md",
+         anchor="   (`src/ragraf/config.py:1139`) и не используется",
+         path="src/ragraf/config.py", marker="budget_seconds=max(5.0"),
+)
+
+
 if __name__ == "__main__":
     sys.exit(main())

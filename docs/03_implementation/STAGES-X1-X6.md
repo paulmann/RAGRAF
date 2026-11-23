@@ -180,7 +180,7 @@
 | подсказка «в каком конфиге дело» | `src/ragraf/facade.py:8296` |
 | отказ «индекса нет» | `src/ragraf/facade.py:8305` |
 | инструмент `ragraf_preflight` | `src/ragraf/mcp_server.py:742` |
-| флаг выборки в командной строке | `src/ragraf/cli.py:2856` |
+| флаг выборки в командной строке | `src/ragraf/cli.py:2864` |
 | набор проверок (34 свойства) | `tests/test_preflight.py` |
 | документ возможности | `docs/03_implementation/PREFLIGHT.md` |
 
@@ -214,7 +214,7 @@
 | догоняющая миграция колонки `observed_hash` | `src/ragraf/telemetry.py:347` |
 | операция `contract_pin_status` | `src/ragraf/facade.py:2075` |
 | операция `contract_pin_approve` | `src/ragraf/facade.py:2144` |
-| разбор новых операций в командной строке | `src/ragraf/cli.py:1102` |
+| разбор новых операций в командной строке | `src/ragraf/cli.py:1110` |
 | инструмент `ragraf_contract_pin_status` | `src/ragraf/mcp_server.py:612` |
 | инструмент `ragraf_contract_pin_approve` | `src/ragraf/mcp_server.py:695` |
 | набор проверок (30 свойств) | `tests/test_contract_pin.py` |

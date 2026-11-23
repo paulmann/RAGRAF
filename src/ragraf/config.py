@@ -931,6 +931,10 @@ class ProjectConfig:
                         "max_chunk_lines": self.chunking.max_chunk_lines,
                     },
                     "embedding": {"model": self.embedding.model, "dim": self.embedding.dim},
+                    # Флаг сбора входит в отпечаток: иначе включение структуры баз не
+                    # делает ревизию несопоставимой, `ensure` отвечает «actual», и слой
+                    # не собирается никогда (замер 23.11.2026: хеш совпал у обоих значений).
+                    "db_enabled": self.db.enabled,
                     "db_sources": self.db.schema_sources,
                     "root": util.to_posix(self.root),
                 }

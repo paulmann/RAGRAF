@@ -457,7 +457,11 @@ def _run_index_locked(args: argparse.Namespace, cfg: ProjectConfig,
     try:
         report = idx.run(with_vectors=not args.no_vectors,
                          limit_files=args.limit_files,
-                         doc_graph=bool(getattr(args, "doc_graph", False)))
+                         doc_graph=bool(getattr(args, "doc_graph", False)),
+                         # Предел берётся из конфига корпуса: до 23.11.2026 настройка
+                         # `index.budget_seconds` читалась и не применялась, поэтому
+                         # объявленный бюджет не останавливал ничего.
+                         budget_seconds=cfg.index.budget_seconds)
     finally:
         idx.close()
     data = report.to_dict()
@@ -541,7 +545,11 @@ def _run_reindex_locked(args: argparse.Namespace, cfg: ProjectConfig,
     try:
         report = idx.run(with_vectors=not args.no_vectors,
                          limit_files=args.limit_files,
-                         doc_graph=bool(getattr(args, "doc_graph", False)))
+                         doc_graph=bool(getattr(args, "doc_graph", False)),
+                         # Предел берётся из конфига корпуса: до 23.11.2026 настройка
+                         # `index.budget_seconds` читалась и не применялась, поэтому
+                         # объявленный бюджет не останавливал ничего.
+                         budget_seconds=cfg.index.budget_seconds)
     finally:
         idx.close()
     if report.ok:

@@ -275,7 +275,7 @@
 | проверок чекера в документе интеграции | 35 | **41** | там же |
 | «числа измерены на версии 0.4.0» | 0.4.0 | **0.5.0** | шапки шести README и `src/ragraf/__init__.py:9` |
 | документного слоя нет в журнале | нет записи | запись `0.5.0` | `community/CHANGELOG.md` |
-| «Отсутствует Java/JVM» (§8 этого плана) | нет JDK | OpenJDK **21.0.12.1** (Temurin), `joern_enabled: true` | `config/ragraf.yaml:250` |
+| «Отсутствует Java/JVM» (§8 этого плана) | нет JDK | OpenJDK **21.0.12.1** (Temurin), `joern_enabled: true` | `config/ragraf.yaml:258` |
 
 **Как это ловилось.** Проверка с именем «documented operation counts match the code»
 в чекере существовала, считала операции фасада и инструменты MCP — и **ничего не
@@ -726,7 +726,7 @@ OLE), PDF, данные, почта, EPUB, HTML, архивы; OCR — отде�
 > **Исправление 2026-10-29.** Строка «Отсутствует Java/JVM» устарела и оставлена как
 > замер от 04.10.2026: сейчас в системе **OpenJDK 21.0.12.1 (Temurin)**, найден
 > `C:\Android\jdk\jdk21\bin\java.exe`; Joern включён настройкой
-> `joern_enabled: true` (`config/ragraf.yaml:250`). Проверка: `java -version`.
+> `joern_enabled: true` (`config/ragraf.yaml:258`). Проверка: `java -version`.
 > Docker, ollama, PostgreSQL и .NET SDK по-прежнему отсутствуют.
 
 Следствие: стек должен быть **Python/Node-центричным, без JVM и без Docker**.

@@ -16,6 +16,8 @@
 исключение, что и настоящий `check_budget`.
 """
 import pathlib
+import re
+import sqlite3
 import sys
 import tempfile
 
@@ -34,13 +36,13 @@ FAIL = 0
 problems: list[str] = []
 
 
-def check(cond: bool, message: str) -> None:
+def check(cond: bool, message: str, detail: str = '') -> None:
     global PASS, FAIL
     if cond:
         PASS += 1
     else:
         FAIL += 1
-        problems.append(message)
+        problems.append(message + (f' | {detail}' if detail else ''))
 
 
 def main() -> int:
@@ -90,6 +92,24 @@ def main() -> int:
               f"счётчик сделанного {report.budget_files_done}, ожидалось 67743 (счётчик прохода)")
         note_text = " ".join(report.notes)
         check("resolve_names" in note_text, "причина не называет стадию прогона")
+
+        # Файлы и время (блок 25): по ним принимают решение о бюджете, а не по рёбрам.
+        conn = sqlite3.connect(cfg.graph_db)
+        try:
+            written = conn.execute(
+                "SELECT COUNT(*) FROM file WHERE rev_id = ?", (report.rev_id,)).fetchone()[0]
+        finally:
+            conn.close()
+        files_in_note = re.search(r"попало файлов (\d+)", note_text)
+        check(files_in_note is not None and int(files_in_note.group(1)) == written,
+              "причина называет число файлов, попавших в ревизию (совпадает с графом)",
+              f"в причине {files_in_note.group(1) if files_in_note else '—'}, в графе {written}")
+        seconds_in_note = re.search(r"прерван через ([\d.]+) с", note_text)
+        check(seconds_in_note is not None
+              and abs(float(seconds_in_note.group(1)) - report.budget_seconds_spent) < 0.2,
+              "причина называет время прогона (совпадает с полем отчёта)",
+              f"в причине {seconds_in_note.group(1) if seconds_in_note else '—'}, "
+              f"поле {report.budget_seconds_spent}")
         check("ревизия не закреплена" in note_text,
               "причина не говорит, что ревизия не закреплена")
 

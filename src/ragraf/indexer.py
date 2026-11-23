@@ -84,6 +84,10 @@ class IndexReport:
     # на `ast` помогает исключение каталога, на `resolve` — сокращение корпуса.
     budget_stage: str = ""
     budget_files_done: int = 0
+    # Сколько ФАЙЛОВ попало в незапечатанную ревизию и сколько шёл прогон: по этим двум
+    # числам принимается решение о бюджете, а не по числу рёбер.
+    budget_files_written: int = 0
+    budget_seconds_spent: float = 0.0
     # Этап 10: целостность ссылок графа. Числа о том, сколько адресов рёбер не
     # имели узла и сколько заглушек заведено, чтобы ребро вело в существующий
     # узел. Пустой словарь — стадия не выполнялась (старая ревизия, прерванный
@@ -118,6 +122,8 @@ class IndexReport:
             "budget_exceeded": self.budget_exceeded,
             "budget_stage": self.budget_stage,
             "budget_files_done": self.budget_files_done,
+            "budget_files_written": self.budget_files_written,
+            "budget_seconds_spent": self.budget_seconds_spent,
             "references": self.references,
             "provenance": self.provenance,
         }
@@ -420,10 +426,19 @@ class Indexer:
             self.report.budget_exceeded = True
             self.report.budget_stage = exc.stage
             self.report.budget_files_done = exc.files_done
+            # Файлы считаются ПО ГРАФУ: `file_count` записи ревизии остаётся нулём, пока
+            # ревизия не запечатана. Без этого числа причина говорила только о рёбрах
+            # («сделано 67 743»), а решение «поднять бюджет или сократить корпус»
+            # принимается по числу файлов.
+            written = self._written_files(rev_id)
+            self.report.budget_files_written = written
+            seconds = round(time.perf_counter() - t_start, 1)
+            self.report.budget_seconds_spent = seconds
             self._abort(
                 rev_id,
                 f"бюджет времени исчерпан на стадии «{exc.stage}» "
-                f"(сделано {exc.files_done}): прогон прерван, ревизия не закреплена, "
+                f"(сделано {exc.files_done}): прогон прерван через {seconds} с, "
+                f"в незапечатанную ревизию попало файлов {written}, ревизия не закреплена, "
                 f"прежний индекс остался рабочим. Увеличьте index.budget_seconds "
                 f"или сократите корпус через exclude.",
                 t_start,
@@ -1337,6 +1352,8 @@ class Indexer:
         ambiguous = 0
         new_rows: list[tuple] = []
         _groups_seen = 0
+        _edges_seen = 0
+        _names_seen = 0
         # Заглушки, которые будут ЗАМЕНЕНЫ разрешёнными рёбрами: иначе в графе останутся
         # и внешняя ссылка, и разрешённая связь одновременно — задвоение факта.
         replaced_uids: list[str] = []
@@ -1348,6 +1365,12 @@ class Indexer:
                 by_name.setdefault(nm, []).append(r)
 
             for nm, group in by_name.items():
+                # Счётчик имён растёт ДО решений: отброшенные как неоднозначные группы тоже
+                # стоят времени (по запросу на имя), а раньше они проходили мимо счётчика,
+                # и бюджет не соблюдался (замер: 326,7 с при пределе 60).
+                _names_seen += 1
+                if check_budget is not None and _names_seen % 200 == 0:
+                    check_budget("resolve_names", _names_seen)
                 cands = self.graph.conn.execute(
                     "SELECT node_id FROM node WHERE rev_id = ? AND name = ?"
                     " AND kind IN ('method','property') LIMIT ?",
@@ -1360,6 +1383,22 @@ class Indexer:
                 if check_budget is not None and _groups_seen % 500 == 0:
                     check_budget("resolve_names", _groups_seen)
                 for er in group:
+                    # Точка контроля ВНУТРИ группы: на живом корпусе групп может быть одна,
+                    # и проверка на границе группы тогда не срабатывает вовсе (замер:
+                    # 67 743 ребра в одной группе, 319,6 с при бюджете 60 с).
+                    _edges_seen += 1
+                    if check_budget is not None and _edges_seen % 2000 == 0:
+                        check_budget("resolve_names", _edges_seen)
+                    if len(new_rows) >= 5000:
+                        # Пачка фиксируется сразу: цена измерена — +0,03 с на 65 600 рёбер
+                        # против одной транзакции.
+                        self.graph.add_edges(new_rows)
+                        new_rows = []
+                        self.graph.commit()
+                        try:
+                            self.graph.conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
+                        except Exception:  # noqa: BLE001 — контрольная точка не обязательна
+                            pass
                     for cand in cands:
                         uid = util.stable_id(
                             er["src"], cand["node_id"], "calls_heuristic",
@@ -1388,7 +1427,14 @@ class Indexer:
             " WHERE rev_id = ? AND dst LIKE '@ext:%' AND dst NOT LIKE '@ext:method:%'",
             (rev_id,),
         ).fetchall()
+        _const_seen = 0
         for cr in const_rows:
+            # Точка контроля во втором цикле прохода: привязка `@ext`-ссылок ищет по
+            # `fqn LIKE '%<target>'`, то есть перебирает узлы ревизии на КАЖДОЕ ребро.
+            # Замер 23.11.2026: здесь проходило ~396 с из 435 при пределе 60 с.
+            _const_seen += 1
+            if check_budget is not None and _const_seen % 500 == 0:
+                check_budget("resolve_names", _const_seen)
             target = str(cr["dst"])[5:]
             if target.startswith(("superglobal:", "dynamic_func", "include_dynamic", "php:")):
                 continue
@@ -2671,6 +2717,19 @@ class Indexer:
         self._stages.append(
             {"stage": name, "seconds": seconds, "items": items, "note": note}
         )
+
+    def _written_files(self, rev_id: str) -> int:
+        """Сколько файлов ревизии уже записано в граф.
+
+        Нужен только для честной причины `partial`: решать по числу рёбер нельзя, а
+        `file_count` записи ревизии не заполняется до запечатывания.
+        """
+        try:
+            row = self.graph.conn.execute(
+                "SELECT COUNT(*) FROM file WHERE rev_id = ?", (rev_id,)).fetchone()
+            return int(row[0]) if row else 0
+        except Exception:  # noqa: BLE001 — счётчик не должен ломать отказ
+            return 0
 
     def _abort(self, rev_id: str, note: str, t_start: float) -> None:
         self.report.ok = False

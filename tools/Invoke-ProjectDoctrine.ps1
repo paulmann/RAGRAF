@@ -18,7 +18,7 @@
     результат Ok=$true при нулевом осмотре считается ложным PASS и валит прогон.
 
     Ожидаемый baseline на момент передачи проекта: 0 ошибок, 0 предупреждений,
-    51 проверка — ровно столько, сколько записей в реестре `$script:CheckFunctions`;
+    52 проверки — ровно столько, сколько записей в реестре `$script:CheckFunctions`;
     это сверяет Test-DocumentedNumbers. Прежние две ошибки («запись прогона в реестр
     не покрывала путь ensure» и «документы называли 18 и 16 инструментов там, где
     в коде 23») закрыты
@@ -4840,6 +4840,58 @@ function Test-ReleaseAndStateProperties {
         -Examined $examined -Details $problems.ToArray()
 }
 
+function Test-TestSetsDoNotHideFailure {
+    <#
+    .SYNOPSIS
+        Набор проверок не подавляет своё падение выходом из finally.
+
+    .DESCRIPTION
+        Измеренный дефект 23.11.2026: `tests/test_client_report.py` заканчивался
+        `finally { ...; raise SystemExit(0 if FAIL == 0 else 1) }`, а SystemExit из
+        `finally` подавляет исходное исключение. Набор печатал «провалено 0» и выходил
+        с кодом 0, не дойдя до конца — зелёный результат, который ничего не осмотрел.
+
+        Свойство: если в `finally` возбуждается выход, у того же `try` обязан быть
+        обработчик, который печатает падение. Проверяется разбором AST, а не поиском
+        строки: правило, искавшее буквальный текст, в этом проекте дважды давало ложный
+        FAIL. Инструмент — `tools/check_test_finally.py`; приманки (нарушение, законный
+        вид, неразбираемый файл) прогнаны отдельно.
+    #>
+    $checkName = 'test sets do not hide their own failure'
+    $toolPath = Join-Path $script:ProjectRoot 'tools/check_test_finally.py'
+    if (-not (Test-Path -LiteralPath $toolPath)) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: нет tools/check_test_finally.py')
+    }
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $python) {
+        return New-CheckResult -Name $checkName -Ok $false -Examined 0 `
+            -Details @('NOT-IMPLEMENTED: python не найден в PATH')
+    }
+
+    $output = & $python.Source $toolPath 2>&1
+    $code = $LASTEXITCODE
+    $text = ($output | Out-String).Trim()
+    Write-Host ("    наборы не прячут падение: " + (($text -split "`n" | Where-Object { $_ -match 'осмотрено' }) -join ' '))
+
+    $examined = 0
+    $match = [regex]::Match($text, 'осмотрено:\s*(\d+)')
+    if ($match.Success) { $examined = [int]$match.Groups[1].Value }
+
+    $problems = [System.Collections.Generic.List[string]]::new()
+    if ($code -ne 0) {
+        foreach ($line in @($output | Where-Object { $_ -is [string] })) {
+            if ($line -match '^FAIL:') { $problems.Add(($line -replace '^FAIL:\s*', '')) }
+        }
+        if ($problems.Count -eq 0) {
+            $problems.Add("проверка завершилась кодом $code без расшифровки")
+        }
+    }
+
+    return New-CheckResult -Name $checkName -Ok ($problems.Count -eq 0) `
+        -Examined $examined -Details $problems.ToArray()
+}
+
 $script:CheckFunctions = @(
     'Test-ProjectLayout'
     'Test-SecretHygiene'
@@ -4892,6 +4944,7 @@ $script:CheckFunctions = @(
     'Test-AgentIntegrations'
     'Test-TrapCatalog'
     'Test-ReleaseAndStateProperties'
+    'Test-TestSetsDoNotHideFailure'
 )
 
 $script:CheckNames = @()
