@@ -426,7 +426,7 @@ def main(argv: list[str] | None = None) -> int:
         if code != 0:
             return code
         archive = pathlib.Path(args.archive).resolve() if args.archive else \
-            pathlib.Path(str(tree) + f"-{args.version}.zip")
+            tree.with_name(f"RAGRAF-{args.version}.zip")
         build_archive(tree, archive)
         problems = verify_archive(archive, tree)
         print(f"архив: {archive.name} ({archive.stat().st_size} Б, sha256 {sha256(archive)[:16]}…)")

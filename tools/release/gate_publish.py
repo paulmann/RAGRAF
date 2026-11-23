@@ -144,8 +144,10 @@ def main(argv: list[str] | None = None) -> int:
         # защиту от подмены дерева (её ловит порча 1).
         pub.write_stamp(third)
         code, text = run_check(third, clone)
-        if code != 0 and ("голов" in text or "таблиц" in text or "[sources]" in text or "отстава" in text
-                       or "[hash]" in text or "не совпадает с источником" in text):
+        if code != 0 and ("голов" in text or "таблиц" in text or "[sources]" in text
+                       or "отстава" in text or "[hash]" in text
+                       or "не прошло сверку с источником" in text
+                       or "не совпадает с источником" in text):
             print("  [ ok ] 3. голова таблицы подменена — отказ сверки (правило sources или отставание)")
         else:
             print(f"  [FAIL] 3. подмена головы не поймана (код {code})")
