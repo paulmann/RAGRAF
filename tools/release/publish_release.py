@@ -378,6 +378,18 @@ def publish(args: argparse.Namespace) -> int:
     version = args.version
     tag = f"v{version}" if version else ""
 
+    # Архив проверяется ДО первого шага, меняющего публикацию. Измерено 24.11.2026 на
+    # выпуске 0.13.19: без --archive коммит и тег уже ушли, а выгрузка релиза молча
+    # пропускалась — тег без релиза и половинчатый выпуск. Отказ окружения, не сборки.
+    archive = pathlib.Path(args.archive).resolve() if args.archive else None
+    if archive is None and not args.check:
+        print("ОКРУЖЕНИЕ: без --archive публикация не начинается: коммит и тег не трогаются, "
+              "потому что выкладывать было бы нечего")
+        return 2
+    if archive is not None and not archive.is_file():
+        print(f"ОКРУЖЕНИЕ: архива нет: {archive}")
+        return 2
+
     problem = check_stamp(tree, version)
     if problem:
         print(f"ОТКАЗ: {problem}")
@@ -391,8 +403,8 @@ def publish(args: argparse.Namespace) -> int:
     if checksums:
         print(f"ОТКАЗ: {checksums[0]}")
         return 1
-    if args.archive:
-        archive_problems = verify_archive(pathlib.Path(args.archive).resolve(), tree)
+    if archive is not None:
+        archive_problems = verify_archive(archive, tree)
         if archive_problems:
             print(f"ОТКАЗ: {archive_problems[0]}")
             return 1
@@ -456,12 +468,11 @@ def publish(args: argparse.Namespace) -> int:
             print(f"ОТКАЗ: {step} не удался; состояние возобновляемое — повторите запуск")
             return 1
 
-    archive = pathlib.Path(args.archive).resolve() if args.archive else None
     notes = pathlib.Path(args.notes_file).resolve() if args.notes_file else None
     if notes and not notes.is_file():
         print(f"ОКРУЖЕНИЕ: файла заметок нет: {notes}")
         return 2
-    if archive and archive.is_file():
+    if archive is not None:
         # Повторный запуск: релиз уже есть — догружаем с заменой, а не падаем.
         existing = subprocess.run(["gh", "release", "view", tag, "--json", "tagName"],
                                   cwd=str(clone), capture_output=True, text=True, env=env)
