@@ -196,7 +196,15 @@ function Test-DangerousTarget {
         try {
             $doc = [IO.File]::ReadAllText($marker) | ConvertFrom-Json
             $marked = [string]$doc.install_path
-        } catch { }
+        } catch {
+            # Маркер есть, но не разобрался (битый файл, нехватка прав). Доказать чужое
+            # состояние нельзя, и молчать об этом нечестно: причина называется в отчёте,
+            # решение остаётся за человеком. Пустой catch здесь был дефектом — lint CI
+            # (PSScriptAnalyzer, PSAvoidUsingEmptyCatchBlock) ловил его, а читатель не знал,
+            # почему маркер проигнорирован.
+            $marked = ''
+            Add-Step -Name 'Маркер установки' -State 'WARN' -Detail "$marker не читается: $($_.Exception.Message)"
+        }
         if ($marked -and $marked -ne $full) {
             return "состояние в $full\.ragraf принадлежит установке $marked`: выберите другой каталог"
         }
