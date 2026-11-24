@@ -42,6 +42,38 @@ def git(clone: pathlib.Path, *args: str) -> tuple[int, str]:
     return completed.returncode, (completed.stdout or "") + (completed.stderr or "")
 
 
+def tree_equals_head(clone: pathlib.Path, tree: pathlib.Path) -> tuple[bool, str]:
+    """Собранное дерево побайтово равно рабочему дереву головы клона.
+
+    Нужно ровно для одного случая: релизный коммит уже сделан из этой самой сборки, и
+    повтор публикации после сбоя на загрузке не должен отказывать. Сравниваются только
+    файлы, которые клон отслеживает: посторонние файлы в сборке проверяет verify_release,
+    а здесь важно, что коммитить нечего.
+    """
+    import hashlib
+
+    listed = subprocess.run(["git", "-C", str(clone), "ls-tree", "-r", "--name-only", "-z", "HEAD"],
+                            capture_output=True, text=True, check=False)
+    if listed.returncode != 0:
+        return False, "git ls-tree не отработал"
+    tracked = [item for item in listed.stdout.split("\0") if item]
+    if not tracked:
+        return False, "в голове клона нет файлов"
+    built = {item.relative_to(tree).as_posix() for item in tree.rglob("*") if item.is_file()}
+    missing = [item for item in tracked if item not in built]
+    if missing:
+        return False, f"в сборке нет {len(missing)} файлов головы, например {missing[0]}"
+    for relative in tracked:
+        try:
+            left = hashlib.sha256((clone / relative).read_bytes()).hexdigest()
+            right = hashlib.sha256((tree / relative).read_bytes()).hexdigest()
+        except OSError as error:
+            return False, f"файл не прочитан: {relative} ({error.__class__.__name__})"
+        if left != right:
+            return False, f"содержимое расходится: {relative}"
+    return True, ""
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="отставание таблицы источников от головы публикации")
     parser.add_argument("--mode", choices=["build", "published"], default="build")
@@ -92,6 +124,17 @@ def main(argv: list[str] | None = None) -> int:
         if distance == 0:
             print(f"OK: таблица называет текущую голову {named[:7]}; релизный коммит станет следующим")
             return 0
+        if distance == 1:
+            # Возобновление после сбоя: коммит уже сделан из ЭТОЙ сборки. Признак — не
+            # расстояние, а содержимое: иначе любой посторонний коммит прошёл бы как выпуск.
+            same, why = tree_equals_head(clone, tree)
+            if same:
+                print(f"OK: голова {head[:7]} — уже релизный коммит этой сборки; "
+                      f"повтор продолжит с тега и релиза")
+                return 0
+            print(f"ОТКАЗ: голова {head[:7]} на один коммит впереди {named[:7]}, "
+                  f"но это не эта сборка: {why}")
+            return 1
         _, log = git(clone, "log", "--oneline", f"{named}..HEAD")
         print(f"ОТКАЗ: таблица называет {named[:7]}, а голова клона {head[:7]} — "
               f"{distance} коммит(ов) разницы. В архиве будет не та голова: "
